@@ -1138,6 +1138,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     activeTab = btn.dataset.tab;
     document.getElementById('tab-' + activeTab).classList.add('active');
+    if (window._currentUser?.role === 'vendedor') {
+      document.getElementById('vendedor-view').style.display = activeTab === 'resumen' ? 'block' : 'none';
+    }
     renderTab(activeTab);
   });
 });
