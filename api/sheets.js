@@ -14,7 +14,23 @@ function getSheets() {
 }
 
 function normalize(s) { return (s || '').toString().trim().toLowerCase(); }
-function parseNum(s)   { return parseFloat((s || '').toString().replace(',', '.')) || 0; }
+
+function parseNum(val) {
+  if (val === null || val === undefined || val === '') return 0;
+  let s = String(val).trim().replace(/\s/g,'').replace(/[$€£¥%]/g,'');
+  const hasDot = s.includes('.');
+  const hasComma = s.includes(',');
+  if (hasDot && hasComma) {
+    const lastComma = s.lastIndexOf(',');
+    const lastDot   = s.lastIndexOf('.');
+    if (lastComma > lastDot) { s = s.replace(/\./g,'').replace(',','.'); }
+    else { s = s.replace(/,/g,''); }
+  } else if (hasComma) {
+    const parts = s.split(',');
+    s = (parts.length === 2 && parts[1].length <= 2) ? s.replace(',','.') : s.replace(/,/g,'');
+  }
+  return parseFloat(s) || 0;
+}
 
 function normFecha(s) {
   const str = (s || '').toString().trim();
