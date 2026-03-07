@@ -394,8 +394,6 @@
 
     body.role-vendedor header .header-right > button:last-child { display: none; }
     body.role-vendedor #f-vendor { display: none; }
-    body.role-vendedor #tab-nav { display: none; }
-    body.role-vendedor main { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
   </style>
 </head>
@@ -973,12 +971,14 @@ function applyLoadedData(parsed) {
 
   setDefaultDateRange();
 
+  populateFilters();
+
   if (window._currentUser?.role === 'vendedor') {
     renderVendorView(window._currentUser);
+    applyFilters();
     return;
   }
 
-  populateFilters();
   applyFilters();
 }
 
@@ -1095,7 +1095,10 @@ function populateFilters() {
 function applyFilters() {
   const dateFrom = document.getElementById('f-date-from').value;
   const dateTo = document.getElementById('f-date-to').value;
-  const vendor = document.getElementById('f-vendor').value;
+  const user = window._currentUser;
+  const vendor = user?.role === 'vendedor'
+    ? (user.vendorName || user.name)
+    : document.getElementById('f-vendor').value;
   const genre = document.getElementById('f-genre').value;
   const client = document.getElementById('f-client').value;
   const method = document.getElementById('f-method').value;
