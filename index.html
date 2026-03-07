@@ -1,0 +1,2400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music Sales Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1c2333;
+      --border: #21262d;
+      --border2: #30363d;
+      --text: #e6edf3;
+      --muted: #7d8590;
+      --muted2: #484f58;
+      --indigo: #6366f1;
+      --indigo-dark: #4f46e5;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #f85149;
+      --blue: #3b82f6;
+      --violet: #8b5cf6;
+      --pink: #ec4899;
+      --teal: #14b8a6;
+      --orange: #f97316;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.5; }
+    a { color: var(--indigo); text-decoration: none; }
+
+    /* LOADING */
+    #loading {
+      position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    }
+    .loader-ring {
+      width: 56px; height: 56px; border: 4px solid var(--border2);
+      border-top-color: var(--indigo); border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { color: var(--muted); font-size: 15px; }
+    #loading .load-detail { font-size: 12px; color: var(--muted2); margin-top: 4px; }
+
+    /* ERROR */
+    #error-screen {
+      display: none; position: fixed; inset: 0; background: var(--bg); z-index: 9998;
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .error-card {
+      background: var(--surface); border: 1px solid var(--red); border-radius: var(--radius);
+      padding: 32px; max-width: 600px; width: 100%; text-align: left;
+    }
+    .error-icon { font-size: 40px; margin-bottom: 12px; display:block; text-align:center; }
+    .error-card h2 { color: var(--red); margin-bottom: 8px; text-align:center; }
+    .error-card p { color: var(--muted); margin-bottom: 16px; line-height: 1.6; text-align:center; }
+    .error-card code { background: var(--surface2); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--amber); word-break: break-all; }
+    .steps { background: var(--surface2); border-radius: var(--radius-sm); padding: 14px 18px; margin: 16px 0; font-size: 13px; color: var(--muted); line-height: 2; }
+    .steps strong { color: var(--text); }
+    .divider { display: flex; align-items: center; gap: 12px; color: var(--muted2); font-size: 12px; margin: 20px 0; }
+    .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border2); }
+    .csv-paste-area { width:100%; min-height:90px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); color:var(--text); font-family:monospace; font-size:12px; padding:10px; resize:vertical; outline:none; }
+    .csv-paste-area:focus { border-color:var(--indigo); }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-sm); border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+    .btn-primary { background: var(--indigo); color: #fff; }
+    .btn-primary:hover { background: var(--indigo-dark); }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border2); }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+    .btn-sm { padding: 5px 12px; font-size: 13px; }
+
+    /* HEADER */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,17,23,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+    .header-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 60px; max-width: 1600px; margin: 0 auto;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-logo { font-size: 20px; }
+    .header-title { font-size: 17px; font-weight: 700; color: var(--text); }
+    .header-subtitle { font-size: 12px; color: var(--muted); }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .data-badge {
+      display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+      background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3);
+      border-radius: 20px; font-size: 12px; color: var(--green);
+    }
+    .badge-dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* FILTERS */
+    #filters-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 12px 24px; position: sticky; top: 60px; z-index: 99;
+    }
+    .filters-inner {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+      max-width: 1600px; margin: 0 auto;
+    }
+    .filter-label { font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+    .filter-control {
+      background: var(--surface2); border: 1px solid var(--border2); color: var(--text);
+      padding: 6px 10px; border-radius: var(--radius-sm); font-size: 13px;
+      outline: none; transition: border 0.15s;
+    }
+    .filter-control:focus { border-color: var(--indigo); }
+    .filter-control option { background: var(--surface2); }
+    input[type="date"].filter-control { width: 138px; }
+    select.filter-control { min-width: 140px; max-width: 200px; }
+    .filter-sep { width: 1px; height: 24px; background: var(--border2); }
+    .month-nav-btn {
+      background: var(--surface2); border: 1px solid var(--border2); color: var(--muted);
+      width: 28px; height: 28px; border-radius: var(--radius-sm); cursor: pointer;
+      font-size: 13px; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    .month-nav-btn:hover:not(:disabled) { border-color: var(--indigo); color: var(--text); }
+    .month-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+    /* TABS */
+    #tab-nav {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 24px; position: sticky; top: 113px; z-index: 98;
+      overflow-x: auto;
+    }
+    .tab-nav-inner {
+      display: flex; gap: 0; max-width: 1600px; margin: 0 auto;
+    }
+    .tab-btn {
+      background: none; border: none; color: var(--muted); font-size: 14px; font-weight: 500;
+      padding: 14px 18px; cursor: pointer; border-bottom: 2px solid transparent;
+      white-space: nowrap; transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--indigo); border-bottom-color: var(--indigo); }
+
+    /* MAIN */
+    main { max-width: 1600px; margin: 0 auto; padding: 24px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* SECTION HEADERS */
+    .section-header {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      margin-bottom: 20px; gap: 12px; flex-wrap: wrap;
+    }
+    .section-title { font-size: 18px; font-weight: 700; color: var(--text); }
+    .section-subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    /* KPI GRID */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px; margin-bottom: 28px;
+    }
+    .kpi-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; position: relative; overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .kpi-card:hover { border-color: var(--border2); }
+    .kpi-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--kpi-color, var(--indigo));
+    }
+    .kpi-icon { font-size: 22px; margin-bottom: 10px; opacity: 0.9; }
+    .kpi-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .kpi-value { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
+    .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .kpi-badge {
+      display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600;
+      padding: 2px 7px; border-radius: 20px; margin-top: 8px;
+    }
+    .kpi-badge.up { background: rgba(16,185,129,0.12); color: var(--green); }
+    .kpi-badge.down { background: rgba(248,81,73,0.12); color: var(--red); }
+
+    /* CHARTS */
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; margin-bottom: 28px; }
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .chart-card.full { grid-column: 1 / -1; }
+    .chart-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .chart-subtitle { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+    .chart-wrap { position: relative; }
+    .chart-wrap canvas { max-height: 320px; }
+
+    /* TABLES */
+    .table-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 28px;
+    }
+    .table-header-bar {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .table-title { font-size: 14px; font-weight: 600; }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 12px 14px; text-align: left; font-size: 12px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+      background: var(--surface2); border-bottom: 1px solid var(--border);
+      cursor: pointer; white-space: nowrap; user-select: none;
+    }
+    thead th:hover { color: var(--text); }
+    thead th.sort-asc::after { content: ' ↑'; color: var(--indigo); }
+    thead th.sort-desc::after { content: ' ↓'; color: var(--indigo); }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 11px 14px; font-size: 13px; }
+    .td-num { text-align: right; font-variant-numeric: tabular-nums; font-family: 'SF Mono', 'Consolas', monospace; font-size: 13px; }
+    .td-badge {
+      display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 20px; font-size: 12px; font-weight: 500;
+    }
+    .td-rank { font-weight: 700; color: var(--indigo); font-size: 13px; }
+    .progress-bar-wrap { width: 80px; height: 6px; background: var(--border2); border-radius: 3px; display: inline-block; }
+    .progress-bar { height: 100%; border-radius: 3px; background: var(--indigo); }
+
+    /* INSIGHTS */
+    .insights-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .insight-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; display: flex; gap: 14px; align-items: flex-start;
+    }
+    .insight-icon-wrap {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+    }
+    .insight-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .insight-value { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.1; }
+    .insight-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+    .insight-card.alert { border-color: rgba(248,81,73,0.3); }
+    .insight-card.good { border-color: rgba(16,185,129,0.3); }
+    .insight-card.info { border-color: rgba(99,102,241,0.3); }
+
+    /* ALERTS */
+    .alert-bar {
+      border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 12px;
+      display: flex; align-items: flex-start; gap: 10px; font-size: 13px;
+    }
+    .alert-bar.warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); color: #fcd34d; }
+    .alert-bar.danger { background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25); color: #fca5a5; }
+    .alert-bar.success { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); color: #6ee7b7; }
+
+    /* SPLIT GRID */
+    .split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+    @media (max-width: 900px) {
+      .split-grid { grid-template-columns: 1fr; }
+      .chart-grid { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      header { padding: 0 16px; }
+      #filters-bar, main { padding-left: 16px; padding-right: 16px; }
+      #tab-nav { padding: 0 16px; }
+      .tab-btn { padding: 12px 12px; font-size: 13px; }
+    }
+    @media (max-width: 540px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+    /* MISC */
+    .empty-state {
+      text-align: center; padding: 48px 24px; color: var(--muted);
+    }
+    .empty-state .empty-icon { font-size: 36px; margin-bottom: 12px; }
+    .tag {
+      display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 20px; font-size: 12px; font-weight: 500;
+      background: rgba(99,102,241,0.1); color: var(--indigo); margin: 2px;
+    }
+    .stat-row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 20px; }
+    .stat-item { text-align: center; }
+    .stat-item .sv { font-size: 22px; font-weight: 700; }
+    .stat-item .sl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .projection-card {
+      background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.1));
+      border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius); padding: 20px;
+      margin-bottom: 20px;
+    }
+    .projection-title { font-size: 14px; font-weight: 600; color: var(--indigo); margin-bottom: 12px; }
+    .projection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+    .proj-item .pv { font-size: 24px; font-weight: 800; }
+    .proj-item .pl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .pareto-label { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .scrollable { overflow-x: auto; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted2); }
+
+    /* MODAL */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+      align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--radius); width: 100%; max-width: 620px;
+      max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+      background: var(--surface); z-index: 1;
+    }
+    .modal-title { font-size: 16px; font-weight: 700; }
+    .modal-close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+    .modal-close:hover { background: var(--surface2); color: var(--text); }
+    .modal-body { padding: 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 540px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+    .form-label span { color: var(--red); margin-left: 2px; }
+    .form-input {
+      background: var(--surface2); border: 1px solid var(--border2); color: var(--text);
+      padding: 9px 12px; border-radius: var(--radius-sm); font-size: 14px; outline: none;
+      transition: border 0.15s; width: 100%;
+    }
+    .form-input:focus { border-color: var(--indigo); }
+    .form-input.auto { border-style: dashed; color: var(--muted); }
+    .form-input.auto:focus { border-style: solid; color: var(--text); }
+    .form-hint { font-size: 11px; color: var(--muted2); }
+    .form-section { font-size: 11px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); grid-column: 1/-1; }
+    .auth-bar {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+      background: var(--surface2); border-radius: var(--radius-sm); margin-bottom: 20px;
+    }
+    .auth-bar.connected { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); }
+    .auth-status { font-size: 13px; flex: 1; }
+    .auth-user { font-size: 12px; color: var(--muted); }
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 2000;
+      background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius-sm);
+      padding: 14px 20px; font-size: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      display: flex; align-items: center; gap: 10px; min-width: 260px;
+      transform: translateY(80px); opacity: 0; transition: all 0.3s ease;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { border-color: rgba(16,185,129,0.4); }
+    .toast.error { border-color: rgba(248,81,73,0.4); }
+  </style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="loader-ring"></div>
+  <p>Cargando datos...</p>
+  <p class="load-detail" id="load-detail">Conectando con Google Sheets</p>
+</div>
+
+<!-- ERROR -->
+<div id="error-screen">
+  <div class="error-card">
+    <span class="error-icon">⚠️</span>
+    <h2>No se pudo cargar automáticamente</h2>
+    <p id="error-msg">El Google Sheet no es accesible públicamente o los proxies están caídos.</p>
+
+    <div class="steps">
+      <strong>Solución rápida — publicar el sheet como CSV:</strong><br>
+      1. Abre el Google Sheet<br>
+      2. Menú <strong>Archivo → Compartir → Publicar en la web</strong><br>
+      3. En "Hoja" elige <strong>la hoja de datos</strong><br>
+      4. En formato elige <strong>Valores separados por comas (.csv)</strong><br>
+      5. Clic en <strong>Publicar</strong> y luego recarga esta página
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-primary" onclick="init()">↻ Reintentar</button>
+    </div>
+
+    <div class="divider">O carga los datos manualmente</div>
+
+    <p style="font-size:13px;margin-bottom:8px">Abre el Google Sheet → <strong>Archivo → Descargar → CSV</strong> → pega el contenido aquí:</p>
+    <textarea class="csv-paste-area" id="csv-manual" placeholder="Pega el contenido del CSV aquí..."></textarea>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:12px">
+      <button class="btn btn-primary" onclick="loadManualCSV()">📂 Cargar datos pegados</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <div class="header-left">
+      <span class="header-logo">🎵</span>
+      <div>
+        <div class="header-title">Music Sales Dashboard</div>
+        <div class="header-subtitle" id="header-subtitle">Servicios de Playlist Marketing</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="data-badge" id="data-badge" style="display:none">
+        <div class="badge-dot"></div>
+        <span id="badge-text">0 registros</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="refresh-btn" onclick="init()">↻ Actualizar</button>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">+ Nueva Venta</button>
+    </div>
+  </div>
+</header>
+
+<!-- MODAL NUEVA VENTA -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Nueva Venta</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Auth bar -->
+      <div class="auth-bar" id="auth-bar">
+        <span style="font-size:20px">🔐</span>
+        <div style="flex:1">
+          <div class="auth-status" id="auth-status">Conectá tu cuenta de Google para guardar en el Sheet</div>
+          <div class="auth-user" id="auth-user"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="auth-btn" onclick="handleAuth()">Conectar Google</button>
+      </div>
+
+      <form id="sale-form" onsubmit="submitSale(event)">
+        <div class="form-grid">
+
+          <div class="form-section">Datos del cliente</div>
+
+          <div class="form-group full">
+            <label class="form-label">Artista / Cliente<span>*</span></label>
+            <input class="form-input" id="f-artista" list="list-artistas" placeholder="Nombre del artista" required>
+            <datalist id="list-artistas"></datalist>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Género</label>
+            <input class="form-input" id="f-genero" list="list-generos" placeholder="Ej: Pop, Reggaeton...">
+            <datalist id="list-generos"></datalist>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Fecha<span>*</span></label>
+            <input class="form-input" id="f-fecha" type="date" required>
+          </div>
+
+          <div class="form-section">Comercial</div>
+
+          <div class="form-group">
+            <label class="form-label">Vendedor<span>*</span></label>
+            <input class="form-input" id="f-venta" list="list-ventas" placeholder="Nombre del vendedor" required>
+            <datalist id="list-ventas"></datalist>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Método de cobro<span>*</span></label>
+            <input class="form-input" id="f-metodo" list="list-metodos" placeholder="Ej: Transferencia, PayPal..." required oninput="autoComision()">
+            <datalist id="list-metodos"></datalist>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Comisión %</label>
+            <input class="form-input" id="f-comision" type="number" step="0.01" min="0" max="100" placeholder="0">
+          </div>
+
+          <div class="form-section">Importes</div>
+
+          <div class="form-group">
+            <label class="form-label">Precio bruto<span>*</span></label>
+            <input class="form-input" id="f-precio" type="number" step="0.01" min="0" placeholder="0.00" oninput="recalcular()" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Gasto</label>
+            <input class="form-input" id="f-gasto" type="number" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Neto</label>
+            <input class="form-input auto" id="f-neto" type="number" step="0.01" placeholder="Auto">
+            <span class="form-hint">Precio − Gasto (editable)</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Final</label>
+            <input class="form-input auto" id="f-final" type="number" step="0.01" placeholder="Auto" oninput="recalcMargen()">
+            <span class="form-hint">Ingreso real recibido (editable)</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Margen %</label>
+            <input class="form-input auto" id="f-margen" type="number" step="0.01" placeholder="Auto">
+            <span class="form-hint">Final / Precio × 100 (auto)</span>
+          </div>
+
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="submit-btn" onclick="submitSale(event)" disabled>Guardar en Sheet</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- FILTERS -->
+<div id="filters-bar">
+  <div class="filters-inner">
+    <span class="filter-label">Desde</span>
+    <button class="month-nav-btn" id="btn-month-prev" onclick="navigateMonth(-1)" title="Mes anterior">←</button>
+    <input type="date" id="f-date-from" class="filter-control" onchange="updateMonthNavButtons();applyFilters()">
+    <span class="filter-label">Hasta</span>
+    <input type="date" id="f-date-to" class="filter-control" onchange="applyFilters()">
+    <button class="month-nav-btn" id="btn-month-next" onclick="navigateMonth(1)" title="Mes siguiente">→</button>
+    <div class="filter-sep"></div>
+    <select id="f-vendor" class="filter-control" onchange="applyFilters()"><option value="">Todos los vendedores</option></select>
+    <select id="f-genre" class="filter-control" onchange="applyFilters()"><option value="">Todos los géneros</option></select>
+    <select id="f-client" class="filter-control" onchange="applyFilters()"><option value="">Todos los clientes</option></select>
+    <select id="f-method" class="filter-control" onchange="applyFilters()"><option value="">Todos los métodos</option></select>
+    <button class="btn btn-ghost btn-sm" onclick="clearFilters()">✕ Limpiar</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div id="tab-nav">
+  <div class="tab-nav-inner">
+    <button class="tab-btn active" data-tab="resumen">📊 Resumen</button>
+    <button class="tab-btn" data-tab="temporal">📈 Temporal</button>
+    <button class="tab-btn" data-tab="vendedores">👤 Vendedores</button>
+    <button class="tab-btn" data-tab="generos">🎸 Géneros</button>
+    <button class="tab-btn" data-tab="clientes">🎤 Clientes</button>
+    <button class="tab-btn" data-tab="metodos">💳 Métodos</button>
+    <button class="tab-btn" data-tab="insights">💡 Insights</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main>
+
+  <!-- TAB: RESUMEN -->
+  <section id="tab-resumen" class="tab-panel active">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Resumen Ejecutivo</div>
+        <div class="section-subtitle" id="resumen-period">—</div>
+      </div>
+    </div>
+    <div class="kpi-grid" id="kpi-grid"></div>
+    <div id="months-panel" style="margin-bottom:20px"></div>
+    <div class="chart-grid">
+      <div class="chart-card" style="flex:2;min-width:320px">
+        <div id="today-sales-panel"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Distribución de Ventas</div>
+        <div class="chart-subtitle">Proporción por vendedor</div>
+        <div class="chart-wrap"><canvas id="chart-resumen-vendor-donut"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: TEMPORAL -->
+  <section id="tab-temporal" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Evolución Temporal</div>
+        <div class="section-subtitle">Rendimiento mes a mes</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card full">
+        <div class="chart-title">Ingresos por Mes</div>
+        <div class="chart-subtitle">Precio bruto · Neto · Final</div>
+        <div class="chart-wrap"><canvas id="chart-temporal-revenue"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Operaciones por Mes</div>
+        <div class="chart-subtitle">Cantidad de ventas</div>
+        <div class="chart-wrap"><canvas id="chart-temporal-ops"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Ticket Promedio por Mes</div>
+        <div class="chart-subtitle">Precio promedio por operación</div>
+        <div class="chart-wrap"><canvas id="chart-temporal-ticket"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Margen Neto por Mes</div>
+        <div class="chart-subtitle">Porcentaje de margen promedio</div>
+        <div class="chart-wrap"><canvas id="chart-temporal-margin"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Final por Mes</div>
+        <div class="chart-subtitle">Ingreso final acumulado</div>
+        <div class="chart-wrap"><canvas id="chart-temporal-final"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: VENDEDORES -->
+  <section id="tab-vendedores" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Análisis por Vendedor</div>
+        <div class="section-subtitle">Rendimiento individual del equipo comercial</div>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header-bar">
+        <span class="table-title">Tabla de Vendedores</span>
+        <span style="font-size:12px;color:var(--muted)">Clic en columna para ordenar</span>
+      </div>
+      <div class="table-scroll">
+        <table id="table-vendors"></table>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card full">
+        <div class="chart-title">Ranking de Vendedores por Final</div>
+        <div class="chart-subtitle">Comparativa de ingresos finales</div>
+        <div class="chart-wrap"><canvas id="chart-vendor-bar"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Participación en Ventas</div>
+        <div class="chart-subtitle">% del total de ventas brutas</div>
+        <div class="chart-wrap"><canvas id="chart-vendor-pie"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Margen Promedio por Vendedor</div>
+        <div class="chart-subtitle">% margen por vendedor</div>
+        <div class="chart-wrap"><canvas id="chart-vendor-margin"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: GENEROS -->
+  <section id="tab-generos" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Análisis por Género Musical</div>
+        <div class="section-subtitle">Rendimiento por género de artista</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-title">Ventas por Género</div>
+        <div class="chart-subtitle">Distribución de precio bruto</div>
+        <div class="chart-wrap"><canvas id="chart-genre-donut"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Final por Género</div>
+        <div class="chart-subtitle">Ingreso final comparado</div>
+        <div class="chart-wrap"><canvas id="chart-genre-bar"></canvas></div>
+      </div>
+      <div class="chart-card full">
+        <div class="chart-title">Evolución Mensual por Género</div>
+        <div class="chart-subtitle">Ventas brutas acumuladas por mes y género</div>
+        <div class="chart-wrap"><canvas id="chart-genre-evolution"></canvas></div>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header-bar"><span class="table-title">Tabla por Género</span></div>
+      <div class="table-scroll"><table id="table-genres"></table></div>
+    </div>
+  </section>
+
+  <!-- TAB: CLIENTES -->
+  <section id="tab-clientes" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Análisis por Cliente / Artista</div>
+        <div class="section-subtitle">Comportamiento y valor de clientes</div>
+      </div>
+    </div>
+    <div class="kpi-grid" id="client-kpis" style="grid-template-columns: repeat(auto-fill, minmax(170px,1fr))"></div>
+    <div class="chart-grid">
+      <div class="chart-card full">
+        <div class="chart-title">Análisis Pareto — Clientes (80/20)</div>
+        <div class="chart-subtitle">El 80% de los ingresos es generado por estos clientes clave</div>
+        <div class="chart-wrap"><canvas id="chart-client-pareto"></canvas></div>
+        <p class="pareto-label" id="pareto-label"></p>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Top 10 Clientes por Final</div>
+        <div class="chart-subtitle">Ingreso final generado</div>
+        <div class="chart-wrap"><canvas id="chart-client-top"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Nuevos Clientes por Mes</div>
+        <div class="chart-subtitle">Primera compra registrada</div>
+        <div class="chart-wrap"><canvas id="chart-client-new"></canvas></div>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header-bar"><span class="table-title">Ranking de Clientes</span></div>
+      <div class="table-scroll"><table id="table-clients"></table></div>
+    </div>
+  </section>
+
+  <!-- TAB: MÉTODOS -->
+  <section id="tab-metodos" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Análisis por Método de Cobro</div>
+        <div class="section-subtitle">Eficiencia y costo de cada canal de pago</div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card full">
+        <div class="chart-title">Comparativa por Método de Pago</div>
+        <div class="chart-subtitle">Precio bruto · Neto · Final</div>
+        <div class="chart-wrap"><canvas id="chart-method-grouped"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Distribución por Método</div>
+        <div class="chart-subtitle">% de ventas brutas</div>
+        <div class="chart-wrap"><canvas id="chart-method-pie"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Comisión Promedio por Método</div>
+        <div class="chart-subtitle">% comisión promedio cobrado</div>
+        <div class="chart-wrap"><canvas id="chart-method-commission"></canvas></div>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header-bar"><span class="table-title">Tabla por Método de Pago</span></div>
+      <div class="table-scroll"><table id="table-methods"></table></div>
+    </div>
+  </section>
+
+  <!-- TAB: INSIGHTS -->
+  <section id="tab-insights" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Insights Automáticos</div>
+        <div class="section-subtitle">Análisis generado automáticamente del dataset</div>
+      </div>
+    </div>
+    <div id="projection-box"></div>
+    <div id="alerts-box"></div>
+    <div class="insights-grid" id="insights-grid"></div>
+  </section>
+
+</main>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRat3RXbjfFAtvUnYIK5cbqjdangQifEy4kTo9GPQ28OVohFakZTbhd4DgxUzRT6NgDmyIlcFcQtXIr/pub?gid=162664118&single=true&output=csv';
+
+// Google OAuth — solo se usa el Client ID en el frontend
+const GOOGLE_CLIENT_ID = '938151424742-a63fv49p3oljphk9i48nlv5spgmb4g0r.apps.googleusercontent.com';
+const SPREADSHEET_ID   = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k'; // ID del sheet (de la URL de edición)
+const SHEET_GID        = 162664118; // GID de la pestaña publicada
+const PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
+// Column indices (header row will be skipped)
+const C = { ARTISTA:0, VENTA:1, METODO:2, COMISION_PCT:3, PRECIO:4, GASTO:5, NETO:6, MARGEN_PCT:7, FINAL:8, FECHA:9, GENERO:10 };
+
+const PALETTE = ['#6366f1','#10b981','#f59e0b','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#e11d48','#0ea5e9'];
+const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+let allData = [];
+let filteredData = [];
+let charts = {};
+let activeTab = 'resumen';
+let sortStates = {};
+
+// ============================================================
+// UTILS
+// ============================================================
+function parseNum(val) {
+  if (val === null || val === undefined || val === '') return null;
+  let s = String(val).trim().replace(/\s/g,'');
+  s = s.replace(/[$€£¥]/g,'').replace(/%/g,'');
+  // European format: 1.234,56 or US: 1,234.56
+  const hasDot = s.includes('.');
+  const hasComma = s.includes(',');
+  if (hasDot && hasComma) {
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastComma > lastDot) { s = s.replace(/\./g,'').replace(',','.'); }
+    else { s = s.replace(/,/g,''); }
+  } else if (hasComma) {
+    const parts = s.split(',');
+    s = (parts.length === 2 && parts[1].length <= 2) ? s.replace(',','.') : s.replace(/,/g,'');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+// Devuelve 'YYYY-MM-DD' usando hora local (evita bug de UTC con toISOString)
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function parseDate(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  let m;
+  // DD/MM/YYYY or D/M/YYYY
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) { const d = new Date(+m[3], +m[2]-1, +m[1]); return isNaN(d) ? null : d; }
+  // DD-MM-YYYY
+  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) { const d = new Date(+m[3], +m[2]-1, +m[1]); return isNaN(d) ? null : d; }
+  // YYYY-MM-DD
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) { const d = new Date(+m[1], +m[2]-1, +m[3]); return isNaN(d) ? null : d; }
+  // DD/MM/YY
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (m) { const d = new Date(2000 + +m[3], +m[2]-1, +m[1]); return isNaN(d) ? null : d; }
+  // Month name formats
+  const esp = {'ene':0,'feb':1,'mar':2,'abr':3,'may':4,'jun':5,'jul':6,'ago':7,'sep':8,'oct':9,'nov':10,'dic':11,'enero':0,'febrero':1,'marzo':2,'abril':3,'mayo':4,'junio':5,'julio':6,'agosto':7,'septiembre':8,'octubre':9,'noviembre':10,'diciembre':11};
+  m = s.match(/^(\d{1,2})\s+de\s+([a-záéíóú]+)\s+de\s+(\d{4})$/i);
+  if (m && esp[m[2].toLowerCase()] !== undefined) return new Date(+m[3], esp[m[2].toLowerCase()], +m[1]);
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function fmt$(n, dec=0) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return '$' + n.toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function fmtN(n, dec=1) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return n.toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function fmtPct(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return n.toFixed(1) + '%';
+}
+function monthKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function monthLabel(k) { const [y,m] = k.split('-'); return `${MONTH_NAMES[+m-1]} ${y}`; }
+
+function sum(arr, fn) { return arr.reduce((a,r) => { const v = fn(r); return a + (v||0); }, 0); }
+function avg(arr, fn) { if (!arr.length) return 0; return sum(arr, fn) / arr.length; }
+function median(arr) { if (!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+
+function groupBy(arr, fn) {
+  const m = new Map();
+  arr.forEach(r => { const k = fn(r); if (!m.has(k)) m.set(k,[]); m.get(k).push(r); });
+  return m;
+}
+
+// ============================================================
+// DATA FETCH & PARSE
+// ============================================================
+async function fetchCSV(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const r = await fetch(url, { cache: 'no-cache', signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const text = await r.text();
+    if (text.includes('<!DOCTYPE html>') || text.includes('<html')) throw new Error('HTML response');
+    return text;
+  } catch(e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+
+function parseRawRows(rows) {
+  if (!rows.length) return [];
+  const headerKeywords = ['artista','venta','precio','fecha','metodo','neto','final','gasto','genero'];
+  const firstRowStr = rows[0].join(',').toLowerCase();
+  const startIdx = headerKeywords.some(k => firstRowStr.includes(k)) ? 1 : 0;
+
+  const data = [];
+  rows.slice(startIdx).forEach((row, i) => {
+    if (row.length < 9) return;
+    const precio = parseNum(row[C.PRECIO]);
+    const fecha  = parseDate(row[C.FECHA]);
+    if (!precio || precio <= 0 || !fecha) return;
+
+    const artista  = (row[C.ARTISTA] || '').toString().trim() || 'Sin artista';
+    const venta    = (row[C.VENTA]   || '').toString().trim() || 'Sin vendedor';
+    const metodo   = (row[C.METODO]  || '').toString().trim() || 'Sin método';
+    const genero   = (row[C.GENERO]  || '').toString().trim() || 'Sin género';
+    const comision = parseNum(row[C.COMISION_PCT]);
+    const gasto    = parseNum(row[C.GASTO]) || 0;
+    const neto     = parseNum(row[C.NETO])  || (precio - gasto);
+    const margen   = parseNum(row[C.MARGEN_PCT]);
+    const final    = parseNum(row[C.FINAL]) || neto;
+
+    data.push({ artista, venta, metodo, genero, comision, precio, gasto, neto, margen, final, fecha,
+      monthKey: monthKey(fecha), rowIdx: i });
+  });
+  return data;
+}
+
+function parseCSVText(text) {
+  const result = Papa.parse(text, { header: false, skipEmptyLines: true, dynamicTyping: false });
+  return parseRawRows(result.data);
+}
+
+async function fetchFromAPI() {
+  const sheetName = await getSheetName();
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A:K`,
+    { headers: { 'Authorization': `Bearer ${gAccessToken}` } }
+  );
+  if (!resp.ok) throw new Error(`API HTTP ${resp.status}`);
+  const json = await resp.json();
+  return parseRawRows(json.values || []);
+}
+
+function applyLoadedData(parsed) {
+  if (!parsed.length) throw new Error('No se encontraron registros válidos en el archivo.');
+  allData = parsed;
+  document.getElementById('data-badge').style.display = 'flex';
+  document.getElementById('badge-text').textContent = `${allData.length} registros`;
+  document.getElementById('header-subtitle').textContent = `Actualizado ${new Date().toLocaleString('es-AR')}`;
+  _panelDayOffset = 0;
+  populateFilters();
+  setDefaultDateRange();
+  applyFilters();
+}
+
+function loadData(text) {
+  applyLoadedData(parseCSVText(text));
+}
+
+function loadManualCSV() {
+  const text = document.getElementById('csv-manual').value.trim();
+  if (!text) { alert('Pega el contenido CSV primero.'); return; }
+  try {
+    document.getElementById('error-screen').style.display = 'none';
+    loadData(text);
+  } catch(e) {
+    alert('Error al procesar el CSV: ' + e.message);
+  }
+}
+
+async function init() {
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('error-screen').style.display = 'none';
+  document.getElementById('load-detail').textContent = 'Conectando con Google Sheets...';
+
+  // Si hay token activo, usar la API directamente (siempre actualizado, sin caché)
+  if (gAccessToken) {
+    try {
+      document.getElementById('load-detail').textContent = 'Cargando desde API (sin caché)...';
+      const parsed = await fetchFromAPI();
+      applyLoadedData(parsed);
+      document.getElementById('loading').style.display = 'none';
+      return;
+    } catch(e) {
+      // Token expirado u otro error — continuar con CSV como fallback
+      if (e.message.includes('401')) { gAccessToken = null; clearToken(); setAuthDisconnected(); }
+    }
+  }
+
+  const attempts = [
+    { label: 'Carga directa...', url: CSV_URL },
+    ...PROXIES.map((fn, i) => ({ label: `Proxy ${i+1} de ${PROXIES.length}...`, url: fn(CSV_URL) }))
+  ];
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    try {
+      document.getElementById('load-detail').textContent = attempt.label;
+      const text = await fetchCSV(attempt.url);
+      document.getElementById('load-detail').textContent = 'Procesando datos...';
+      loadData(text);
+      document.getElementById('loading').style.display = 'none';
+      return;
+    } catch(e) {
+      lastError = e;
+    }
+  }
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('error-screen').style.display = 'flex';
+  document.getElementById('error-msg').textContent = `No fue posible cargar el sheet automáticamente (${lastError?.message || 'error de red'}).`;
+}
+
+// ============================================================
+// FILTERS
+// ============================================================
+function setDefaultDateRange() {
+  const now = new Date();
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  document.getElementById('f-date-from').value = localDateStr(firstOfMonth);
+  document.getElementById('f-date-to').value   = localDateStr(now);
+  updateMonthNavButtons();
+}
+
+function navigateMonth(dir) {
+  const from = new Date(document.getElementById('f-date-from').value + 'T00:00:00');
+  // Calcular el primer día del mes destino
+  const target = new Date(from.getFullYear(), from.getMonth() + dir, 1);
+  const now    = new Date();
+  const isCurrentMonth = target.getFullYear() === now.getFullYear() && target.getMonth() === now.getMonth();
+  const isFutureMonth  = target > new Date(now.getFullYear(), now.getMonth(), 1);
+
+  if (isFutureMonth) return;
+
+  const firstDay = target;
+  const lastDay  = isCurrentMonth
+    ? now  // mes actual: hasta hoy
+    : new Date(target.getFullYear(), target.getMonth() + 1, 0); // mes pasado: último día
+
+  document.getElementById('f-date-from').value = localDateStr(firstDay);
+  document.getElementById('f-date-to').value   = localDateStr(lastDay);
+  updateMonthNavButtons();
+  applyFilters();
+  if (activeTab === 'resumen') renderMonthsPanel();
+}
+
+function updateMonthNavButtons() {
+  const from = new Date(document.getElementById('f-date-from').value + 'T00:00:00');
+  const now  = new Date();
+  const isCurrentMonth = from.getFullYear() === now.getFullYear() && from.getMonth() === now.getMonth();
+  document.getElementById('btn-month-next').disabled = isCurrentMonth;
+}
+
+function populateFilters() {
+  const fillSelect = (id, values) => {
+    const el = document.getElementById(id);
+    const cur = el.value;
+    const first = el.options[0];
+    el.innerHTML = '';
+    el.appendChild(first);
+    [...new Set(values)].sort().forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      el.appendChild(o);
+    });
+    el.value = cur;
+  };
+  fillSelect('f-vendor', allData.map(r => r.venta));
+  fillSelect('f-genre', allData.map(r => r.genero));
+  fillSelect('f-client', allData.map(r => r.artista));
+  fillSelect('f-method', allData.map(r => r.metodo));
+}
+
+function applyFilters() {
+  const dateFrom = document.getElementById('f-date-from').value;
+  const dateTo = document.getElementById('f-date-to').value;
+  const vendor = document.getElementById('f-vendor').value;
+  const genre = document.getElementById('f-genre').value;
+  const client = document.getElementById('f-client').value;
+  const method = document.getElementById('f-method').value;
+
+  filteredData = allData.filter(r => {
+    if (dateFrom && r.fecha < new Date(dateFrom + 'T00:00:00')) return false;
+    if (dateTo && r.fecha > new Date(dateTo + 'T23:59:59')) return false;
+    if (vendor && r.venta !== vendor) return false;
+    if (genre && r.genero !== genre) return false;
+    if (client && r.artista !== client) return false;
+    if (method && r.metodo !== method) return false;
+    return true;
+  });
+
+  renderActive();
+}
+
+function clearFilters() {
+  ['f-date-from','f-date-to'].forEach(id => document.getElementById(id).value = '');
+  ['f-vendor','f-genre','f-client','f-method'].forEach(id => document.getElementById(id).value = '');
+  applyFilters();
+}
+
+// ============================================================
+// TAB MANAGEMENT
+// ============================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = btn.dataset.tab;
+    document.getElementById('tab-' + activeTab).classList.add('active');
+    renderTab(activeTab);
+  });
+});
+
+function renderActive() { renderTab(activeTab); }
+
+function renderTab(tab) {
+  if (tab === 'resumen') renderResumen();
+  else if (tab === 'temporal') renderTemporal();
+  else if (tab === 'vendedores') renderVendedores();
+  else if (tab === 'generos') renderGeneros();
+  else if (tab === 'clientes') renderClientes();
+  else if (tab === 'metodos') renderMetodos();
+  else if (tab === 'insights') renderInsights();
+}
+
+// ============================================================
+// CHART HELPERS
+// ============================================================
+function mkChart(id, config) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const defaults = {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: { legend: { labels: { color: '#7d8590', font: { size: 12 } } } },
+    scales: {}
+  };
+  if (config.options) {
+    config.options = deepMerge(defaults, config.options);
+  } else {
+    config.options = defaults;
+  }
+  charts[id] = new Chart(el, config);
+  return charts[id];
+}
+
+function deepMerge(target, source) {
+  const out = Object.assign({}, target);
+  for (const k in source) {
+    if (source[k] && typeof source[k] === 'object' && !Array.isArray(source[k])) {
+      out[k] = deepMerge(target[k] || {}, source[k]);
+    } else {
+      out[k] = source[k];
+    }
+  }
+  return out;
+}
+
+const gridColor = 'rgba(255,255,255,0.06)';
+const tickColor = '#7d8590';
+
+function axisDefaults(title='') {
+  return {
+    grid: { color: gridColor },
+    ticks: { color: tickColor, font: { size: 11 } },
+    title: title ? { display: true, text: title, color: tickColor, font: { size: 11 } } : undefined
+  };
+}
+
+// ============================================================
+// AGGREGATION
+// ============================================================
+function aggByMonth(data) {
+  const byMonth = groupBy(data, r => r.monthKey);
+  return [...byMonth.entries()]
+    .sort((a,b) => a[0].localeCompare(b[0]))
+    .map(([k, rows]) => ({
+      key: k,
+      label: monthLabel(k),
+      precio: sum(rows, r => r.precio),
+      gasto: sum(rows, r => r.gasto),
+      neto: sum(rows, r => r.neto),
+      final: sum(rows, r => r.final),
+      ops: rows.length,
+      ticket: avg(rows, r => r.precio),
+      margen: avg(rows, r => r.margen !== null ? r.margen : (r.precio>0 ? (r.final/r.precio*100) : 0))
+    }));
+}
+
+function aggByVendor(data) {
+  const total = sum(data, r => r.precio) || 1;
+  const byV = groupBy(data, r => r.venta);
+  return [...byV.entries()].map(([k, rows]) => ({
+    key: k,
+    precio: sum(rows, r => r.precio),
+    gasto: sum(rows, r => r.gasto),
+    neto: sum(rows, r => r.neto),
+    final: sum(rows, r => r.final),
+    ops: rows.length,
+    ticket: avg(rows, r => r.precio),
+    margen: avg(rows, r => r.precio>0 ? (r.final/r.precio*100) : 0),
+    pct: sum(rows, r => r.precio) / total * 100
+  })).sort((a,b) => b.final - a.final);
+}
+
+function aggByGenre(data) {
+  const byG = groupBy(data, r => r.genero);
+  return [...byG.entries()].map(([k, rows]) => ({
+    key: k,
+    precio: sum(rows, r => r.precio),
+    gasto: sum(rows, r => r.gasto),
+    neto: sum(rows, r => r.neto),
+    final: sum(rows, r => r.final),
+    ops: rows.length,
+    ticket: avg(rows, r => r.precio),
+    margen: avg(rows, r => r.precio>0 ? (r.final/r.precio*100) : 0)
+  })).sort((a,b) => b.precio - a.precio);
+}
+
+function aggByClient(data) {
+  const byC = groupBy(data, r => r.artista);
+  return [...byC.entries()].map(([k, rows]) => {
+    const dates = rows.map(r => r.fecha).sort((a,b) => a-b);
+    return {
+      key: k,
+      precio: sum(rows, r => r.precio),
+      gasto: sum(rows, r => r.gasto),
+      neto: sum(rows, r => r.neto),
+      final: sum(rows, r => r.final),
+      ops: rows.length,
+      ticket: avg(rows, r => r.precio),
+      margen: avg(rows, r => r.precio>0 ? (r.final/r.precio*100) : 0),
+      firstDate: dates[0],
+      lastDate: dates[dates.length-1]
+    };
+  }).sort((a,b) => b.final - a.final);
+}
+
+function aggByMethod(data) {
+  const byM = groupBy(data, r => r.metodo);
+  return [...byM.entries()].map(([k, rows]) => ({
+    key: k,
+    precio: sum(rows, r => r.precio),
+    gasto: sum(rows, r => r.gasto),
+    neto: sum(rows, r => r.neto),
+    final: sum(rows, r => r.final),
+    ops: rows.length,
+    ticket: avg(rows, r => r.precio),
+    margen: avg(rows, r => r.precio>0 ? (r.final/r.precio*100) : 0),
+    comision: avg(rows, r => r.comision !== null ? r.comision : 0)
+  })).sort((a,b) => b.precio - a.precio);
+}
+
+// ============================================================
+// SORTABLE TABLE
+// ============================================================
+function makeSortableTable(tableId, headers, rows, colTypes) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const state = sortStates[tableId] || { col: -1, dir: 1 };
+
+  function render(data) {
+    table.innerHTML = '';
+    const thead = table.createTHead();
+    const hr = thead.insertRow();
+    headers.forEach((h, i) => {
+      const th = document.createElement('th');
+      th.innerHTML = h;
+      th.dataset.col = i;
+      if (state.col === i) th.className = state.dir===1 ? 'sort-asc' : 'sort-desc';
+      th.addEventListener('click', () => {
+        if (state.col === i) state.dir *= -1; else { state.col = i; state.dir = 1; }
+        sortStates[tableId] = state;
+        const sorted = [...data].sort((a,b) => {
+          const va = a[i], vb = b[i];
+          if (typeof va === 'number' && typeof vb === 'number') return state.dir * (va - vb);
+          return state.dir * String(va).localeCompare(String(vb), 'es');
+        });
+        render(sorted);
+      });
+      hr.appendChild(th);
+    });
+
+    const tbody = table.createTBody();
+    data.forEach((row, ri) => {
+      const tr = tbody.insertRow();
+      row.forEach((cell, ci) => {
+        const td = tr.insertCell();
+        if (typeof cell === 'object' && cell !== null && cell.html !== undefined) {
+          td.innerHTML = cell.html;
+          td.className = cell.cls || '';
+        } else if ((colTypes && colTypes[ci] === 'num') || typeof cell === 'number') {
+          td.textContent = typeof cell === 'number' ? fmtN(cell) : cell;
+          td.className = 'td-num';
+        } else {
+          td.textContent = cell === null || cell === undefined ? '—' : cell;
+        }
+      });
+    });
+    if (!data.length) {
+      const tr = tbody.insertRow();
+      const td = tr.insertCell();
+      td.colSpan = headers.length;
+      td.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin datos</div>';
+    }
+  }
+  render(rows);
+}
+
+// ============================================================
+// SECTION 1: RESUMEN
+// ============================================================
+let _panelDayOffset = 0; // 0 = hoy, -1 = ayer, etc.
+
+function renderTodayPanel() {
+  const panel = document.getElementById('today-sales-panel');
+  if (!panel) return;
+
+  const target = new Date();
+  target.setDate(target.getDate() + _panelDayOffset);
+  const targetStr = target.toDateString();
+
+  const isToday = _panelDayOffset === 0;
+  const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const dayLabel = isToday ? 'Hoy · ' + capitalize(target.toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long' }))
+                 : _panelDayOffset === -1 ? 'Ayer · ' + capitalize(target.toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long' }))
+                 : capitalize(target.toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long', year:'numeric' }));
+
+  const rows = allData.filter(r => r.fecha.toDateString() === targetStr)
+                      .sort((a, b) => allData.indexOf(b) - allData.indexOf(a));
+
+  window._todayRows = rows;
+  const totalFinal  = sum(rows, r => r.final);
+  const totalPrecio = sum(rows, r => r.precio);
+
+  const navBtn = (dir, disabled) => `
+    <button onclick="_panelDayOffset+=(${dir});renderTodayPanel()" ${disabled?'disabled':''} style="background:none;border:1px solid var(--border2);color:${disabled?'var(--muted2)':'var(--muted)'};border-radius:6px;width:28px;height:28px;cursor:${disabled?'default':'pointer'};font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.15s" ${disabled?'':` onmouseover="this.style.borderColor='var(--indigo)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'"`}>${dir===-1?'←':'→'}</button>`;
+
+  const rows_html = rows.length ? rows.map((r, idx) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:36px;height:36px;border-radius:10px;background:${PALETTE[0]}18;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🎤</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.artista}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${r.venta} · ${r.metodo}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-right:4px">
+        <div style="font-size:14px;font-weight:700;color:var(--green)">${fmt$(r.final)}</div>
+        <div style="font-size:11px;color:var(--muted)">${fmt$(r.precio)} bruto</div>
+      </div>
+      ${isToday ? `<button onclick="deleteSale(${idx})" title="Eliminar venta" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>` : ''}
+    </div>`).join('')
+  : `<div class="empty-state" style="padding:28px 0"><div class="empty-icon">🌙</div><div>Sin ventas registradas</div></div>`;
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="flex:1;min-width:0">
+        <div class="chart-title">Ventas del día</div>
+        <div class="chart-subtitle" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${dayLabel}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        ${rows.length ? `<div style="text-align:right">
+          <div style="font-size:20px;font-weight:800;color:var(--green)">${fmt$(totalFinal)}</div>
+          <div style="font-size:11px;color:var(--muted)">${rows.length} op${rows.length>1?'s':''} · ${fmt$(totalPrecio)}</div>
+        </div>` : ''}
+        <div style="display:flex;gap:4px;margin-left:8px">
+          ${navBtn(-1, false)}
+          ${navBtn(1, _panelDayOffset >= 0)}
+        </div>
+      </div>
+    </div>
+    <div style="max-height:280px;overflow-y:auto;margin-top:8px">${rows_html}</div>`;
+}
+
+function renderMonthsPanel() {
+  const panel = document.getElementById('months-panel');
+  if (!panel) return;
+
+  // Mes seleccionado según el filtro de fecha
+  const fromVal = document.getElementById('f-date-from').value;
+  const selDate = fromVal ? new Date(fromVal + 'T00:00:00') : new Date();
+  const selYear = selDate.getFullYear();
+  const selMon  = selDate.getMonth();
+  const now     = new Date();
+
+  // 3 meses: anterior, seleccionado, siguiente
+  const slots = [-1, 0, 1].map(offset => {
+    const d    = new Date(selYear, selMon + offset, 1);
+    const key  = monthKey(d);
+    const rows = allData.filter(r => r.monthKey === key);
+    const isFuture = d > new Date(now.getFullYear(), now.getMonth(), 1);
+    return { key, label: monthLabel(key), rows, isFuture,
+      final:  sum(rows, r => r.final),
+      precio: sum(rows, r => r.precio),
+      ops:    rows.length,
+      ticket: rows.length ? sum(rows, r => r.precio) / rows.length : 0,
+      margen: rows.length ? avg(rows, r => r.precio > 0 ? r.final / r.precio * 100 : 0) : 0,
+    };
+  });
+
+  const card = (m, isCenter) => {
+    if (m.isFuture && !m.rows.length) {
+      return `<div style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;opacity:0.35;display:flex;align-items:center;justify-content:center">
+        <span style="color:var(--muted);font-size:13px">${m.label}</span>
+      </div>`;
+    }
+
+    // Calcular variación vs mes anterior (sin parsear fecha para evitar bug de timezone)
+    const [ky, km] = m.key.split('-').map(Number);
+    const prevKey = monthKey(new Date(ky, km - 2, 1)); // km es 1-based, -2 da el mes anterior
+    const prevRows = allData.filter(r => r.monthKey === prevKey);
+    const prevFinal = sum(prevRows, r => r.final);
+    const growth = prevFinal > 0 ? ((m.final - prevFinal) / prevFinal * 100) : null;
+
+    const growthBadge = growth !== null
+      ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:700;padding:3px 8px;border-radius:20px;background:${growth>=0?'rgba(16,185,129,0.12)':'rgba(248,81,73,0.12)'};color:${growth>=0?'var(--green)':'var(--red)'}">
+          ${growth >= 0 ? '▲' : '▼'} ${Math.abs(growth).toFixed(1)}%
+        </span>`
+      : `<span style="font-size:11px;color:var(--muted2)">Sin mes anterior</span>`;
+
+    const borderStyle = isCenter
+      ? 'border:2px solid var(--indigo);background:rgba(99,102,241,0.06)'
+      : 'border:1px solid var(--border);background:var(--surface)';
+
+    return `
+    <div style="flex:1;min-width:0;${borderStyle};border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden">
+      ${isCenter ? `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--indigo)"></div>` : ''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:${isCenter?'var(--indigo)':'var(--muted)'}">${m.label}</div>
+        ${isCenter ? `<span style="font-size:10px;font-weight:600;color:var(--indigo);background:rgba(99,102,241,0.15);padding:2px 7px;border-radius:20px">SELECCIONADO</span>` : ''}
+      </div>
+      <div style="font-size:26px;font-weight:800;color:var(--text);line-height:1;margin-bottom:4px">${m.final > 0 ? fmt$(m.final) : '—'}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Final acumulado</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div>
+          <div style="font-size:15px;font-weight:700">${m.ops}</div>
+          <div style="font-size:11px;color:var(--muted)">Operaciones</div>
+        </div>
+        <div>
+          <div style="font-size:15px;font-weight:700">${m.ops ? fmt$(m.ticket) : '—'}</div>
+          <div style="font-size:11px;color:var(--muted)">Ticket prom.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">
+        vs mes ant.: ${growthBadge}
+      </div>
+    </div>`;
+  };
+
+  panel.innerHTML = `
+    <div style="display:flex;gap:12px;align-items:stretch">
+      ${card(slots[0], false)}
+      ${card(slots[1], true)}
+      ${card(slots[2], false)}
+    </div>`;
+}
+
+function renderResumen() {
+  const data = filteredData;
+  if (!data.length) { document.getElementById('kpi-grid').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin datos para los filtros seleccionados</div>'; return; }
+
+  const totalPrecio = sum(data, r => r.precio);
+  const totalGasto = sum(data, r => r.gasto);
+  const totalNeto = sum(data, r => r.neto);
+  const totalFinal = sum(data, r => r.final);
+  const ops = data.length;
+  const ticket = totalPrecio / ops;
+  const margenProm = totalPrecio > 0 ? (totalFinal / totalPrecio * 100) : 0;
+
+  const byMonth = aggByMonth(data);
+  const bestMonth = byMonth.length ? byMonth.reduce((a,b) => a.final > b.final ? a : b) : null;
+  const worstMonth = byMonth.length ? byMonth.reduce((a,b) => a.final < b.final ? a : b) : null;
+
+  // MoM comparison
+  let momBadge = '';
+  if (byMonth.length >= 2) {
+    const last = byMonth[byMonth.length-1];
+    const prev = byMonth[byMonth.length-2];
+    const pct = prev.final > 0 ? ((last.final - prev.final) / prev.final * 100) : 0;
+    momBadge = `<span class="kpi-badge ${pct>=0?'up':'down'}">${pct>=0?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% vs mes ant.</span>`;
+  }
+
+  const periodDates = data.map(r => r.fecha).sort((a,b) => a-b);
+  const pFrom = periodDates[0];
+  const pTo = periodDates[periodDates.length-1];
+  document.getElementById('resumen-period').textContent = pFrom && pTo ?
+    `${pFrom.toLocaleDateString('es-AR')} — ${pTo.toLocaleDateString('es-AR')}` : '';
+
+  // Ventas de hoy (sobre allData, sin filtro de fecha)
+  const todayStr = new Date().toDateString();
+  const todayData = allData.filter(r => r.fecha.toDateString() === todayStr);
+  const todayFinal = sum(todayData, r => r.final);
+  const todayOps   = todayData.length;
+
+  const kpis = [
+    { icon:'✅', label:'Final Total', value:fmt$(totalFinal), sub:`Ingreso real`, color:'var(--green)', badge:momBadge },
+    { icon:'📅', label:'Final Hoy', value: todayFinal > 0 ? fmt$(todayFinal) : '$0', sub: todayOps > 0 ? `${todayOps} op${todayOps>1?'s':''} del día` : 'Sin ventas hoy', color:'var(--teal)' },
+    { icon:'💰', label:'Ventas Brutas', value:fmt$(totalPrecio), sub:`Precio bruto total`, color:'var(--indigo)' },
+    { icon:'📤', label:'Gasto Total', value:fmt$(totalGasto), sub:`${fmtPct(totalGasto/totalPrecio*100)} del bruto`, color:'var(--red)' },
+    { icon:'📊', label:'Neto Total', value:fmt$(totalNeto), sub:`Bruto - Gasto`, color:'var(--blue)' },
+    { icon:'📈', label:'Margen Promedio', value:fmtPct(margenProm), sub:`Final / Precio`, color:'var(--indigo)' },
+  ];
+
+  document.getElementById('kpi-grid').innerHTML = kpis.map(k => `
+    <div class="kpi-card" style="--kpi-color:${k.color}">
+      <div class="kpi-icon">${k.icon}</div>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+      ${k.badge || ''}
+    </div>`).join('');
+
+  // Panel ventas de hoy
+  renderTodayPanel();
+  renderMonthsPanel();
+
+  // Vendor donut
+  const byVendor = aggByVendor(data).slice(0, 8);
+  mkChart('chart-resumen-vendor-donut', {
+    type: 'doughnut',
+    data: {
+      labels: byVendor.map(v => v.key),
+      datasets: [{ data: byVendor.map(v => v.precio), backgroundColor: PALETTE, borderColor: '#161b22', borderWidth: 2 }]
+    },
+    options: {
+      cutout: '60%',
+      plugins: { legend: { position: 'bottom', labels:{ color: tickColor, font:{size:12}, padding:12 } } }
+    }
+  });
+}
+
+// ============================================================
+// SECTION 2: TEMPORAL
+// ============================================================
+function renderTemporal() {
+  const data = filteredData;
+  const byMonth = aggByMonth(data);
+  const labels = byMonth.map(m => m.label);
+
+  mkChart('chart-temporal-revenue', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Precio Bruto', data: byMonth.map(m => m.precio), borderColor: PALETTE[0], backgroundColor: PALETTE[0]+'15', tension: 0.3, fill: true, pointRadius: 5 },
+        { label:'Neto', data: byMonth.map(m => m.neto), borderColor: PALETTE[1], tension: 0.3, fill: false, pointRadius: 5 },
+        { label:'Final', data: byMonth.map(m => m.final), borderColor: PALETTE[2], tension: 0.3, fill: false, pointRadius: 5 }
+      ]
+    },
+    options: {
+      plugins: { legend: { position:'top', labels:{color:tickColor} } },
+      scales: {
+        x: axisDefaults(),
+        y: { ...axisDefaults('$'), ticks:{ color:tickColor, callback: v => '$'+v.toLocaleString('es-AR') } }
+      }
+    }
+  });
+
+  mkChart('chart-temporal-ops', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label:'Operaciones', data: byMonth.map(m => m.ops), backgroundColor: PALETTE[3]+'bb', borderRadius: 6 }]
+    },
+    options: { plugins:{legend:{labels:{color:tickColor}}}, scales:{ x:axisDefaults(), y:axisDefaults('Cantidad') } }
+  });
+
+  mkChart('chart-temporal-ticket', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label:'Ticket Promedio', data: byMonth.map(m => m.ticket), borderColor: PALETTE[4], backgroundColor: PALETTE[4]+'22', tension: 0.3, fill: true, pointRadius: 5 }]
+    },
+    options: {
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback: v => '$'+v.toLocaleString('es-AR')} } }
+    }
+  });
+
+  mkChart('chart-temporal-margin', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label:'Margen %', data: byMonth.map(m => +m.margen.toFixed(1)), borderColor: PALETTE[1], backgroundColor: PALETTE[1]+'22', tension: 0.3, fill: true, pointRadius: 5 }]
+    },
+    options: {
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:{ ...axisDefaults('%'), ticks:{color:tickColor, callback: v => v+'%'} } }
+    }
+  });
+
+  mkChart('chart-temporal-final', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label:'Final', data: byMonth.map(m => m.final), backgroundColor: byMonth.map(m => PALETTE[1]+'cc'), borderRadius: 6 }]
+    },
+    options: {
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback: v => '$'+v.toLocaleString('es-AR')} } }
+    }
+  });
+}
+
+// ============================================================
+// SECTION 3: VENDEDORES
+// ============================================================
+function renderVendedores() {
+  const data = filteredData;
+  const byVendor = aggByVendor(data);
+
+  // Bar chart (horizontal)
+  mkChart('chart-vendor-bar', {
+    type: 'bar',
+    data: {
+      labels: byVendor.map(v => v.key),
+      datasets: [
+        { label:'Precio Bruto', data: byVendor.map(v => v.precio), backgroundColor: PALETTE[0]+'cc', borderRadius: 4 },
+        { label:'Neto', data: byVendor.map(v => v.neto), backgroundColor: PALETTE[1]+'cc', borderRadius: 4 },
+        { label:'Final', data: byVendor.map(v => v.final), backgroundColor: PALETTE[2]+'cc', borderRadius: 4 }
+      ]
+    },
+    options: {
+      plugins:{legend:{position:'top',labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback: v=>'$'+v.toLocaleString('es-AR')} } }
+    }
+  });
+
+  // Pie
+  mkChart('chart-vendor-pie', {
+    type: 'doughnut',
+    data: {
+      labels: byVendor.map(v => v.key),
+      datasets: [{ data: byVendor.map(v => v.precio), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
+    },
+    options: { cutout:'55%', plugins:{legend:{position:'bottom',labels:{color:tickColor,padding:10}}} }
+  });
+
+  // Margin bar
+  mkChart('chart-vendor-margin', {
+    type: 'bar',
+    data: {
+      labels: byVendor.map(v => v.key),
+      datasets: [{ label:'Margen %', data: byVendor.map(v => +v.margen.toFixed(1)), backgroundColor: byVendor.map(v => v.margen>50?PALETTE[1]+'cc':PALETTE[2]+'cc'), borderRadius: 4 }]
+    },
+    options: {
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:{ ...axisDefaults('%'), ticks:{color:tickColor, callback:v=>v+'%'} } }
+    }
+  });
+
+  // Table
+  const totalPrecio = sum(data, r => r.precio) || 1;
+  const rows = byVendor.map((v, i) => [
+    { html: `<span class="td-rank">#${i+1}</span>`, cls:'' },
+    v.key,
+    fmt$(v.precio),
+    fmt$(v.neto),
+    fmt$(v.final),
+    v.ops,
+    fmt$(v.ticket),
+    fmtPct(v.margen),
+    { html: `<div style="display:flex;align-items:center;gap:8px"><div class="progress-bar-wrap"><div class="progress-bar" style="width:${v.pct}%;background:${PALETTE[0]}"></div></div><span style="font-size:12px;color:var(--muted)">${v.pct.toFixed(1)}%</span></div>`, cls:'' }
+  ]);
+
+  makeSortableTable('table-vendors',
+    ['#','Vendedor','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Margen %','Participación'],
+    rows
+  );
+}
+
+// ============================================================
+// SECTION 4: GÉNEROS
+// ============================================================
+function renderGeneros() {
+  const data = filteredData;
+  const byGenre = aggByGenre(data);
+
+  mkChart('chart-genre-donut', {
+    type: 'doughnut',
+    data: {
+      labels: byGenre.map(g => g.key),
+      datasets: [{ data: byGenre.map(g => g.precio), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
+    },
+    options: { cutout:'60%', plugins:{legend:{position:'bottom',labels:{color:tickColor,padding:8,font:{size:11}}}} }
+  });
+
+  mkChart('chart-genre-bar', {
+    type: 'bar',
+    data: {
+      labels: byGenre.map(g => g.key),
+      datasets: [
+        { label:'Final', data: byGenre.map(g => g.final), backgroundColor: PALETTE.map(c => c+'cc'), borderRadius: 5 }
+      ]
+    },
+    options: {
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} } }
+    }
+  });
+
+  // Genre evolution stacked
+  const months = [...new Set(data.map(r => r.monthKey))].sort();
+  const genres = byGenre.map(g => g.key);
+  const genreMonthData = genres.map(g => months.map(m => {
+    const rows = data.filter(r => r.genero === g && r.monthKey === m);
+    return sum(rows, r => r.precio);
+  }));
+
+  mkChart('chart-genre-evolution', {
+    type: 'bar',
+    data: {
+      labels: months.map(monthLabel),
+      datasets: genres.map((g, i) => ({
+        label: g, data: genreMonthData[i],
+        backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
+        borderRadius: 3, stack: 'genres'
+      }))
+    },
+    options: {
+      plugins:{legend:{position:'top',labels:{color:tickColor,font:{size:11}}}},
+      scales:{
+        x: axisDefaults(),
+        y: { ...axisDefaults('$'), stacked:true, ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} }
+      }
+    }
+  });
+
+  // Table
+  const rows = byGenre.map((g, i) => [
+    { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+    g.key,
+    fmt$(g.precio),
+    fmt$(g.neto),
+    fmt$(g.final),
+    g.ops,
+    fmt$(g.ticket),
+    fmtPct(g.margen)
+  ]);
+  makeSortableTable('table-genres',
+    ['#','Género','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Margen %'],
+    rows
+  );
+}
+
+// ============================================================
+// SECTION 5: CLIENTES
+// ============================================================
+function renderClientes() {
+  const data = filteredData;
+  const byClient = aggByClient(data);
+
+  // Recurrentes
+  const recurrentes = byClient.filter(c => c.ops > 1).length;
+  const unicos = byClient.length;
+
+  document.getElementById('client-kpis').innerHTML = [
+    { icon:'👥', label:'Total Clientes', value: unicos, color:'var(--indigo)' },
+    { icon:'🔄', label:'Recurrentes', value: recurrentes, sub:`${fmtPct(recurrentes/unicos*100)} del total`, color:'var(--green)' },
+    { icon:'🆕', label:'Compra única', value: unicos - recurrentes, color:'var(--amber)' },
+    { icon:'🏆', label:'Top Cliente', value: byClient[0]?.key || '—', sub: byClient[0] ? fmt$(byClient[0].final) : '', color:'var(--violet)' },
+  ].map(k => `<div class="kpi-card" style="--kpi-color:${k.color}"><div class="kpi-icon">${k.icon}</div><div class="kpi-label">${k.label}</div><div class="kpi-value" style="font-size:${k.value.toString().length>10?'18px':'26px'}">${k.value}</div>${k.sub?`<div class="kpi-sub">${k.sub}</div>`:''}</div>`).join('');
+
+  // Pareto
+  const sorted = [...byClient].sort((a,b) => b.final - a.final);
+  const totalFinal = sum(sorted, c => c.final);
+  let cum = 0;
+  const paretoData = sorted.map(c => { cum += c.final; return { ...c, pct: cum/totalFinal*100 }; });
+  const p80idx = paretoData.findIndex(c => c.pct >= 80);
+  const p80count = p80idx === -1 ? sorted.length : p80idx + 1;
+  document.getElementById('pareto-label').textContent =
+    `El ${fmtPct(p80count/sorted.length*100)} de clientes (${p80count} de ${sorted.length}) genera el 80% de los ingresos finales.`;
+
+  const paretoTop = paretoData.slice(0, Math.min(30, paretoData.length));
+  mkChart('chart-client-pareto', {
+    type: 'bar',
+    data: {
+      labels: paretoTop.map(c => c.key),
+      datasets: [
+        { type:'bar', label:'Final', data: paretoTop.map(c => c.final), backgroundColor: paretoTop.map((c,i) => i<p80count?PALETTE[0]+'cc':PALETTE[0]+'44'), borderRadius:4, yAxisID:'y' },
+        { type:'line', label:'% Acumulado', data: paretoTop.map(c => +c.pct.toFixed(1)), borderColor: PALETTE[2], pointRadius:3, tension:0, yAxisID:'y1', fill:false }
+      ]
+    },
+    options: {
+      plugins:{legend:{position:'top',labels:{color:tickColor}}},
+      scales:{
+        x:{...axisDefaults(), ticks:{color:tickColor, font:{size:10}, maxRotation:45}},
+        y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} },
+        y1:{ position:'right', max:100, grid:{display:false}, ticks:{color:tickColor, callback:v=>v+'%'} }
+      }
+    }
+  });
+
+  // Top 10 bar
+  const top10 = sorted.slice(0, 10);
+  mkChart('chart-client-top', {
+    type: 'bar',
+    data: {
+      labels: top10.map(c => c.key),
+      datasets: [{ label:'Final', data: top10.map(c => c.final), backgroundColor: PALETTE.slice(0,10).map(c=>c+'cc'), borderRadius:5 }]
+    },
+    options: {
+      indexAxis:'y',
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{
+        x:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} },
+        y:axisDefaults()
+      }
+    }
+  });
+
+  // New clients per month
+  const firstPurchase = {};
+  data.forEach(r => { if (!firstPurchase[r.artista] || r.fecha < firstPurchase[r.artista]) firstPurchase[r.artista] = r.fecha; });
+  const newByMonth = new Map();
+  Object.values(firstPurchase).forEach(d => { const k = monthKey(d); newByMonth.set(k, (newByMonth.get(k)||0)+1); });
+  const newMonths = [...newByMonth.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+
+  mkChart('chart-client-new', {
+    type: 'bar',
+    data: {
+      labels: newMonths.map(([k]) => monthLabel(k)),
+      datasets: [{ label:'Nuevos clientes', data: newMonths.map(([,v])=>v), backgroundColor: PALETTE[1]+'cc', borderRadius:5 }]
+    },
+    options: {
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:axisDefaults('Cantidad') }
+    }
+  });
+
+  // Table
+  const rows = sorted.map((c, i) => [
+    { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+    c.key,
+    fmt$(c.precio),
+    fmt$(c.final),
+    c.ops,
+    fmt$(c.ticket),
+    fmtPct(c.margen),
+    c.ops > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
+    c.firstDate ? c.firstDate.toLocaleDateString('es-AR') : '—'
+  ]);
+
+  makeSortableTable('table-clients',
+    ['#','Artista/Cliente','Ventas Brutas','Final','Ops','Ticket Prom','Margen %','Tipo','Primera Compra'],
+    rows
+  );
+}
+
+// ============================================================
+// SECTION 6: MÉTODOS
+// ============================================================
+function renderMetodos() {
+  const data = filteredData;
+  const byMethod = aggByMethod(data);
+
+  mkChart('chart-method-grouped', {
+    type: 'bar',
+    data: {
+      labels: byMethod.map(m => m.key),
+      datasets: [
+        { label:'Precio Bruto', data: byMethod.map(m => m.precio), backgroundColor: PALETTE[0]+'cc', borderRadius:4 },
+        { label:'Neto', data: byMethod.map(m => m.neto), backgroundColor: PALETTE[1]+'cc', borderRadius:4 },
+        { label:'Final', data: byMethod.map(m => m.final), backgroundColor: PALETTE[2]+'cc', borderRadius:4 }
+      ]
+    },
+    options: {
+      plugins:{legend:{position:'top',labels:{color:tickColor}}},
+      scales:{
+        x:axisDefaults(),
+        y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} }
+      }
+    }
+  });
+
+  mkChart('chart-method-pie', {
+    type: 'doughnut',
+    data: {
+      labels: byMethod.map(m => m.key),
+      datasets: [{ data: byMethod.map(m => m.precio), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
+    },
+    options: { cutout:'55%', plugins:{legend:{position:'bottom',labels:{color:tickColor,padding:10}}} }
+  });
+
+  mkChart('chart-method-commission', {
+    type: 'bar',
+    data: {
+      labels: byMethod.map(m => m.key),
+      datasets: [{ label:'Comisión % promedio', data: byMethod.map(m => +m.comision.toFixed(1)), backgroundColor: byMethod.map((_,i)=>PALETTE[i%PALETTE.length]+'cc'), borderRadius:5 }]
+    },
+    options: {
+      plugins:{legend:{labels:{color:tickColor}}},
+      scales:{ x:axisDefaults(), y:{ ...axisDefaults('%'), ticks:{color:tickColor, callback:v=>v+'%'} } }
+    }
+  });
+
+  // Efficiency rank: final / precio
+  const ranked = [...byMethod].sort((a,b) => (b.final/b.precio) - (a.final/a.precio));
+
+  const rows = ranked.map((m, i) => [
+    { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+    m.key,
+    fmt$(m.precio),
+    fmt$(m.neto),
+    fmt$(m.final),
+    m.ops,
+    fmt$(m.ticket),
+    fmtPct(m.comision),
+    fmtPct(m.margen),
+    fmtPct(m.final/m.precio*100)
+  ]);
+
+  makeSortableTable('table-methods',
+    ['#','Método','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Comisión Prom','Margen %','Eficiencia (Final/Bruto)'],
+    rows
+  );
+}
+
+// ============================================================
+// SECTION 7: INSIGHTS
+// ============================================================
+function renderInsights() {
+  const data = filteredData;
+  if (!data.length) { document.getElementById('insights-grid').innerHTML = '<div class="empty-state"><div>Sin datos</div></div>'; return; }
+
+  const byVendor = aggByVendor(data);
+  const byGenre = aggByGenre(data);
+  const byClient = aggByClient(data);
+  const byMethod = aggByMethod(data);
+  const byMonth = aggByMonth(data);
+
+  const totalPrecio = sum(data, r => r.precio);
+  const sinGenero = data.filter(r => r.genero === 'Sin género').length;
+  const sinGeneroPct = data.length > 0 ? sinGenero / data.length * 100 : 0;
+  const topVendor = byVendor[0];
+  const topGenreRent = [...byGenre].sort((a,b) => b.margen - a.margen)[0];
+  const topGenreVol = byGenre[0];
+  const worstMethod = [...byMethod].sort((a,b) => a.margen - b.margen)[0];
+  const topClients = byClient.slice(0, 3);
+
+  // MoM growth
+  let momGrowth = null, momPct = null;
+  if (byMonth.length >= 2) {
+    const last = byMonth[byMonth.length-1];
+    const prev = byMonth[byMonth.length-2];
+    momGrowth = last.final - prev.final;
+    momPct = prev.final > 0 ? momGrowth / prev.final * 100 : 0;
+  }
+
+  // Projection
+  const now = new Date();
+  const curMonthData = data.filter(r => r.fecha.getMonth() === now.getMonth() && r.fecha.getFullYear() === now.getFullYear());
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const dayOfMonth = now.getDate();
+  const curFinal = sum(curMonthData, r => r.final);
+  const dailyRate = dayOfMonth > 0 ? curFinal / dayOfMonth : 0;
+  const projected = dailyRate * daysInMonth;
+  const daysLeft = daysInMonth - dayOfMonth;
+
+  if (curMonthData.length > 0) {
+    const projHtml = `
+      <div class="projection-card">
+        <div class="projection-title">📅 Proyección de Cierre — ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}</div>
+        <div class="projection-grid">
+          <div class="proj-item"><div class="pv" style="color:var(--green)">${fmt$(projected)}</div><div class="pl">Final proyectado</div></div>
+          <div class="proj-item"><div class="pv">${fmt$(curFinal)}</div><div class="pl">Acumulado actual</div></div>
+          <div class="proj-item"><div class="pv">${fmt$(dailyRate)}</div><div class="pl">Ritmo diario</div></div>
+          <div class="proj-item"><div class="pv">${daysLeft}</div><div class="pl">Días restantes</div></div>
+          <div class="proj-item"><div class="pv">${curMonthData.length}</div><div class="pl">Ops en el mes</div></div>
+        </div>
+      </div>`;
+    document.getElementById('projection-box').innerHTML = projHtml;
+  }
+
+  // Alerts
+  let alertsHtml = '';
+  if (sinGeneroPct > 30) {
+    alertsHtml += `<div class="alert-bar warn">⚠️ <strong>${fmtPct(sinGeneroPct)}</strong> de registros no tiene género asignado (${sinGenero} de ${data.length}). Completar esta info mejorará el análisis.</div>`;
+  }
+  if (momPct !== null && momPct < -20) {
+    alertsHtml += `<div class="alert-bar danger">📉 Caída del <strong>${Math.abs(momPct).toFixed(1)}%</strong> en el ingreso final vs el mes anterior.</div>`;
+  }
+  if (momPct !== null && momPct > 20) {
+    alertsHtml += `<div class="alert-bar success">🚀 Crecimiento del <strong>${momPct.toFixed(1)}%</strong> en el ingreso final vs el mes anterior.</div>`;
+  }
+  if (worstMethod && worstMethod.margen < 20) {
+    alertsHtml += `<div class="alert-bar warn">💸 El método <strong>${worstMethod.key}</strong> tiene un margen muy bajo (${fmtPct(worstMethod.margen)}). Revisar comisiones.</div>`;
+  }
+  // Check if top 3 clients > 60% of revenue
+  const top3pct = topClients.reduce((a,c) => a + c.final, 0) / sum(data, r=>r.final) * 100;
+  if (top3pct > 60) {
+    alertsHtml += `<div class="alert-bar warn">⚠️ Alta concentración: los top 3 clientes representan el <strong>${fmtPct(top3pct)}</strong> del ingreso final. Diversificar cartera.</div>`;
+  }
+  document.getElementById('alerts-box').innerHTML = alertsHtml;
+
+  // Insight cards
+  const insightCards = [
+    topVendor && { icon:'🏆', cls:'good', title:'Mejor Vendedor', value: topVendor.key, desc:`${fmt$(topVendor.final)} en ingresos finales · ${topVendor.ops} operaciones · Margen ${fmtPct(topVendor.margen)}`, color:PALETTE[1] },
+    topGenreRent && { icon:'💎', cls:'good', title:'Género Más Rentable', value: topGenreRent.key, desc:`Margen promedio del ${fmtPct(topGenreRent.margen)} · ${fmt$(topGenreRent.final)} en Final`, color:PALETTE[0] },
+    topGenreVol && { icon:'📢', cls:'info', title:'Género con Mayor Volumen', value: topGenreVol.key, desc:`${topGenreVol.ops} operaciones · ${fmt$(topGenreVol.precio)} en ventas brutas`, color:PALETTE[3] },
+    byClient[0] && { icon:'⭐', cls:'good', title:'Cliente Principal', value: byClient[0].key, desc:`${fmt$(byClient[0].final)} en ingresos finales · ${byClient[0].ops} compras`, color:PALETTE[4] },
+    worstMethod && { icon:'💳', cls:'alert', title:'Método con Mayor Costo', value: worstMethod.key, desc:`Margen promedio ${fmtPct(worstMethod.margen)} · Comisión ${fmtPct(worstMethod.comision)}`, color:PALETTE[5] },
+    momPct !== null && { icon: momPct >= 0 ? '📈' : '📉', cls: momPct>=0?'good':'alert', title:'Variación Mensual (Final)', value: `${momPct>=0?'+':''}${momPct.toFixed(1)}%`, desc:`Vs mes anterior: ${fmt$(Math.abs(momGrowth))} ${momPct>=0?'más':'menos'}`, color: momPct>=0?PALETTE[1]:PALETTE[7] },
+    { icon:'🏷️', cls:'info', title:'Sin Género', value: fmtPct(sinGeneroPct), desc:`${sinGenero} registros sin género de ${data.length} totales`, color: PALETTE[6] },
+    { icon:'📦', cls:'info', title:'Concentración Top 3 Clientes', value: fmtPct(top3pct), desc:`${topClients.map(c=>c.key).join(', ')}`, color: PALETTE[2] },
+  ].filter(Boolean);
+
+  document.getElementById('insights-grid').innerHTML = insightCards.map(c => `
+    <div class="insight-card ${c.cls}">
+      <div class="insight-icon-wrap" style="background:${c.color}18;color:${c.color}">${c.icon}</div>
+      <div>
+        <div class="insight-title">${c.title}</div>
+        <div class="insight-value">${c.value}</div>
+        <div class="insight-desc">${c.desc}</div>
+      </div>
+    </div>`).join('');
+
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', init);
+
+// ============================================================
+// OAUTH + NUEVA VENTA
+// ============================================================
+let gAccessToken = null;
+let gTokenClient = null;
+let gSheetName   = null;
+let pendingAction = null;
+
+const TOKEN_KEY = 'gsh_token';
+
+function saveToken(token, expiresIn) {
+  sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
+    token, expiresAt: Date.now() + (expiresIn - 60) * 1000  // 60s de margen
+  }));
+}
+
+function loadToken() {
+  try {
+    const data = JSON.parse(sessionStorage.getItem(TOKEN_KEY));
+    if (data && data.expiresAt > Date.now()) return data.token;
+  } catch(_) {}
+  return null;
+}
+
+function clearToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
+function initTokenClient() {
+  if (!window.google) return;
+  gTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    callback: async (resp) => {
+      if (resp.error) {
+        // Silencioso falló (usuario no logueado o no autorizó) — no mostrar error
+        if (resp.error === 'interaction_required' || resp.error === 'access_denied') return;
+        showToast('Error de autenticación: ' + resp.error, 'error');
+        return;
+      }
+      gAccessToken = resp.access_token;
+      saveToken(resp.access_token, resp.expires_in || 3600);
+      setAuthConnected();
+      if (pendingAction) { pendingAction(); pendingAction = null; }
+    }
+  });
+
+  // Restaurar token guardado en sesión
+  const saved = loadToken();
+  if (saved) {
+    gAccessToken = saved;
+    setAuthConnected();
+  } else {
+    // Intentar renovación silenciosa (funciona si ya autorizó antes en este navegador)
+    gTokenClient.requestAccessToken({ prompt: '' });
+  }
+}
+
+function handleAuth() {
+  if (!gTokenClient) {
+    showToast('Google Identity Services aún no cargó. Esperá un momento.', 'error'); return;
+  }
+  if (gAccessToken) {
+    google.accounts.oauth2.revoke(gAccessToken, () => {});
+    gAccessToken = null;
+    gSheetName = null;
+    clearToken();
+    setAuthDisconnected();
+    return;
+  }
+  gTokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+function setAuthConnected() {
+  document.getElementById('auth-bar').classList.add('connected');
+  document.getElementById('auth-status').textContent = 'Conectado con Google. Listo para guardar.';
+  document.getElementById('auth-user').textContent = '';
+  document.getElementById('auth-btn').textContent = 'Desconectar';
+  document.getElementById('submit-btn').disabled = false;
+}
+
+function setAuthDisconnected() {
+  document.getElementById('auth-bar').classList.remove('connected');
+  document.getElementById('auth-status').textContent = 'Conectá tu cuenta de Google para guardar en el Sheet';
+  document.getElementById('auth-user').textContent = '';
+  document.getElementById('auth-btn').textContent = 'Conectar Google';
+  document.getElementById('submit-btn').disabled = true;
+}
+
+// Obtener nombre de la pestaña por GID (necesario para la API)
+async function getSheetName() {
+  if (gSheetName) return gSheetName;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?fields=sheets.properties`;
+  const r = await fetch(url, { headers: { 'Authorization': `Bearer ${gAccessToken}` } });
+  if (!r.ok) throw new Error(`No se pudo acceder al spreadsheet (HTTP ${r.status}). Verificá que el Sheet ID es correcto y que tenés acceso de edición.`);
+  const data = await r.json();
+  const sheet = data.sheets.find(s => s.properties.sheetId === SHEET_GID);
+  if (!sheet) throw new Error(`No se encontró la pestaña con GID ${SHEET_GID}. Verificá el SHEET_GID en el config.`);
+  gSheetName = sheet.properties.title;
+  return gSheetName;
+}
+
+// ── MODAL ──────────────────────────────────────────────────
+function openModal() {
+  // Pre-set fecha de hoy
+  const today = localDateStr(new Date());
+  document.getElementById('f-fecha').value = today;
+
+  // Poblar datalists con valores únicos del dataset actual
+  fillDatalist('list-artistas', allData.map(r => r.artista));
+  fillDatalist('list-ventas',   allData.map(r => r.venta));
+  fillDatalist('list-metodos',  allData.map(r => r.metodo));
+  fillDatalist('list-generos',  allData.map(r => r.genero));
+
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('f-artista').focus();
+
+  // Inicializar token client si no está listo aún
+  if (!gTokenClient) initTokenClient();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.getElementById('sale-form').reset();
+  document.getElementById('f-neto').value = '';
+  document.getElementById('f-final').value = '';
+  document.getElementById('f-margen').value = '';
+}
+
+function fillDatalist(id, values) {
+  const dl = document.getElementById(id);
+  dl.innerHTML = [...new Set(values)].filter(Boolean).sort()
+    .map(v => `<option value="${v.replace(/"/g,'&quot;')}">`).join('');
+}
+
+// Comisiones por método de pago
+const COMISIONES = {
+  'paypal':            11,
+  'wise':              5.2,
+  'mercado pago':      11,
+  'transferencia ars': 1,
+  'sin comision':      0,
+  'sin comisión':      0,
+};
+
+function autoComision() {
+  const metodo = document.getElementById('f-metodo').value.trim().toLowerCase();
+  const pct = COMISIONES[metodo];
+  if (pct !== undefined) {
+    document.getElementById('f-comision').value = pct;
+  }
+}
+
+// Auto-cálculos del formulario
+function recalcular() {
+  const precio = parseFloat(document.getElementById('f-precio').value) || 0;
+  const gasto  = parseFloat(document.getElementById('f-gasto').value)  || 0;
+  const neto   = precio - gasto;
+  if (precio > 0) {
+    document.getElementById('f-neto').value  = neto.toFixed(2);
+    document.getElementById('f-final').value = neto.toFixed(2);
+    document.getElementById('f-margen').value = (neto / precio * 100).toFixed(2);
+  }
+}
+
+function recalcMargen() {
+  const precio = parseFloat(document.getElementById('f-precio').value) || 0;
+  const final  = parseFloat(document.getElementById('f-final').value)  || 0;
+  if (precio > 0) {
+    document.getElementById('f-margen').value = (final / precio * 100).toFixed(2);
+  }
+}
+
+// ── SUBMIT ─────────────────────────────────────────────────
+async function submitSale(e) {
+  if (e) e.preventDefault();
+
+  if (!gAccessToken) {
+    pendingAction = submitSale;
+    handleAuth();
+    return;
+  }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    const sheetName = await getSheetName();
+
+    // Leer valores del form
+    const artista  = document.getElementById('f-artista').value.trim();
+    const venta    = document.getElementById('f-venta').value.trim();
+    const metodo   = document.getElementById('f-metodo').value.trim();
+    const comision = document.getElementById('f-comision').value.trim();
+    const precio   = document.getElementById('f-precio').value.trim();
+    const gasto    = document.getElementById('f-gasto').value.trim();
+    const neto     = document.getElementById('f-neto').value.trim();
+    const margen   = document.getElementById('f-margen').value.trim();
+    const final    = document.getElementById('f-final').value.trim();
+    const fechaRaw = document.getElementById('f-fecha').value;   // YYYY-MM-DD
+    const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
+
+    // Convertir fecha a DD/MM/YYYY (formato del sheet)
+    const [fy, fm, fd] = fechaRaw.split('-');
+    const fechaFmt = `${fd}/${fm}/${fy}`;
+
+    // Orden de columnas: ARTISTA, VENTA, METODO, %, PRECIO, GASTO, NETO, %, FINAL, FECHA, GENERO
+    const row = [artista, venta, metodo, comision, precio, gasto, neto, margen, final, fechaFmt, genero];
+
+    // Encontrar primera fila vacía en columna A
+    const colResp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A:A`,
+      { headers: { 'Authorization': `Bearer ${gAccessToken}` } }
+    );
+    const colData = await colResp.json();
+    const nextRow = (colData.values ? colData.values.length : 0) + 1;
+
+    const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A${nextRow}:K${nextRow}?valueInputOption=USER_ENTERED`;
+
+    const resp = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${gAccessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ values: [row] })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+    }
+
+    showToast('✅ Venta guardada en el Sheet', 'success');
+    closeModal();
+
+    // Agregar la venta a allData inmediatamente (sin esperar al CSV)
+    const fecha = new Date(+fy, +fm - 1, +fd);
+    allData.push({
+      artista:  artista || 'Sin artista',
+      venta:    venta   || 'Sin vendedor',
+      metodo:   metodo  || 'Sin método',
+      genero:   genero  || 'Sin género',
+      comision: parseFloat(comision) || 0,
+      precio:   parseFloat(precio)   || 0,
+      gasto:    parseFloat(gasto)    || 0,
+      neto:     parseFloat(neto)     || 0,
+      margen:   parseFloat(margen)   || 0,
+      final:    parseFloat(final)    || 0,
+      fecha,
+      monthKey: monthKey(fecha)
+    });
+    document.getElementById('badge-text').textContent = `${allData.length} registros`;
+    applyFilters();
+
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+    // Si el token expiró, resetear
+    if (err.message.includes('401') || err.message.includes('invalid_token')) {
+      gAccessToken = null; clearToken(); setAuthDisconnected();
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar en Sheet';
+  }
+}
+
+// ── TOAST ──────────────────────────────────────────────────
+// Normaliza fecha a YYYY-MM-DD para comparación agnóstica de formato
+function normFecha(s) {
+  const str = (s || '').toString().trim();
+  let m;
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  // Google Sheets puede devolver número serial de fecha — ignorar, se matchea sin fecha
+  return str;
+}
+
+async function deleteSale(idx) {
+  const r = window._todayRows?.[idx];
+  if (!r) { showToast('No se encontró la venta.', 'error'); return; }
+
+  const d = r.fecha;
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  const fechaNorm = `${yyyy}-${mm}-${dd}`;
+
+  if (!confirm(`¿Eliminar la venta de "${r.artista}" (${fmt$(r.precio)}) del ${dd}/${mm}/${yyyy}?\n\nEsta acción no se puede deshacer.`)) return;
+
+  if (!gAccessToken) {
+    pendingAction = () => deleteSale(idx);
+    handleAuth();
+    return;
+  }
+
+  showToast('Buscando fila en el Sheet...', 'success');
+
+  try {
+    const sheetName = await getSheetName();
+
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A:K`,
+      { headers: { 'Authorization': `Bearer ${gAccessToken}` } }
+    );
+    if (!resp.ok) throw new Error(`No se pudo leer el sheet (HTTP ${resp.status})`);
+    const data = await resp.json();
+    const sheetRows = data.values || [];
+
+    // Buscar fila: artista (col 0) + precio (col 4) — ignora mayúsculas/espacios
+    // Si hay múltiples coincidencias de artista+precio, usa la fecha como desempate
+    const normalize = s => (s || '').toString().trim().toLowerCase();
+    const targetArtista = normalize(r.artista);
+    const targetPrecio  = r.precio;
+
+    let matchIndex = -1;
+    let bestScore  = -1;
+
+    for (let i = 1; i < sheetRows.length; i++) {
+      const row = sheetRows[i];
+      const rowArtista = normalize(row[0]);
+      const rowPrecio  = parseNum(row[4]) || 0;
+      if (rowArtista !== targetArtista) continue;
+      if (Math.abs(rowPrecio - targetPrecio) > 0.5) continue;
+
+      // Coincide artista + precio. Calcular score por fecha
+      const rowFechaNorm = normFecha(row[9]);
+      const fechaScore = rowFechaNorm === fechaNorm ? 2 : 1;
+      if (fechaScore > bestScore) { bestScore = fechaScore; matchIndex = i; }
+    }
+
+    if (matchIndex === -1) throw new Error(
+      `No se encontró "${r.artista}" (${fmt$(r.precio)}) en el Sheet.\n` +
+      `Verificá que el SPREADSHEET_ID (${SPREADSHEET_ID}) corresponde al sheet correcto.`
+    );
+
+    const delResp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${gAccessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            deleteDimension: {
+              range: { sheetId: SHEET_GID, dimension: 'ROWS', startIndex: matchIndex, endIndex: matchIndex + 1 }
+            }
+          }]
+        })
+      }
+    );
+    if (!delResp.ok) {
+      const err = await delResp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${delResp.status}`);
+    }
+
+    // Remover de allData localmente
+    const localIdx = allData.indexOf(r);
+    if (localIdx !== -1) allData.splice(localIdx, 1);
+    document.getElementById('badge-text').textContent = `${allData.length} registros`;
+
+    showToast(`Venta de "${r.artista}" eliminada`, 'success');
+    applyFilters();
+
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+    if (e.message.includes('401')) { gAccessToken = null; clearToken(); setAuthDisconnected(); }
+  }
+}
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type}`;
+  setTimeout(() => t.classList.add('show'), 10);
+  setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// Inicializar token client cuando GIS cargue
+window.addEventListener('load', () => {
+  if (window.google) initTokenClient();
+  else document.querySelector('script[src*="accounts.google.com"]')
+    ?.addEventListener('load', initTokenClient);
+});
+</script>
+</body>
+</html>
