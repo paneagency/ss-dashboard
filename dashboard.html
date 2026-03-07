@@ -351,9 +351,75 @@
     .toast.show { transform: translateY(0); opacity: 1; }
     .toast.success { border-color: rgba(16,185,129,0.4); }
     .toast.error { border-color: rgba(248,81,73,0.4); }
+
+    /* LOGIN */
+    #login-overlay {
+      display: flex; position: fixed; inset: 0; background: var(--bg); z-index: 99999;
+      align-items: center; justify-content: center; padding: 24px;
+    }
+    .login-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 40px 36px; width: 100%; max-width: 380px;
+    }
+    .login-logo { font-size: 32px; text-align: center; margin-bottom: 8px; }
+    .login-title { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+    .login-sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 28px; }
+    .login-group { margin-bottom: 16px; }
+    .login-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; text-transform: uppercase; letter-spacing: .05em; }
+    .login-input { width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text); font-size: 14px; outline: none; }
+    .login-input:focus { border-color: var(--indigo); }
+    .login-btn { width: 100%; margin-top: 8px; padding: 12px; font-size: 15px; }
+    .login-error { color: var(--red); font-size: 13px; text-align: center; margin-top: 12px; display: none; }
+
+    /* USER BADGE en header */
+    .user-badge { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .user-badge strong { color: var(--text); }
+    .user-badge button { font-size: 12px; padding: 4px 10px; }
+
+    /* VENDOR VIEW */
+    #vendedor-view { display: none; padding: 24px 32px; }
+    #vendedor-view .vendor-header { margin-bottom: 24px; }
+    #vendedor-view .vendor-title { font-size: 22px; font-weight: 700; }
+    #vendedor-view .vendor-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .vendor-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px,1fr)); gap: 16px; margin-bottom: 28px; }
+    .vendor-sales-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+
+    /* ROLES: ocultar elementos según rol */
+    body.role-secondary .tab-btn:not([data-tab="resumen"]) { display: none; }
+    body.role-secondary #months-panel { display: none; }
+    body.role-secondary #filters-bar { display: none; }
+    body.role-secondary #kpi-grid { display: none; }
+    body.role-secondary #resumen-secondary-kpis { display: grid; }
+    #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
+
+    body.role-vendedor header .header-right > button:last-child { display: none; }
+    body.role-vendedor #filters-bar { display: none; }
+    body.role-vendedor .tabs-bar { display: none; }
+    body.role-vendedor main { display: none; }
+    body.role-vendedor #vendedor-view { display: block; }
   </style>
 </head>
 <body>
+
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">🎵</div>
+    <div class="login-title">Pane Agency</div>
+    <div class="login-sub">Ingresá con tu usuario y contraseña</div>
+    <div class="login-group">
+      <label class="login-label">Usuario</label>
+      <input class="login-input" id="login-username" type="text" autocomplete="username" placeholder="usuario">
+    </div>
+    <div class="login-group">
+      <label class="login-label">Contraseña</label>
+      <input class="login-input" id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary login-btn" id="login-btn" onclick="handleLogin()">Ingresar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
 
 <!-- LOADING -->
 <div id="loading">
@@ -407,8 +473,12 @@
         <div class="badge-dot"></div>
         <span id="badge-text">0 registros</span>
       </div>
+      <div class="user-badge" id="user-badge" style="display:none">
+        <strong id="user-badge-name"></strong>
+        <button class="btn btn-ghost btn-sm" onclick="logout()">Salir</button>
+      </div>
       <button class="btn btn-ghost btn-sm" id="refresh-btn" onclick="init()">↻ Actualizar</button>
-      <button class="btn btn-primary btn-sm" onclick="openModal()">+ Nueva Venta</button>
+      <button class="btn btn-primary btn-sm" id="btn-nueva-venta" onclick="openModal()">+ Nueva Venta</button>
     </div>
   </div>
 </header>
@@ -538,6 +608,19 @@
   </div>
 </div>
 
+<!-- VENDOR VIEW -->
+<div id="vendedor-view">
+  <div class="vendor-header">
+    <div class="vendor-title" id="vendor-greeting"></div>
+    <div class="vendor-sub" id="vendor-sub"></div>
+  </div>
+  <div class="vendor-kpis" id="vendor-kpis"></div>
+  <div class="vendor-sales-title">Mis ventas</div>
+  <div class="table-card">
+    <div class="table-scroll"><table id="vendor-sales-table"></table></div>
+  </div>
+</div>
+
 <!-- MAIN -->
 <main>
 
@@ -550,6 +633,7 @@
       </div>
     </div>
     <div class="kpi-grid" id="kpi-grid"></div>
+    <div id="resumen-secondary-kpis"></div>
     <div id="months-panel" style="margin-bottom:20px"></div>
     <div class="chart-grid">
       <div class="chart-card" style="flex:2;min-width:320px">
@@ -922,6 +1006,12 @@ function applyLoadedData(parsed) {
   document.getElementById('badge-text').textContent = `${allData.length} registros`;
   document.getElementById('header-subtitle').textContent = `Actualizado ${new Date().toLocaleString('es-AR')}`;
   _panelDayOffset = 0;
+
+  if (window._currentUser?.role === 'vendedor') {
+    renderVendorView(window._currentUser);
+    return;
+  }
+
   populateFilters();
   setDefaultDateRange();
   applyFilters();
@@ -943,6 +1033,11 @@ function loadManualCSV() {
 }
 
 async function init() {
+  const savedUser = getSavedUser();
+  if (!savedUser) { showLoginScreen(); return; }
+  hideLoginScreen();
+  applyRole(savedUser);
+
   document.getElementById('loading').style.display = 'flex';
   document.getElementById('error-screen').style.display = 'none';
   document.getElementById('load-detail').textContent = 'Conectando con Google Sheets...';
@@ -1420,6 +1515,23 @@ function renderMonthsPanel() {
 function renderResumen() {
   const data = filteredData;
   if (!data.length) { document.getElementById('kpi-grid').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin datos para los filtros seleccionados</div>'; return; }
+
+  // Admin Secundario: KPIs restringidos
+  if (window._currentUser?.role === 'secondary_admin') {
+    renderSecondaryAdminKpis(data);
+    renderTodayPanel();
+    // Vendor donut
+    const byVendor = aggByVendor(data).slice(0, 8);
+    mkChart('chart-resumen-vendor-donut', {
+      type: 'doughnut',
+      data: {
+        labels: byVendor.map(v => v.key),
+        datasets: [{ data: byVendor.map(v => v.precio), backgroundColor: PALETTE, borderColor: '#161b22', borderWidth: 2 }]
+      },
+      options: { cutout: '60%', plugins: { legend: { position: 'bottom', labels:{ color: tickColor, font:{size:12}, padding:12 } } } }
+    });
+    return;
+  }
 
   const totalPrecio = sum(data, r => r.precio);
   const totalGasto = sum(data, r => r.gasto);
@@ -1998,6 +2110,13 @@ function openModal() {
   fillDatalist('list-metodos',  allData.map(r => r.metodo));
   fillDatalist('list-generos',  allData.map(r => r.genero));
 
+  // Pre-llenar vendedor si es rol vendedor
+  if (window._currentUser?.role === 'vendedor') {
+    const ventaInput = document.getElementById('f-venta');
+    ventaInput.value = window._currentUser.vendorName || window._currentUser.name;
+    ventaInput.readOnly = true;
+  }
+
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('f-artista').focus();
 
@@ -2173,6 +2292,155 @@ function showToast(msg, type = 'success') {
   t.className = `toast ${type}`;
   setTimeout(() => t.classList.add('show'), 10);
   setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// ============================================================
+// AUTH & ROLES
+// ============================================================
+const USER_SESSION_KEY = 'pane_user';
+
+function getSavedUser() {
+  try { return JSON.parse(sessionStorage.getItem(USER_SESSION_KEY)); } catch(_) { return null; }
+}
+
+function showLoginScreen() {
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('loading').style.display = 'none';
+}
+
+function hideLoginScreen() {
+  document.getElementById('login-overlay').style.display = 'none';
+}
+
+function logout() {
+  sessionStorage.removeItem(USER_SESSION_KEY);
+  window._currentUser = null;
+  document.body.className = '';
+  document.getElementById('user-badge').style.display = 'none';
+  allData = [];
+  showLoginScreen();
+}
+
+function applyRole(user) {
+  window._currentUser = user;
+  document.body.classList.remove('role-admin', 'role-secondary', 'role-vendedor');
+  if (user.role === 'secondary_admin') document.body.classList.add('role-secondary');
+  else if (user.role === 'vendedor') document.body.classList.add('role-vendedor');
+  document.getElementById('user-badge').style.display = 'flex';
+  document.getElementById('user-badge-name').textContent = user.name;
+}
+
+async function handleLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  if (!username || !password) { errEl.textContent = 'Completá usuario y contraseña'; errEl.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Ingresando...';
+  try {
+    const resp = await fetch('/api/auth', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const user = await resp.json();
+    if (!resp.ok) throw new Error(user.error || 'Error de autenticación');
+    sessionStorage.setItem(USER_SESSION_KEY, JSON.stringify(user));
+    hideLoginScreen();
+    init();
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+}
+
+// Enter en el login
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+  document.getElementById('login-username').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+});
+
+// ── ADMIN SECUNDARIO ────────────────────────────────────────
+function renderSecondaryAdminKpis(data) {
+  const ops    = data.length;
+  const ticket = ops > 0 ? sum(data, r => r.precio) / ops : 0;
+
+  // % vs mes anterior usando allData
+  const now = new Date();
+  const curKey  = monthKey(new Date(now.getFullYear(), now.getMonth(), 1));
+  const prevKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const curOps  = allData.filter(r => r.monthKey === curKey).length;
+  const prevOps = allData.filter(r => r.monthKey === prevKey).length;
+  const pct = prevOps > 0 ? ((curOps - prevOps) / prevOps * 100) : null;
+  const pctBadge = pct !== null
+    ? `<span class="kpi-badge ${pct>=0?'up':'down'}">${pct>=0?'▲':'▼'} ${Math.abs(pct).toFixed(1)}% vs mes ant.</span>`
+    : '';
+
+  const kpis = [
+    { icon:'🔢', label:'Operaciones', value: ops, sub:'Ventas en el período', color:'var(--indigo)', badge: pctBadge },
+    { icon:'🎟️', label:'Ticket Promedio', value: fmt$(ticket), sub:'Precio bruto promedio', color:'var(--teal)' },
+  ];
+
+  document.getElementById('resumen-secondary-kpis').innerHTML = kpis.map(k => `
+    <div class="kpi-card" style="--kpi-color:${k.color}">
+      <div class="kpi-icon">${k.icon}</div>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+      ${k.badge || ''}
+    </div>`).join('');
+}
+
+// ── VENDEDOR VIEW ───────────────────────────────────────────
+function renderVendorView(user) {
+  const vendorName = user.vendorName || user.name;
+  const commission = user.commission || 0;
+  const myData = allData.filter(r => r.venta.toLowerCase() === vendorName.toLowerCase());
+
+  const now = new Date();
+  const curKey = monthKey(new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthData = myData.filter(r => r.monthKey === curKey);
+
+  const totalNeto    = sum(monthData, r => r.neto);
+  const myCommission = totalNeto * commission;
+  const ops          = monthData.length;
+  const todayStr     = now.toDateString();
+  const todayOps     = myData.filter(r => r.fecha.toDateString() === todayStr).length;
+
+  document.getElementById('vendor-greeting').textContent = `Hola, ${user.name}`;
+  document.getElementById('vendor-sub').textContent = `Tu comisión es del ${(commission*100).toFixed(0)}% sobre el neto · ${new Date().toLocaleDateString('es-AR',{month:'long',year:'numeric'})}`;
+
+  const kpis = [
+    { icon:'💰', label:'Tu Comisión (mes)', value: fmt$(myCommission), sub:`${ops} op${ops!==1?'s':''} · Neto: ${fmt$(totalNeto)}`, color:'var(--green)' },
+    { icon:'📅', label:'Ventas Hoy', value: todayOps, sub:'Operaciones del día', color:'var(--teal)' },
+    { icon:'📊', label:'Total de Ventas', value: myData.length, sub:'Histórico completo', color:'var(--indigo)' },
+  ];
+  document.getElementById('vendor-kpis').innerHTML = kpis.map(k => `
+    <div class="kpi-card" style="--kpi-color:${k.color}">
+      <div class="kpi-icon">${k.icon}</div>
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+    </div>`).join('');
+
+  // Tabla de sus ventas (más recientes primero)
+  const rows = [...myData].reverse().slice(0, 50);
+  const table = document.getElementById('vendor-sales-table');
+  const headers = ['Artista', 'Fecha', 'Precio', 'Neto', 'Tu Comisión', 'Método'];
+  table.innerHTML = `
+    <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r => {
+      const comm = r.neto * commission;
+      return `<tr>
+        <td>${r.artista}</td>
+        <td>${r.fecha.toLocaleDateString('es-AR')}</td>
+        <td>${fmt$(r.precio)}</td>
+        <td>${fmt$(r.neto)}</td>
+        <td style="color:var(--green);font-weight:600">${fmt$(comm)}</td>
+        <td>${r.metodo}</td>
+      </tr>`;
+    }).join('')}</tbody>`;
 }
 
 </script>
