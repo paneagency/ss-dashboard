@@ -2184,20 +2184,11 @@ function recalcMargen() {
 async function submitSale(e) {
   if (e) e.preventDefault();
 
-  if (!gAccessToken) {
-    pendingAction = submitSale;
-    handleAuth();
-    return;
-  }
-
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.textContent = 'Guardando...';
 
   try {
-    const sheetName = await getSheetName();
-
-    // Leer valores del form
     const artista  = document.getElementById('f-artista').value.trim();
     const venta    = document.getElementById('f-venta').value.trim();
     const metodo   = document.getElementById('f-metodo').value.trim();
@@ -2210,41 +2201,21 @@ async function submitSale(e) {
     const fechaRaw = document.getElementById('f-fecha').value;   // YYYY-MM-DD
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
 
-    // Convertir fecha a DD/MM/YYYY (formato del sheet)
     const [fy, fm, fd] = fechaRaw.split('-');
     const fechaFmt = `${fd}/${fm}/${fy}`;
-
-    // Orden de columnas: ARTISTA, VENTA, METODO, %, PRECIO, GASTO, NETO, %, FINAL, FECHA, GENERO
     const row = [artista, venta, metodo, comision, precio, gasto, neto, margen, final, fechaFmt, genero];
 
-    // Encontrar primera fila vacía en columna A
-    const colResp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A:A`,
-      { headers: { 'Authorization': `Bearer ${gAccessToken}` } }
-    );
-    const colData = await colResp.json();
-    const nextRow = (colData.values ? colData.values.length : 0) + 1;
-
-    const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A${nextRow}:K${nextRow}?valueInputOption=USER_ENTERED`;
-
-    const resp = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${gAccessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ values: [row] })
+    const resp = await fetch('/api/sheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: row })
     });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
-    }
-
-    showToast('✅ Venta guardada en el Sheet', 'success');
+    showToast('Venta guardada en el Sheet', 'success');
     closeModal();
 
-    // Agregar la venta a allData inmediatamente (sin esperar al CSV)
     const fecha = new Date(+fy, +fm - 1, +fd);
     allData.push({
       artista:  artista || 'Sin artista',
@@ -2265,10 +2236,6 @@ async function submitSale(e) {
 
   } catch(err) {
     showToast('Error: ' + err.message, 'error');
-    // Si el token expiró, resetear
-    if (err.message.includes('401') || err.message.includes('invalid_token')) {
-      gAccessToken = null; clearToken(); setAuthDisconnected();
-    }
   } finally {
     btn.disabled = false;
     btn.textContent = 'Guardar en Sheet';
@@ -2295,79 +2262,24 @@ async function deleteSale(idx) {
   if (!r) { showToast('No se encontró la venta.', 'error'); return; }
 
   const d = r.fecha;
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd   = String(d.getDate()).padStart(2,'0');
+  const mm   = String(d.getMonth()+1).padStart(2,'0');
   const yyyy = d.getFullYear();
   const fechaNorm = `${yyyy}-${mm}-${dd}`;
 
   if (!confirm(`¿Eliminar la venta de "${r.artista}" (${fmt$(r.precio)}) del ${dd}/${mm}/${yyyy}?\n\nEsta acción no se puede deshacer.`)) return;
 
-  if (!gAccessToken) {
-    pendingAction = () => deleteSale(idx);
-    handleAuth();
-    return;
-  }
-
   showToast('Buscando fila en el Sheet...', 'success');
 
   try {
-    const sheetName = await getSheetName();
+    const resp = await fetch('/api/sheets', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista: r.artista, precio: r.precio, fechaNorm })
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
 
-    const resp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A:K`,
-      { headers: { 'Authorization': `Bearer ${gAccessToken}` } }
-    );
-    if (!resp.ok) throw new Error(`No se pudo leer el sheet (HTTP ${resp.status})`);
-    const data = await resp.json();
-    const sheetRows = data.values || [];
-
-    // Buscar fila: artista (col 0) + precio (col 4) — ignora mayúsculas/espacios
-    // Si hay múltiples coincidencias de artista+precio, usa la fecha como desempate
-    const normalize = s => (s || '').toString().trim().toLowerCase();
-    const targetArtista = normalize(r.artista);
-    const targetPrecio  = r.precio;
-
-    let matchIndex = -1;
-    let bestScore  = -1;
-
-    for (let i = 1; i < sheetRows.length; i++) {
-      const row = sheetRows[i];
-      const rowArtista = normalize(row[0]);
-      const rowPrecio  = parseNum(row[4]) || 0;
-      if (rowArtista !== targetArtista) continue;
-      if (Math.abs(rowPrecio - targetPrecio) > 0.5) continue;
-
-      // Coincide artista + precio. Calcular score por fecha
-      const rowFechaNorm = normFecha(row[9]);
-      const fechaScore = rowFechaNorm === fechaNorm ? 2 : 1;
-      if (fechaScore > bestScore) { bestScore = fechaScore; matchIndex = i; }
-    }
-
-    if (matchIndex === -1) throw new Error(
-      `No se encontró "${r.artista}" (${fmt$(r.precio)}) en el Sheet.\n` +
-      `Verificá que el SPREADSHEET_ID (${SPREADSHEET_ID}) corresponde al sheet correcto.`
-    );
-
-    const delResp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${gAccessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [{
-            deleteDimension: {
-              range: { sheetId: SHEET_GID, dimension: 'ROWS', startIndex: matchIndex, endIndex: matchIndex + 1 }
-            }
-          }]
-        })
-      }
-    );
-    if (!delResp.ok) {
-      const err = await delResp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `HTTP ${delResp.status}`);
-    }
-
-    // Remover de allData localmente
     const localIdx = allData.indexOf(r);
     if (localIdx !== -1) allData.splice(localIdx, 1);
     document.getElementById('badge-text').textContent = `${allData.length} registros`;
@@ -2377,7 +2289,6 @@ async function deleteSale(idx) {
 
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
-    if (e.message.includes('401')) { gAccessToken = null; clearToken(); setAuthDisconnected(); }
   }
 }
 
