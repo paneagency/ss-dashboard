@@ -393,8 +393,8 @@
     #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
 
     body.role-vendedor header .header-right > button:last-child { display: none; }
-    body.role-vendedor #filters-bar { display: none; }
-    body.role-vendedor .tabs-bar { display: none; }
+    body.role-vendedor #f-vendor { display: none; }
+    body.role-vendedor #tab-nav { display: none; }
     body.role-vendedor main { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
   </style>
@@ -612,12 +612,6 @@
   <div class="vendor-header">
     <div class="vendor-title" id="vendor-greeting"></div>
     <div class="vendor-sub" id="vendor-sub"></div>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-    <span class="filter-label">Desde</span>
-    <input class="filter-input" id="v-date-from" type="date" onchange="refreshVendorView()">
-    <span class="filter-label">Hasta</span>
-    <input class="filter-input" id="v-date-to" type="date" onchange="refreshVendorView()">
   </div>
   <div class="vendor-kpis" id="vendor-kpis"></div>
   <div class="vendor-sales-title">Mis ventas</div>
@@ -1115,6 +1109,7 @@ function applyFilters() {
     return true;
   });
 
+  if (window._currentUser?.role === 'vendedor') { renderVendorView(window._currentUser); return; }
   renderActive();
 }
 
@@ -2298,20 +2293,15 @@ function renderSecondaryAdminKpis(data) {
 // ── VENDEDOR VIEW ───────────────────────────────────────────
 function renderVendorView(user) {
   const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  // Inicializar fechas si no están seteadas
-  const fromEl = document.getElementById('v-date-from');
-  const toEl   = document.getElementById('v-date-to');
-  if (!fromEl.value) fromEl.value = localDateStr(firstOfMonth);
-  if (!toEl.value)   toEl.value   = localDateStr(now);
-
   const vendorName = user.vendorName || user.name;
   const commission = user.commission || 0;
   const myAll = allData.filter(r => r.venta.toLowerCase() === vendorName.toLowerCase());
 
-  // Filtrar por rango de fechas
-  const dateFrom = fromEl.value ? new Date(fromEl.value + 'T00:00:00') : null;
-  const dateTo   = toEl.value   ? new Date(toEl.value   + 'T23:59:59') : null;
+  // Usar las fechas de la barra principal
+  const fromVal = document.getElementById('f-date-from').value;
+  const toVal   = document.getElementById('f-date-to').value;
+  const dateFrom = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+  const dateTo   = toVal   ? new Date(toVal   + 'T23:59:59') : null;
   const myData = myAll.filter(r => {
     if (dateFrom && r.fecha < dateFrom) return false;
     if (dateTo   && r.fecha > dateTo)   return false;
