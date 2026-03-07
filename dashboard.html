@@ -582,9 +582,9 @@
   <div class="filters-inner">
     <span class="filter-label">Desde</span>
     <button class="month-nav-btn" id="btn-month-prev" onclick="navigateMonth(-1)" title="Mes anterior">←</button>
-    <input type="date" id="f-date-from" class="filter-control" onchange="updateMonthNavButtons();applyFilters()">
+    <input type="date" id="f-date-from" class="filter-control" autocomplete="off" onchange="updateMonthNavButtons();applyFilters()">
     <span class="filter-label">Hasta</span>
-    <input type="date" id="f-date-to" class="filter-control" onchange="applyFilters()">
+    <input type="date" id="f-date-to" class="filter-control" autocomplete="off" onchange="applyFilters()">
     <button class="month-nav-btn" id="btn-month-next" onclick="navigateMonth(1)" title="Mes siguiente">→</button>
     <div class="filter-sep"></div>
     <select id="f-vendor" class="filter-control" onchange="applyFilters()"><option value="">Todos los vendedores</option></select>
