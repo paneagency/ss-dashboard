@@ -6,7 +6,6 @@
   <title>Music Sales Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async></script>
   <style>
     :root {
       --bg: #0d1117;
@@ -423,15 +422,6 @@
     </div>
     <div class="modal-body">
 
-      <!-- Auth bar -->
-      <div class="auth-bar" id="auth-bar">
-        <span style="font-size:20px">🔐</span>
-        <div style="flex:1">
-          <div class="auth-status" id="auth-status">Conectá tu cuenta de Google para guardar en el Sheet</div>
-          <div class="auth-user" id="auth-user"></div>
-        </div>
-        <button class="btn btn-primary btn-sm" id="auth-btn" onclick="handleAuth()">Conectar Google</button>
-      </div>
 
       <form id="sale-form" onsubmit="submitSale(event)">
         <div class="form-grid">
@@ -957,19 +947,6 @@ async function init() {
   document.getElementById('error-screen').style.display = 'none';
   document.getElementById('load-detail').textContent = 'Conectando con Google Sheets...';
 
-  // Si hay token activo, usar la API directamente (siempre actualizado, sin caché)
-  if (gAccessToken) {
-    try {
-      document.getElementById('load-detail').textContent = 'Cargando desde API (sin caché)...';
-      const parsed = await fetchFromAPI();
-      applyLoadedData(parsed);
-      document.getElementById('loading').style.display = 'none';
-      return;
-    } catch(e) {
-      // Token expirado u otro error — continuar con CSV como fallback
-      if (e.message.includes('401')) { gAccessToken = null; clearToken(); setAuthDisconnected(); }
-    }
-  }
 
   const attempts = [
     { label: 'Carga directa...', url: CSV_URL },
@@ -2007,107 +1984,7 @@ function renderInsights() {
 // ============================================================
 window.addEventListener('DOMContentLoaded', init);
 
-// ============================================================
-// OAUTH + NUEVA VENTA
-// ============================================================
-let gAccessToken = null;
-let gTokenClient = null;
-let gSheetName   = null;
-let pendingAction = null;
-
-const TOKEN_KEY = 'gsh_token';
-
-function saveToken(token, expiresIn) {
-  sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
-    token, expiresAt: Date.now() + (expiresIn - 60) * 1000  // 60s de margen
-  }));
-}
-
-function loadToken() {
-  try {
-    const data = JSON.parse(sessionStorage.getItem(TOKEN_KEY));
-    if (data && data.expiresAt > Date.now()) return data.token;
-  } catch(_) {}
-  return null;
-}
-
-function clearToken() {
-  sessionStorage.removeItem(TOKEN_KEY);
-}
-
-function initTokenClient() {
-  if (!window.google) return;
-  gTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
-    callback: async (resp) => {
-      if (resp.error) {
-        // Silencioso falló (usuario no logueado o no autorizó) — no mostrar error
-        if (resp.error === 'interaction_required' || resp.error === 'access_denied') return;
-        showToast('Error de autenticación: ' + resp.error, 'error');
-        return;
-      }
-      gAccessToken = resp.access_token;
-      saveToken(resp.access_token, resp.expires_in || 3600);
-      setAuthConnected();
-      if (pendingAction) { pendingAction(); pendingAction = null; }
-    }
-  });
-
-  // Restaurar token guardado en sesión
-  const saved = loadToken();
-  if (saved) {
-    gAccessToken = saved;
-    setAuthConnected();
-  } else {
-    // Intentar renovación silenciosa (funciona si ya autorizó antes en este navegador)
-    gTokenClient.requestAccessToken({ prompt: '' });
-  }
-}
-
-function handleAuth() {
-  if (!gTokenClient) {
-    showToast('Google Identity Services aún no cargó. Esperá un momento.', 'error'); return;
-  }
-  if (gAccessToken) {
-    google.accounts.oauth2.revoke(gAccessToken, () => {});
-    gAccessToken = null;
-    gSheetName = null;
-    clearToken();
-    setAuthDisconnected();
-    return;
-  }
-  gTokenClient.requestAccessToken({ prompt: 'consent' });
-}
-
-function setAuthConnected() {
-  document.getElementById('auth-bar').classList.add('connected');
-  document.getElementById('auth-status').textContent = 'Conectado con Google. Listo para guardar.';
-  document.getElementById('auth-user').textContent = '';
-  document.getElementById('auth-btn').textContent = 'Desconectar';
-  document.getElementById('submit-btn').disabled = false;
-}
-
-function setAuthDisconnected() {
-  document.getElementById('auth-bar').classList.remove('connected');
-  document.getElementById('auth-status').textContent = 'Conectá tu cuenta de Google para guardar en el Sheet';
-  document.getElementById('auth-user').textContent = '';
-  document.getElementById('auth-btn').textContent = 'Conectar Google';
-  document.getElementById('submit-btn').disabled = true;
-}
-
-// Obtener nombre de la pestaña por GID (necesario para la API)
-async function getSheetName() {
-  if (gSheetName) return gSheetName;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?fields=sheets.properties`;
-  const r = await fetch(url, { headers: { 'Authorization': `Bearer ${gAccessToken}` } });
-  if (!r.ok) throw new Error(`No se pudo acceder al spreadsheet (HTTP ${r.status}). Verificá que el Sheet ID es correcto y que tenés acceso de edición.`);
-  const data = await r.json();
-  const sheet = data.sheets.find(s => s.properties.sheetId === SHEET_GID);
-  if (!sheet) throw new Error(`No se encontró la pestaña con GID ${SHEET_GID}. Verificá el SHEET_GID en el config.`);
-  gSheetName = sheet.properties.title;
-  return gSheetName;
-}
+// ── NUEVA VENTA ────────────────────────────────────────────
 
 // ── MODAL ──────────────────────────────────────────────────
 function openModal() {
@@ -2124,8 +2001,6 @@ function openModal() {
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('f-artista').focus();
 
-  // Inicializar token client si no está listo aún
-  if (!gTokenClient) initTokenClient();
 }
 
 function closeModal() {
@@ -2300,12 +2175,6 @@ function showToast(msg, type = 'success') {
   setTimeout(() => t.classList.remove('show'), 4000);
 }
 
-// Inicializar token client cuando GIS cargue
-window.addEventListener('load', () => {
-  if (window.google) initTokenClient();
-  else document.querySelector('script[src*="accounts.google.com"]')
-    ?.addEventListener('load', initTokenClient);
-});
 </script>
 </body>
 </html>

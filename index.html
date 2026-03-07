@@ -6,7 +6,6 @@
   <title>Music Sales Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async></script>
   <style>
     :root {
       --bg: #0d1117;
@@ -423,15 +422,6 @@
     </div>
     <div class="modal-body">
 
-      <!-- Auth bar -->
-      <div class="auth-bar" id="auth-bar">
-        <span style="font-size:20px">🔐</span>
-        <div style="flex:1">
-          <div class="auth-status" id="auth-status">Conectá tu cuenta de Google para guardar en el Sheet</div>
-          <div class="auth-user" id="auth-user"></div>
-        </div>
-        <button class="btn btn-primary btn-sm" id="auth-btn" onclick="handleAuth()">Conectar Google</button>
-      </div>
 
       <form id="sale-form" onsubmit="submitSale(event)">
         <div class="form-grid">
@@ -957,19 +947,6 @@ async function init() {
   document.getElementById('error-screen').style.display = 'none';
   document.getElementById('load-detail').textContent = 'Conectando con Google Sheets...';
 
-  // Si hay token activo, usar la API directamente (siempre actualizado, sin caché)
-  if (gAccessToken) {
-    try {
-      document.getElementById('load-detail').textContent = 'Cargando desde API (sin caché)...';
-      const parsed = await fetchFromAPI();
-      applyLoadedData(parsed);
-      document.getElementById('loading').style.display = 'none';
-      return;
-    } catch(e) {
-      // Token expirado u otro error — continuar con CSV como fallback
-      if (e.message.includes('401')) { gAccessToken = null; clearToken(); setAuthDisconnected(); }
-    }
-  }
 
   const attempts = [
     { label: 'Carga directa...', url: CSV_URL },
@@ -2007,107 +1984,7 @@ function renderInsights() {
 // ============================================================
 window.addEventListener('DOMContentLoaded', init);
 
-// ============================================================
-// OAUTH + NUEVA VENTA
-// ============================================================
-let gAccessToken = null;
-let gTokenClient = null;
-let gSheetName   = null;
-let pendingAction = null;
-
-const TOKEN_KEY = 'gsh_token';
-
-function saveToken(token, expiresIn) {
-  sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
-    token, expiresAt: Date.now() + (expiresIn - 60) * 1000  // 60s de margen
-  }));
-}
-
-function loadToken() {
-  try {
-    const data = JSON.parse(sessionStorage.getItem(TOKEN_KEY));
-    if (data && data.expiresAt > Date.now()) return data.token;
-  } catch(_) {}
-  return null;
-}
-
-function clearToken() {
-  sessionStorage.removeItem(TOKEN_KEY);
-}
-
-function initTokenClient() {
-  if (!window.google) return;
-  gTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
-    callback: async (resp) => {
-      if (resp.error) {
-        // Silencioso falló (usuario no logueado o no autorizó) — no mostrar error
-        if (resp.error === 'interaction_required' || resp.error === 'access_denied') return;
-        showToast('Error de autenticación: ' + resp.error, 'error');
-        return;
-      }
-      gAccessToken = resp.access_token;
-      saveToken(resp.access_token, resp.expires_in || 3600);
-      setAuthConnected();
-      if (pendingAction) { pendingAction(); pendingAction = null; }
-    }
-  });
-
-  // Restaurar token guardado en sesión
-  const saved = loadToken();
-  if (saved) {
-    gAccessToken = saved;
-    setAuthConnected();
-  } else {
-    // Intentar renovación silenciosa (funciona si ya autorizó antes en este navegador)
-    gTokenClient.requestAccessToken({ prompt: '' });
-  }
-}
-
-function handleAuth() {
-  if (!gTokenClient) {
-    showToast('Google Identity Services aún no cargó. Esperá un momento.', 'error'); return;
-  }
-  if (gAccessToken) {
-    google.accounts.oauth2.revoke(gAccessToken, () => {});
-    gAccessToken = null;
-    gSheetName = null;
-    clearToken();
-    setAuthDisconnected();
-    return;
-  }
-  gTokenClient.requestAccessToken({ prompt: 'consent' });
-}
-
-function setAuthConnected() {
-  document.getElementById('auth-bar').classList.add('connected');
-  document.getElementById('auth-status').textContent = 'Conectado con Google. Listo para guardar.';
-  document.getElementById('auth-user').textContent = '';
-  document.getElementById('auth-btn').textContent = 'Desconectar';
-  document.getElementById('submit-btn').disabled = false;
-}
-
-function setAuthDisconnected() {
-  document.getElementById('auth-bar').classList.remove('connected');
-  document.getElementById('auth-status').textContent = 'Conectá tu cuenta de Google para guardar en el Sheet';
-  document.getElementById('auth-user').textContent = '';
-  document.getElementById('auth-btn').textContent = 'Conectar Google';
-  document.getElementById('submit-btn').disabled = true;
-}
-
-// Obtener nombre de la pestaña por GID (necesario para la API)
-async function getSheetName() {
-  if (gSheetName) return gSheetName;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?fields=sheets.properties`;
-  const r = await fetch(url, { headers: { 'Authorization': `Bearer ${gAccessToken}` } });
-  if (!r.ok) throw new Error(`No se pudo acceder al spreadsheet (HTTP ${r.status}). Verificá que el Sheet ID es correcto y que tenés acceso de edición.`);
-  const data = await r.json();
-  const sheet = data.sheets.find(s => s.properties.sheetId === SHEET_GID);
-  if (!sheet) throw new Error(`No se encontró la pestaña con GID ${SHEET_GID}. Verificá el SHEET_GID en el config.`);
-  gSheetName = sheet.properties.title;
-  return gSheetName;
-}
+// ── NUEVA VENTA ────────────────────────────────────────────
 
 // ── MODAL ──────────────────────────────────────────────────
 function openModal() {
@@ -2124,8 +2001,6 @@ function openModal() {
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('f-artista').focus();
 
-  // Inicializar token client si no está listo aún
-  if (!gTokenClient) initTokenClient();
 }
 
 function closeModal() {
@@ -2184,20 +2059,11 @@ function recalcMargen() {
 async function submitSale(e) {
   if (e) e.preventDefault();
 
-  if (!gAccessToken) {
-    pendingAction = submitSale;
-    handleAuth();
-    return;
-  }
-
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.textContent = 'Guardando...';
 
   try {
-    const sheetName = await getSheetName();
-
-    // Leer valores del form
     const artista  = document.getElementById('f-artista').value.trim();
     const venta    = document.getElementById('f-venta').value.trim();
     const metodo   = document.getElementById('f-metodo').value.trim();
@@ -2210,41 +2076,21 @@ async function submitSale(e) {
     const fechaRaw = document.getElementById('f-fecha').value;   // YYYY-MM-DD
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
 
-    // Convertir fecha a DD/MM/YYYY (formato del sheet)
     const [fy, fm, fd] = fechaRaw.split('-');
     const fechaFmt = `${fd}/${fm}/${fy}`;
-
-    // Orden de columnas: ARTISTA, VENTA, METODO, %, PRECIO, GASTO, NETO, %, FINAL, FECHA, GENERO
     const row = [artista, venta, metodo, comision, precio, gasto, neto, margen, final, fechaFmt, genero];
 
-    // Encontrar primera fila vacía en columna A
-    const colResp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A:A`,
-      { headers: { 'Authorization': `Bearer ${gAccessToken}` } }
-    );
-    const colData = await colResp.json();
-    const nextRow = (colData.values ? colData.values.length : 0) + 1;
-
-    const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A${nextRow}:K${nextRow}?valueInputOption=USER_ENTERED`;
-
-    const resp = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${gAccessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ values: [row] })
+    const resp = await fetch('/api/sheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: row })
     });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
-    }
-
-    showToast('✅ Venta guardada en el Sheet', 'success');
+    showToast('Venta guardada en el Sheet', 'success');
     closeModal();
 
-    // Agregar la venta a allData inmediatamente (sin esperar al CSV)
     const fecha = new Date(+fy, +fm - 1, +fd);
     allData.push({
       artista:  artista || 'Sin artista',
@@ -2265,10 +2111,6 @@ async function submitSale(e) {
 
   } catch(err) {
     showToast('Error: ' + err.message, 'error');
-    // Si el token expiró, resetear
-    if (err.message.includes('401') || err.message.includes('invalid_token')) {
-      gAccessToken = null; clearToken(); setAuthDisconnected();
-    }
   } finally {
     btn.disabled = false;
     btn.textContent = 'Guardar en Sheet';
@@ -2295,79 +2137,24 @@ async function deleteSale(idx) {
   if (!r) { showToast('No se encontró la venta.', 'error'); return; }
 
   const d = r.fecha;
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd   = String(d.getDate()).padStart(2,'0');
+  const mm   = String(d.getMonth()+1).padStart(2,'0');
   const yyyy = d.getFullYear();
   const fechaNorm = `${yyyy}-${mm}-${dd}`;
 
   if (!confirm(`¿Eliminar la venta de "${r.artista}" (${fmt$(r.precio)}) del ${dd}/${mm}/${yyyy}?\n\nEsta acción no se puede deshacer.`)) return;
 
-  if (!gAccessToken) {
-    pendingAction = () => deleteSale(idx);
-    handleAuth();
-    return;
-  }
-
   showToast('Buscando fila en el Sheet...', 'success');
 
   try {
-    const sheetName = await getSheetName();
+    const resp = await fetch('/api/sheets', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista: r.artista, precio: r.precio, fechaNorm })
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
 
-    const resp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(sheetName)}!A:K`,
-      { headers: { 'Authorization': `Bearer ${gAccessToken}` } }
-    );
-    if (!resp.ok) throw new Error(`No se pudo leer el sheet (HTTP ${resp.status})`);
-    const data = await resp.json();
-    const sheetRows = data.values || [];
-
-    // Buscar fila: artista (col 0) + precio (col 4) — ignora mayúsculas/espacios
-    // Si hay múltiples coincidencias de artista+precio, usa la fecha como desempate
-    const normalize = s => (s || '').toString().trim().toLowerCase();
-    const targetArtista = normalize(r.artista);
-    const targetPrecio  = r.precio;
-
-    let matchIndex = -1;
-    let bestScore  = -1;
-
-    for (let i = 1; i < sheetRows.length; i++) {
-      const row = sheetRows[i];
-      const rowArtista = normalize(row[0]);
-      const rowPrecio  = parseNum(row[4]) || 0;
-      if (rowArtista !== targetArtista) continue;
-      if (Math.abs(rowPrecio - targetPrecio) > 0.5) continue;
-
-      // Coincide artista + precio. Calcular score por fecha
-      const rowFechaNorm = normFecha(row[9]);
-      const fechaScore = rowFechaNorm === fechaNorm ? 2 : 1;
-      if (fechaScore > bestScore) { bestScore = fechaScore; matchIndex = i; }
-    }
-
-    if (matchIndex === -1) throw new Error(
-      `No se encontró "${r.artista}" (${fmt$(r.precio)}) en el Sheet.\n` +
-      `Verificá que el SPREADSHEET_ID (${SPREADSHEET_ID}) corresponde al sheet correcto.`
-    );
-
-    const delResp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${gAccessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [{
-            deleteDimension: {
-              range: { sheetId: SHEET_GID, dimension: 'ROWS', startIndex: matchIndex, endIndex: matchIndex + 1 }
-            }
-          }]
-        })
-      }
-    );
-    if (!delResp.ok) {
-      const err = await delResp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `HTTP ${delResp.status}`);
-    }
-
-    // Remover de allData localmente
     const localIdx = allData.indexOf(r);
     if (localIdx !== -1) allData.splice(localIdx, 1);
     document.getElementById('badge-text').textContent = `${allData.length} registros`;
@@ -2377,7 +2164,6 @@ async function deleteSale(idx) {
 
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
-    if (e.message.includes('401')) { gAccessToken = null; clearToken(); setAuthDisconnected(); }
   }
 }
 
@@ -2389,12 +2175,6 @@ function showToast(msg, type = 'success') {
   setTimeout(() => t.classList.remove('show'), 4000);
 }
 
-// Inicializar token client cuando GIS cargue
-window.addEventListener('load', () => {
-  if (window.google) initTokenClient();
-  else document.querySelector('script[src*="accounts.google.com"]')
-    ?.addEventListener('load', initTokenClient);
-});
 </script>
 </body>
 </html>
