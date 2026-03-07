@@ -1103,17 +1103,18 @@ function applyFilters() {
   const client = document.getElementById('f-client').value;
   const method = document.getElementById('f-method').value;
 
+  const vendorLower = vendor ? vendor.toLowerCase() : '';
   filteredData = allData.filter(r => {
     if (dateFrom && r.fecha < new Date(dateFrom + 'T00:00:00')) return false;
     if (dateTo && r.fecha > new Date(dateTo + 'T23:59:59')) return false;
-    if (vendor && r.venta !== vendor) return false;
+    if (vendor && r.venta.toLowerCase() !== vendorLower) return false;
     if (genre && r.genero !== genre) return false;
     if (client && r.artista !== client) return false;
     if (method && r.metodo !== method) return false;
     return true;
   });
 
-  if (window._currentUser?.role === 'vendedor') { renderVendorView(window._currentUser); return; }
+  if (window._currentUser?.role === 'vendedor') renderVendorView(window._currentUser);
   renderActive();
 }
 
