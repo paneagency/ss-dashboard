@@ -971,13 +971,14 @@ function applyLoadedData(parsed) {
   document.getElementById('header-subtitle').textContent = `Actualizado ${new Date().toLocaleString('es-AR')}`;
   _panelDayOffset = 0;
 
+  setDefaultDateRange();
+
   if (window._currentUser?.role === 'vendedor') {
     renderVendorView(window._currentUser);
     return;
   }
 
   populateFilters();
-  setDefaultDateRange();
   applyFilters();
 }
 
