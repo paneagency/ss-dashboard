@@ -1086,10 +1086,14 @@ function populateFilters() {
     });
     el.value = cur;
   };
+  const user = window._currentUser;
+  const sourceData = user?.role === 'vendedor'
+    ? allData.filter(r => r.venta.toLowerCase() === (user.vendorName || user.name).toLowerCase())
+    : allData;
   fillSelect('f-vendor', allData.map(r => r.venta));
-  fillSelect('f-genre', allData.map(r => r.genero));
-  fillSelect('f-client', allData.map(r => r.artista));
-  fillSelect('f-method', allData.map(r => r.metodo));
+  fillSelect('f-genre',  sourceData.map(r => r.genero));
+  fillSelect('f-client', sourceData.map(r => r.artista));
+  fillSelect('f-method', sourceData.map(r => r.metodo));
 }
 
 function applyFilters() {
