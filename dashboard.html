@@ -1489,6 +1489,7 @@ function renderMonthsPanel() {
 }
 
 function renderResumen() {
+  if (window._currentUser?.role === 'vendedor') return;
   const data = filteredData;
   if (!data.length) { document.getElementById('kpi-grid').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin datos para los filtros seleccionados</div>'; return; }
 
