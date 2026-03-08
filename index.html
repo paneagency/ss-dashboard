@@ -1667,72 +1667,148 @@ function renderTemporal() {
 function renderGeneros() {
   const data = filteredData;
   const byGenre = aggByGenre(data);
+  const isVendedor = window._currentUser?.role === 'vendedor';
 
-  mkChart('chart-genre-donut', {
-    type: 'doughnut',
-    data: {
-      labels: byGenre.map(g => g.key),
-      datasets: [{ data: byGenre.map(g => g.precio), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
-    },
-    options: { cutout:'60%', plugins:{legend:{position:'bottom',labels:{color:tickColor,padding:8,font:{size:11}}}} }
-  });
+  const totalPrecio = sum(byGenre, g => g.precio) || 1;
+  const totalFinal  = sum(byGenre, g => g.final)  || 1;
 
-  mkChart('chart-genre-bar', {
-    type: 'bar',
-    data: {
-      labels: byGenre.map(g => g.key),
-      datasets: [
-        { label:'Final', data: byGenre.map(g => g.final), backgroundColor: PALETTE.map(c => c+'cc'), borderRadius: 5 }
-      ]
-    },
-    options: {
-      plugins:{legend:{labels:{color:tickColor}}},
-      scales:{ x:axisDefaults(), y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} } }
-    }
-  });
-
-  // Genre evolution stacked
-  const months = [...new Set(data.map(r => r.monthKey))].sort();
-  const genres = byGenre.map(g => g.key);
-  const genreMonthData = genres.map(g => months.map(m => {
-    const rows = data.filter(r => r.genero === g && r.monthKey === m);
-    return sum(rows, r => r.precio);
-  }));
-
-  mkChart('chart-genre-evolution', {
-    type: 'bar',
-    data: {
-      labels: months.map(monthLabel),
-      datasets: genres.map((g, i) => ({
-        label: g, data: genreMonthData[i],
-        backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
-        borderRadius: 3, stack: 'genres'
-      }))
-    },
-    options: {
-      plugins:{legend:{position:'top',labels:{color:tickColor,font:{size:11}}}},
-      scales:{
-        x: axisDefaults(),
-        y: { ...axisDefaults('$'), stacked:true, ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} }
+  if (isVendedor) {
+    // Donut: % de ventas brutas por género
+    mkChart('chart-genre-donut', {
+      type: 'doughnut',
+      data: {
+        labels: byGenre.map(g => g.key),
+        datasets: [{ data: byGenre.map(g => +(g.precio / totalPrecio * 100).toFixed(1)), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
+      },
+      options: {
+        cutout:'60%',
+        plugins:{
+          legend:{position:'bottom',labels:{color:tickColor,padding:8,font:{size:11}}},
+          tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
+        }
       }
-    }
-  });
+    });
 
-  // Table
-  const rows = byGenre.map((g, i) => [
-    { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
-    g.key,
-    fmt$(g.precio),
-    fmt$(g.neto),
-    fmt$(g.final),
-    g.ops,
-    fmt$(g.ticket),
-    fmtPct(g.margen)
-  ]);
-  makeSortableTable('table-genres',
-    ['#','Género','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Margen %'],
-    rows
-  );
+    // Bar: % del final por género
+    mkChart('chart-genre-bar', {
+      type: 'bar',
+      data: {
+        labels: byGenre.map(g => g.key),
+        datasets: [{ label:'% Final', data: byGenre.map(g => +(g.final / totalFinal * 100).toFixed(1)), backgroundColor: PALETTE.map(c => c+'cc'), borderRadius: 5 }]
+      },
+      options: {
+        plugins:{legend:{labels:{color:tickColor}}},
+        scales:{ x:axisDefaults(), y:{ ...axisDefaults('%'), ticks:{color:tickColor, callback:v => v+'%'}, max:100 } }
+      }
+    });
+
+    // Evolution: % apilado por mes
+    const months = [...new Set(data.map(r => r.monthKey))].sort();
+    const genres = byGenre.map(g => g.key);
+    const genreMonthData = genres.map(g => months.map(m => {
+      const rows = data.filter(r => r.genero === g && r.monthKey === m);
+      const monthTotal = sum(data.filter(r => r.monthKey === m), r => r.precio) || 1;
+      return +(sum(rows, r => r.precio) / monthTotal * 100).toFixed(1);
+    }));
+
+    mkChart('chart-genre-evolution', {
+      type: 'bar',
+      data: {
+        labels: months.map(monthLabel),
+        datasets: genres.map((g, i) => ({
+          label: g, data: genreMonthData[i],
+          backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
+          borderRadius: 3, stack: 'genres'
+        }))
+      },
+      options: {
+        plugins:{legend:{position:'top',labels:{color:tickColor,font:{size:11}}}},
+        scales:{
+          x: axisDefaults(),
+          y: { ...axisDefaults('%'), stacked:true, ticks:{color:tickColor, callback:v => v+'%'}, max:100 }
+        }
+      }
+    });
+
+    // Table: % columnas
+    const tableRows = byGenre.map((g, i) => [
+      { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+      g.key,
+      fmtPct(g.precio / totalPrecio * 100),
+      fmtPct(g.final  / totalFinal  * 100),
+      { html: `<span style="display:block;text-align:center">${g.ops}</span>`, cls:'' },
+      fmtPct(g.margen)
+    ]);
+    makeSortableTable('table-genres',
+      ['#','Género','% Ventas Brutas','% Final','Ops','Margen %'],
+      tableRows
+    );
+
+  } else {
+    mkChart('chart-genre-donut', {
+      type: 'doughnut',
+      data: {
+        labels: byGenre.map(g => g.key),
+        datasets: [{ data: byGenre.map(g => g.precio), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
+      },
+      options: { cutout:'60%', plugins:{legend:{position:'bottom',labels:{color:tickColor,padding:8,font:{size:11}}}} }
+    });
+
+    mkChart('chart-genre-bar', {
+      type: 'bar',
+      data: {
+        labels: byGenre.map(g => g.key),
+        datasets: [
+          { label:'Final', data: byGenre.map(g => g.final), backgroundColor: PALETTE.map(c => c+'cc'), borderRadius: 5 }
+        ]
+      },
+      options: {
+        plugins:{legend:{labels:{color:tickColor}}},
+        scales:{ x:axisDefaults(), y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} } }
+      }
+    });
+
+    const months = [...new Set(data.map(r => r.monthKey))].sort();
+    const genres = byGenre.map(g => g.key);
+    const genreMonthData = genres.map(g => months.map(m => {
+      const rows = data.filter(r => r.genero === g && r.monthKey === m);
+      return sum(rows, r => r.precio);
+    }));
+
+    mkChart('chart-genre-evolution', {
+      type: 'bar',
+      data: {
+        labels: months.map(monthLabel),
+        datasets: genres.map((g, i) => ({
+          label: g, data: genreMonthData[i],
+          backgroundColor: PALETTE[i % PALETTE.length] + 'cc',
+          borderRadius: 3, stack: 'genres'
+        }))
+      },
+      options: {
+        plugins:{legend:{position:'top',labels:{color:tickColor,font:{size:11}}}},
+        scales:{
+          x: axisDefaults(),
+          y: { ...axisDefaults('$'), stacked:true, ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} }
+        }
+      }
+    });
+
+    const rows = byGenre.map((g, i) => [
+      { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+      g.key,
+      fmt$(g.precio),
+      fmt$(g.neto),
+      fmt$(g.final),
+      g.ops,
+      fmt$(g.ticket),
+      fmtPct(g.margen)
+    ]);
+    makeSortableTable('table-genres',
+      ['#','Género','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Margen %'],
+      rows
+    );
+  }
 }
 
 // ============================================================
