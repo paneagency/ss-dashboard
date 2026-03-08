@@ -1749,8 +1749,8 @@ function renderClientes() {
     totalOpsAll[r.artista] = (totalOpsAll[r.artista] || 0) + 1;
   });
 
-  // Recurrentes
-  const recurrentes = byClient.filter(c => c.ops > 1).length;
+  // Recurrentes (basado en historial completo, no el período filtrado)
+  const recurrentes = byClient.filter(c => (totalOpsAll[c.key] || 0) > 1).length;
   const unicos = byClient.length;
 
   document.getElementById('client-kpis').innerHTML = [
