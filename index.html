@@ -392,6 +392,18 @@
     body.role-secondary #resumen-secondary-kpis { display: grid; }
     #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
 
+    /* Clientes potenciales (vendedor insights) */
+    .dormant-section { margin-top: 28px; }
+    .dormant-section .section-label { font-size:15px; font-weight:600; margin-bottom:4px; }
+    .dormant-section .section-sublabel { font-size:13px; color:var(--muted); margin-bottom:16px; }
+    .dormant-list { display:flex; flex-direction:column; gap:10px; }
+    .dormant-item { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:14px 20px; display:flex; align-items:center; gap:16px; }
+    .dormant-rank { font-size:18px; font-weight:800; color:var(--muted); min-width:24px; }
+    .dormant-info { flex:1; }
+    .dormant-name { font-size:15px; font-weight:600; margin-bottom:2px; }
+    .dormant-meta { font-size:12px; color:var(--muted); }
+    .dormant-final { font-size:15px; font-weight:700; color:var(--green); white-space:nowrap; }
+
     /* Tabs solo admin */
     .tab-btn[data-tab="cuentas"],
     .tab-btn[data-tab="vendedores"] { display: none; }
@@ -885,6 +897,7 @@
     <div id="projection-box"></div>
     <div id="alerts-box"></div>
     <div class="insights-grid" id="insights-grid"></div>
+    <div id="dormant-clients-box"></div>
   </section>
 
   <!-- TAB: VENDEDORES (admin only) -->
@@ -2253,6 +2266,52 @@ function renderInsights() {
       </div>
     </div>`).join('');
 
+  // Clientes potenciales (solo vendedor)
+  const dormantBox = document.getElementById('dormant-clients-box');
+  if (!isVendedor) { dormantBox.innerHTML = ''; return; }
+
+  const user        = window._currentUser;
+  const vendorName  = (user.vendorName || user.name).toLowerCase();
+  const myAll       = allData.filter(r => r.venta.toLowerCase() === vendorName);
+  const today       = new Date();
+  const cutoff      = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 90);
+
+  // Agrupar por cliente: última compra y total final histórico
+  const clientMap = {};
+  myAll.forEach(r => {
+    if (!clientMap[r.artista]) clientMap[r.artista] = { lastDate: r.fecha, totalFinal: 0, ops: 0 };
+    const c = clientMap[r.artista];
+    if (r.fecha > c.lastDate) c.lastDate = r.fecha;
+    c.totalFinal += r.final;
+    c.ops++;
+  });
+
+  const dormant = Object.entries(clientMap)
+    .filter(([, c]) => c.lastDate < cutoff)
+    .sort((a, b) => b[1].totalFinal - a[1].totalFinal)
+    .slice(0, 5);
+
+  if (!dormant.length) { dormantBox.innerHTML = ''; return; }
+
+  const fmtDate = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  const daysSince = d => Math.floor((today - d) / 86400000);
+
+  dormantBox.innerHTML = `
+    <div class="dormant-section">
+      <div class="section-label">🎯 Clientes Potenciales</div>
+      <div class="section-sublabel">Clientes que no compran hace más de 90 días — oportunidad de reactivación</div>
+      <div class="dormant-list">
+        ${dormant.map(([name, c], i) => `
+          <div class="dormant-item">
+            <div class="dormant-rank">#${i+1}</div>
+            <div class="dormant-info">
+              <div class="dormant-name">${name}</div>
+              <div class="dormant-meta">Última compra: ${fmtDate(c.lastDate)} · hace ${daysSince(c.lastDate)} días · ${c.ops} compra${c.ops !== 1 ? 's' : ''}</div>
+            </div>
+            <div class="dormant-final">${fmt$(c.totalFinal)}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
 }
 
 // ============================================================
