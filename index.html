@@ -392,9 +392,33 @@
     body.role-secondary #resumen-secondary-kpis { display: grid; }
     #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
 
-    /* Tab cuentas: solo admin */
-    .tab-btn[data-tab="cuentas"] { display: none; }
-    body.role-admin .tab-btn[data-tab="cuentas"] { display: inline-flex; }
+    /* Tabs solo admin */
+    .tab-btn[data-tab="cuentas"],
+    .tab-btn[data-tab="vendedores"] { display: none; }
+    body.role-admin .tab-btn[data-tab="cuentas"],
+    body.role-admin .tab-btn[data-tab="vendedores"] { display: inline-flex; }
+
+    /* Vendedores panel */
+    .vendedores-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 20px; margin-bottom: 32px; }
+    .vendedor-card { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:24px; }
+    .vendedor-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .vendedor-card-name { font-size:18px; font-weight:700; }
+    .vendedor-card-pct { font-size:12px; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(99,102,241,0.15); color:var(--indigo); }
+    .vendedor-stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+    .vendedor-stat { }
+    .vendedor-stat-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+    .vendedor-stat-value { font-size:18px; font-weight:700; }
+    .vendedor-tops { border-top:1px solid var(--border2); padding-top:14px; display:flex; flex-direction:column; gap:6px; }
+    .vendedor-top-item { display:flex; justify-content:space-between; font-size:12px; }
+    .vendedor-top-item span:first-child { color:var(--muted); }
+    .vendedor-top-item span:last-child { font-weight:600; max-width:60%; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .vendedores-compare { margin-top:8px; }
+    .vendedores-compare table { width:100%; }
+    .vendedores-compare th:first-child { text-align:left; color:var(--muted); font-weight:500; font-size:13px; }
+    .vendedores-compare td:first-child { color:var(--muted); font-size:13px; }
+    .vendedores-compare th:not(:first-child),
+    .vendedores-compare td:not(:first-child) { text-align:right; }
+    .vendedores-compare .best { color:var(--green); font-weight:700; }
 
     /* Cuentas panel */
     .cuentas-saldos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
@@ -623,6 +647,7 @@
     <button class="tab-btn" data-tab="clientes">🎤 Clientes</button>
     <button class="tab-btn" data-tab="metodos">💳 Métodos</button>
     <button class="tab-btn" data-tab="insights">💡 Insights</button>
+    <button class="tab-btn" data-tab="vendedores">🧑‍💼 Vendedores</button>
     <button class="tab-btn" data-tab="cuentas">💼 Cuentas</button>
   </div>
 </div>
@@ -860,6 +885,18 @@
     <div id="projection-box"></div>
     <div id="alerts-box"></div>
     <div class="insights-grid" id="insights-grid"></div>
+  </section>
+
+  <!-- TAB: VENDEDORES (admin only) -->
+  <section id="tab-vendedores" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Vendedores</div>
+        <div class="section-subtitle">Performance y comparativa del período seleccionado</div>
+      </div>
+    </div>
+    <div class="vendedores-cards" id="vendedores-cards"></div>
+    <div class="vendedores-compare table-card" id="vendedores-compare"></div>
   </section>
 
   <!-- TAB: CUENTAS (admin only) -->
@@ -1221,6 +1258,7 @@ function applyFilters() {
     renderVendorView(window._currentUser);
     renderVendorAccount(window._currentUser);
   }
+  if (activeTab === 'vendedores') renderVendedores();
   if (activeTab === 'cuentas') renderCuentasTable();
   renderActive();
 }
@@ -1257,6 +1295,7 @@ function renderTab(tab) {
   else if (tab === 'clientes') renderClientes();
   else if (tab === 'metodos') renderMetodos();
   else if (tab === 'insights') renderInsights();
+  else if (tab === 'vendedores') renderVendedores();
   else if (tab === 'cuentas') loadAdminCuentas();
 }
 
@@ -2660,6 +2699,140 @@ function renderVendorAccount(user) {
       </td>
       <td>${m.fecha}</td>
     </tr>`).join('')}</tbody>`;
+}
+
+// ── ADMIN: tab Vendedores ────────────────────────────────────
+function renderVendedores() {
+  const data = filteredData;
+  if (!data.length) {
+    document.getElementById('vendedores-cards').innerHTML = '<p style="color:var(--muted);font-size:13px">Sin datos en el período.</p>';
+    document.getElementById('vendedores-compare').innerHTML = '';
+    return;
+  }
+
+  // Obtener vendedores únicos del período
+  const vendorNames = [...new Set(data.map(r => r.venta).filter(Boolean))].sort();
+  const totalNeto = data.reduce((s, r) => s + r.neto, 0);
+  const totalVentas = data.length;
+
+  function top(arr) {
+    const freq = {};
+    arr.forEach(v => { if (v) freq[v] = (freq[v] || 0) + 1; });
+    return Object.entries(freq).sort((a,b) => b[1]-a[1])[0]?.[0] || '—';
+  }
+
+  const stats = vendorNames.map(name => {
+    const vd = data.filter(r => r.venta === name);
+    const neto       = vd.reduce((s, r) => s + r.neto, 0);
+    const precio     = vd.reduce((s, r) => s + r.precio, 0);
+    const clientes   = new Set(vd.map(r => r.artista)).size;
+    const ticketProm = vd.length ? precio / vd.length : 0;
+    const pctTotal   = totalVentas ? (vd.length / totalVentas * 100).toFixed(1) : 0;
+    const pctNeto    = totalNeto   ? (neto / totalNeto * 100).toFixed(1) : 0;
+
+    // Tendencia: comparar primera vs segunda mitad del período
+    const sorted = [...vd].sort((a,b) => a.fecha - b.fecha);
+    const mid = Math.floor(sorted.length / 2);
+    const firstHalf  = sorted.slice(0, mid).length;
+    const secondHalf = sorted.slice(mid).length;
+    const trend = secondHalf > firstHalf ? '↑' : secondHalf < firstHalf ? '↓' : '→';
+
+    // Mes con más ventas
+    const byMonth = {};
+    vd.forEach(r => {
+      const key = `${r.fecha.getFullYear()}-${String(r.fecha.getMonth()+1).padStart(2,'0')}`;
+      byMonth[key] = (byMonth[key] || 0) + 1;
+    });
+    const bestMonth = Object.entries(byMonth).sort((a,b) => b[1]-a[1])[0];
+    const bestMonthLabel = bestMonth ? (() => {
+      const [y, m] = bestMonth[0].split('-');
+      return `${MONTH_NAMES[parseInt(m)-1]} ${y}`;
+    })() : '—';
+
+    return {
+      name, ops: vd.length, neto, precio, clientes, ticketProm,
+      pctTotal, pctNeto, trend, bestMonthLabel,
+      topCliente: top(vd.map(r => r.artista)),
+      topGenero:  top(vd.map(r => r.genero)),
+      topMetodo:  top(vd.map(r => r.metodo)),
+    };
+  });
+
+  // Renderizar cards
+  document.getElementById('vendedores-cards').innerHTML = stats.map(s => `
+    <div class="vendedor-card">
+      <div class="vendedor-card-header">
+        <div class="vendedor-card-name">${s.name}</div>
+        <div class="vendedor-card-pct">${s.pctTotal}% del total</div>
+      </div>
+      <div class="vendedor-stats">
+        <div class="vendedor-stat">
+          <div class="vendedor-stat-label">Ventas</div>
+          <div class="vendedor-stat-value">${s.ops}</div>
+        </div>
+        <div class="vendedor-stat">
+          <div class="vendedor-stat-label">Neto generado</div>
+          <div class="vendedor-stat-value">${fmt$(s.neto)}</div>
+        </div>
+        <div class="vendedor-stat">
+          <div class="vendedor-stat-label">Clientes únicos</div>
+          <div class="vendedor-stat-value">${s.clientes}</div>
+        </div>
+        <div class="vendedor-stat">
+          <div class="vendedor-stat-label">Ticket promedio</div>
+          <div class="vendedor-stat-value">${fmt$(s.ticketProm)}</div>
+        </div>
+      </div>
+      <div class="vendedor-tops">
+        <div class="vendedor-top-item"><span>Top cliente</span><span>${s.topCliente}</span></div>
+        <div class="vendedor-top-item"><span>Top género</span><span>${s.topGenero}</span></div>
+        <div class="vendedor-top-item"><span>Top método</span><span>${s.topMetodo}</span></div>
+        <div class="vendedor-top-item"><span>Mejor mes</span><span>${s.bestMonthLabel}</span></div>
+        <div class="vendedor-top-item"><span>% del neto total</span><span>${s.pctNeto}%</span></div>
+        <div class="vendedor-top-item"><span>Tendencia período</span><span>${s.trend}</span></div>
+      </div>
+    </div>`).join('');
+
+  // Renderizar tabla comparativa
+  if (stats.length < 2) {
+    document.getElementById('vendedores-compare').innerHTML = '';
+    return;
+  }
+
+  // Highlight el mejor en cada fila
+  function bestIdx(arr, higher = true) {
+    let best = 0;
+    arr.forEach((v, i) => { if (higher ? v > arr[best] : v < arr[best]) best = i; });
+    return best;
+  }
+
+  const rows = [
+    { label: 'Ventas',          vals: stats.map(s => s.ops),         fmt: v => v,           higher: true },
+    { label: 'Neto generado',   vals: stats.map(s => s.neto),        fmt: v => fmt$(v),     higher: true },
+    { label: 'Clientes únicos', vals: stats.map(s => s.clientes),    fmt: v => v,           higher: true },
+    { label: 'Ticket promedio', vals: stats.map(s => s.ticketProm),  fmt: v => fmt$(v),     higher: true },
+    { label: '% del total',     vals: stats.map(s => parseFloat(s.pctTotal)), fmt: v => v+'%', higher: true },
+  ];
+
+  document.getElementById('vendedores-compare').innerHTML = `
+    <div style="padding:20px 24px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:16px">Comparativa</div>
+      <div class="table-scroll"><table class="vendedores-compare">
+        <thead><tr>
+          <th>Métrica</th>
+          ${stats.map(s => `<th style="text-align:right;font-weight:700">${s.name}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${rows.map(row => {
+            const bi = bestIdx(row.vals, row.higher);
+            return `<tr>
+              <td>${row.label}</td>
+              ${row.vals.map((v, i) => `<td class="${i === bi ? 'best' : ''}">${row.fmt(v)}</td>`).join('')}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
 }
 
 // ── ADMIN: tab Cuentas ───────────────────────────────────────
