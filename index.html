@@ -1737,9 +1737,13 @@ function renderClientes() {
   const byClient = aggByClient(data);
 
   // Primera compra y total ops desde allData completo (ignora filtros de fecha)
+  // Para vendedor: solo sus propias ventas
+  const isVendedor = window._currentUser?.role === 'vendedor';
+  const vendorName = isVendedor ? (window._currentUser.vendorName || window._currentUser.name).toLowerCase() : null;
+  const baseData = isVendedor ? allData.filter(r => r.venta.toLowerCase() === vendorName) : allData;
   const firstPurchaseAll = {};
   const totalOpsAll = {};
-  allData.forEach(r => {
+  baseData.forEach(r => {
     if (!firstPurchaseAll[r.artista] || r.fecha < firstPurchaseAll[r.artista])
       firstPurchaseAll[r.artista] = r.fecha;
     totalOpsAll[r.artista] = (totalOpsAll[r.artista] || 0) + 1;
@@ -1822,7 +1826,6 @@ function renderClientes() {
   });
 
   // Table
-  const isVendedor = window._currentUser?.role === 'vendedor';
   const commission = isVendedor ? (window._currentUser.commission || 0) : 0;
   const rows = sorted.map((c, i) => isVendedor ? [
     { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
