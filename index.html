@@ -1835,7 +1835,7 @@ function renderClientes() {
     { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
     c.key,
     fmt$(c.precio),
-    { html: `<span style="display:block;text-align:center">${c.ops}</span>`, cls: '' },
+    { html: `<span style="display:block;text-align:center">${totalOpsAll[c.key] || c.ops}</span>`, cls: '' },
     { html:`<span style="color:var(--green);font-weight:600">${fmt$(c.neto * commission)}</span>`, cls:'' },
     totalOpsAll[c.key] > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
     firstPurchaseAll[c.key] ? firstPurchaseAll[c.key].toLocaleDateString('es-AR') : '—'
@@ -1844,7 +1844,7 @@ function renderClientes() {
     c.key,
     fmt$(c.precio),
     fmt$(c.final),
-    { html: `<span style="display:block;text-align:center">${c.ops}</span>`, cls: '' },
+    { html: `<span style="display:block;text-align:center">${totalOpsAll[c.key] || c.ops}</span>`, cls: '' },
     fmt$(c.ticket),
     fmtPct(c.margen),
     totalOpsAll[c.key] > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
