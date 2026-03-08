@@ -2758,6 +2758,8 @@ function renderVendedores() {
     };
   });
 
+  stats.sort((a, b) => b.neto - a.neto);
+
   // Renderizar cards
   document.getElementById('vendedores-cards').innerHTML = stats.map(s => `
     <div class="vendedor-card">
