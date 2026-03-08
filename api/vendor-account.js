@@ -1,8 +1,5 @@
 const { google } = require('googleapis');
 
-const GID_RETIROS  = '544530893';
-const GID_RECIBIDO = '985424718';
-
 function getSheets() {
   const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
   const auth  = new google.auth.GoogleAuth({
@@ -14,9 +11,7 @@ function getSheets() {
 
 function parseNum(val) {
   if (!val) return 0;
-  // Remove currency symbols and spaces, then handle thousand separators
   let s = String(val).trim().replace(/[$\s]/g, '');
-  // If both dot and comma present: last one is decimal separator
   if (s.includes('.') && s.includes(',')) {
     const lastDot = s.lastIndexOf('.');
     const lastComma = s.lastIndexOf(',');
@@ -29,39 +24,15 @@ function parseNum(val) {
   return parseFloat(s) || 0;
 }
 
-function parseCSVLine(line) {
-  const cols = [];
-  let cur = '', inQ = false;
-  for (const ch of line) {
-    if (ch === '"') inQ = !inQ;
-    else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-    else cur += ch;
-  }
-  cols.push(cur.trim());
-  return cols;
-}
-
-async function fetchCSV(sheetId, gid) {
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
-  const resp = await fetch(url, { redirect: 'follow' });
-  if (!resp.ok) throw new Error(`Error leyendo sheet gid=${gid}: ${resp.status}`);
-  return resp.text();
-}
-
-function parseCSVRows(text) {
-  const lines = text.trim().split('\n').filter(l => l.trim());
-  if (lines.length < 3) return [];
-  return lines.slice(2).map(line => {
-    const cols = [];
-    let cur = '', inQ = false;
-    for (const ch of line) {
-      if (ch === '"') inQ = !inQ;
-      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
-      else cur += ch;
-    }
-    cols.push(cur.trim());
-    return { detalle: cols[0] || '', monto: parseNum(cols[1]), fecha: (cols[2] || '').replace(/"/g, '').trim() };
-  }).filter(r => r.detalle && r.monto !== 0);
+function parseSheetRows(values) {
+  if (!values || values.length < 3) return [];
+  return values.slice(2)
+    .map(row => ({
+      detalle: (row[0] || '').trim(),
+      monto:   parseNum(row[1]),
+      fecha:   (row[2] || '').trim(),
+    }))
+    .filter(r => r.detalle && r.monto !== 0);
 }
 
 module.exports = async (req, res) => {
@@ -78,19 +49,18 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const sheets = getSheets();
 
-      const [retirosText, recibidoText, saldoResp] = await Promise.all([
-        fetchCSV(sheetId, GID_RETIROS),
-        fetchCSV(sheetId, GID_RECIBIDO),
+      const [retirosResp, recibidoResp, saldoResp] = await Promise.all([
+        sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'Retiros!A:C' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'Recibido!A:C' }),
         sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'J2' }),
       ]);
 
-      const retiros  = parseCSVRows(retirosText);
-      const recibido = parseCSVRows(recibidoText);
+      const retiros  = parseSheetRows(retirosResp.data.values);
+      const recibido = parseSheetRows(recibidoResp.data.values);
 
       const totalRetiros  = retiros.reduce((s, r) => s + r.monto, 0);
       const totalRecibido = recibido.reduce((s, r) => s + r.monto, 0);
 
-      // Leer saldo directamente de J2 (ya calculado por la fórmula del sheet)
       const saldoRaw = saldoResp.data.values?.[0]?.[0] ?? '0';
       const saldo = parseNum(saldoRaw);
 
