@@ -395,6 +395,7 @@
     body.role-vendedor header .header-right > button:last-child { display: none; }
     body.role-vendedor #f-vendor { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
+    body.role-vendedor #tab-resumen { display: none !important; }
   </style>
 </head>
 <body>
@@ -1979,7 +1980,15 @@ function renderInsights() {
   document.getElementById('alerts-box').innerHTML = alertsHtml;
 
   // Insight cards
-  const insightCards = [
+  const isVendedor = window._currentUser?.role === 'vendedor';
+  const insightCards = isVendedor ? [
+    byClient[0] && { icon:'⭐', cls:'good', title:'Cliente Principal', value: byClient[0].key, desc:`${fmt$(byClient[0].final)} en ingresos finales · ${byClient[0].ops} compras`, color:PALETTE[4] },
+    topGenreVol && { icon:'📢', cls:'info', title:'Género con Mayor Volumen', value: topGenreVol.key, desc:`${topGenreVol.ops} operaciones · ${fmt$(topGenreVol.precio)} en ventas brutas`, color:PALETTE[3] },
+    topGenreRent && { icon:'💎', cls:'good', title:'Género Más Rentable', value: topGenreRent.key, desc:`Margen promedio del ${fmtPct(topGenreRent.margen)} · ${fmt$(topGenreRent.final)} en Final`, color:PALETTE[0] },
+    worstMethod && { icon:'💳', cls:'alert', title:'Método con Mayor Costo', value: worstMethod.key, desc:`Margen promedio ${fmtPct(worstMethod.margen)} · Comisión ${fmtPct(worstMethod.comision)}`, color:PALETTE[5] },
+    momPct !== null && { icon: momPct >= 0 ? '📈' : '📉', cls: momPct>=0?'good':'alert', title:'Variación Mensual (Final)', value: `${momPct>=0?'+':''}${momPct.toFixed(1)}%`, desc:`Vs mes anterior: ${fmt$(Math.abs(momGrowth))} ${momPct>=0?'más':'menos'}`, color: momPct>=0?PALETTE[1]:PALETTE[7] },
+    { icon:'📦', cls:'info', title:'Concentración Top 3 Clientes', value: fmtPct(top3pct), desc:`${topClients.map(c=>c.key).join(', ')}`, color: PALETTE[2] },
+  ].filter(Boolean) : [
     topVendor && { icon:'🏆', cls:'good', title:'Mejor Vendedor', value: topVendor.key, desc:`${fmt$(topVendor.final)} en ingresos finales · ${topVendor.ops} operaciones · Margen ${fmtPct(topVendor.margen)}`, color:PALETTE[1] },
     topGenreRent && { icon:'💎', cls:'good', title:'Género Más Rentable', value: topGenreRent.key, desc:`Margen promedio del ${fmtPct(topGenreRent.margen)} · ${fmt$(topGenreRent.final)} en Final`, color:PALETTE[0] },
     topGenreVol && { icon:'📢', cls:'info', title:'Género con Mayor Volumen', value: topGenreVol.key, desc:`${topGenreVol.ops} operaciones · ${fmt$(topGenreVol.precio)} en ventas brutas`, color:PALETTE[3] },
@@ -2236,7 +2245,10 @@ function applyRole(user) {
   window._currentUser = user;
   document.body.classList.remove('role-admin', 'role-secondary', 'role-vendedor');
   if (user.role === 'secondary_admin') document.body.classList.add('role-secondary');
-  else if (user.role === 'vendedor') document.body.classList.add('role-vendedor');
+  else if (user.role === 'vendedor') {
+    document.body.classList.add('role-vendedor');
+    document.getElementById('tab-resumen').style.display = 'none';
+  }
   document.getElementById('user-badge').style.display = 'flex';
   document.getElementById('user-badge-name').textContent = user.name;
 }
