@@ -392,12 +392,7 @@
     body.role-secondary #resumen-secondary-kpis { display: grid; }
     #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
 
-    .vendor-saldo-card { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:24px 28px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
-    .vendor-saldo-amount { font-size:36px; font-weight:800; color:var(--green); }
-    .vendor-saldo-label { font-size:13px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.06em; }
-    .vendor-saldo-breakdown { display:flex; gap:24px; flex-wrap:wrap; }
-    .vendor-saldo-item { font-size:13px; color:var(--muted); }
-    .vendor-saldo-item span { color:var(--text); font-weight:600; margin-left:4px; }
+    #vendor-saldo-section { display: contents; }
     body.role-vendedor header .header-right > button:last-child { display: none; }
     body.role-vendedor #f-vendor { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
@@ -625,8 +620,7 @@
     <div class="vendor-title" id="vendor-greeting"></div>
     <div class="vendor-sub" id="vendor-sub"></div>
   </div>
-  <div class="vendor-kpis" id="vendor-kpis"></div>
-  <div id="vendor-saldo-section"></div>
+  <div class="vendor-kpis" id="vendor-kpis"><div id="vendor-saldo-section"></div></div>
   <div class="vendor-sales-title">Mis ventas</div>
   <div class="table-card">
     <div class="table-scroll"><table id="vendor-sales-table"></table></div>
@@ -2578,17 +2572,12 @@ function renderVendorAccount(user) {
 
   const saldo = acc.saldo || 0;
 
-  // Saldo card
+  // Saldo card (as KPI card)
   document.getElementById('vendor-saldo-section').innerHTML = `
-    <div class="vendor-saldo-card">
-      <div>
-        <div class="vendor-saldo-label">Saldo a favor</div>
-        <div class="vendor-saldo-amount">${fmt$(saldo)}</div>
-      </div>
-      <div class="vendor-saldo-breakdown">
-        <div class="vendor-saldo-item">Retirado <span style="color:var(--red)">−${fmt$(acc.totalRetiros)}</span></div>
-        <div class="vendor-saldo-item">Recibido <span style="color:var(--green)">+${fmt$(acc.totalRecibido)}</span></div>
-      </div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow)">
+      <div class="kpi-icon">🏦</div>
+      <div class="kpi-label">Saldo a favor</div>
+      <div class="kpi-value" style="color:var(--green)">${fmt$(saldo)}</div>
     </div>`;
 
   // Movimientos table (retiros en rojo, recibido en verde, ordenados por fecha desc)
