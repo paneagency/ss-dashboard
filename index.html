@@ -392,7 +392,6 @@
     body.role-secondary #resumen-secondary-kpis { display: grid; }
     #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
 
-    #vendor-saldo-section { display: contents; }
     body.role-vendedor header .header-right > button:last-child { display: none; }
     body.role-vendedor #f-vendor { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
@@ -620,7 +619,7 @@
     <div class="vendor-title" id="vendor-greeting"></div>
     <div class="vendor-sub" id="vendor-sub"></div>
   </div>
-  <div class="vendor-kpis" id="vendor-kpis"><div id="vendor-saldo-section"></div></div>
+  <div class="vendor-kpis" id="vendor-kpis"></div>
   <div class="vendor-sales-title">Mis ventas</div>
   <div class="table-card">
     <div class="table-scroll"><table id="vendor-sales-table"></table></div>
@@ -2572,13 +2571,15 @@ function renderVendorAccount(user) {
 
   const saldo = acc.saldo || 0;
 
-  // Saldo card (as KPI card)
-  document.getElementById('vendor-saldo-section').innerHTML = `
-    <div class="kpi-card" style="--kpi-color:var(--yellow)">
-      <div class="kpi-icon">🏦</div>
-      <div class="kpi-label">Saldo a favor</div>
-      <div class="kpi-value" style="color:var(--green)">${fmt$(saldo)}</div>
-    </div>`;
+  // Saldo card (append to KPI grid)
+  const saldoCard = document.createElement('div');
+  saldoCard.className = 'kpi-card';
+  saldoCard.style.cssText = '--kpi-color:var(--yellow)';
+  saldoCard.innerHTML = `
+    <div class="kpi-icon">🏦</div>
+    <div class="kpi-label">Saldo a favor</div>
+    <div class="kpi-value" style="color:var(--green)">${fmt$(saldo)}</div>`;
+  document.getElementById('vendor-kpis').appendChild(saldoCard);
 
   // Movimientos table (retiros en rojo, recibido en verde, ordenados por fecha desc)
   const movimientos = [
