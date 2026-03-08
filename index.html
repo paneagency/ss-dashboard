@@ -1804,10 +1804,10 @@ function renderClientes() {
     }
   });
 
-  // New clients per month (desde allData para mostrar historia completa)
+  // New clients per month — últimos 6 meses desde allData
   const newByMonth = new Map();
   Object.values(firstPurchaseAll).forEach(d => { const k = monthKey(d); newByMonth.set(k, (newByMonth.get(k)||0)+1); });
-  const newMonths = [...newByMonth.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const newMonths = [...newByMonth.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
 
   mkChart('chart-client-new', {
     type: 'bar',
