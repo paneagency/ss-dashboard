@@ -2730,7 +2730,7 @@ function renderVendedores() {
     const final      = vd.reduce((s, r) => s + r.final, 0);
     const totalFinal = data.reduce((s, r) => s + r.final, 0);
     const pctFinal   = totalFinal ? (final / totalFinal * 100).toFixed(1) : 0;
-    const margenProm = vd.length  ? vd.reduce((s, r) => s + r.margen, 0) / vd.length : 0;
+    const margenProm = precio > 0 ? (final / precio * 100) : 0;
 
     // Tendencia: comparar primera vs segunda mitad del período
     const sorted = [...vd].sort((a,b) => a.fecha - b.fecha);
@@ -2763,8 +2763,8 @@ function renderVendedores() {
           <div class="vendedor-stat-value">${s.ops}</div>
         </div>
         <div class="vendedor-stat">
-          <div class="vendedor-stat-label">Neto generado</div>
-          <div class="vendedor-stat-value">${fmt$(s.neto)}</div>
+          <div class="vendedor-stat-label">Final</div>
+          <div class="vendedor-stat-value">${fmt$(s.final)}</div>
         </div>
         <div class="vendedor-stat">
           <div class="vendedor-stat-label">Clientes únicos</div>
@@ -2779,8 +2779,7 @@ function renderVendedores() {
         <div class="vendedor-top-item"><span>Top cliente</span><span>${s.topCliente}</span></div>
         <div class="vendedor-top-item"><span>Top género</span><span>${s.topGenero}</span></div>
         <div class="vendedor-top-item"><span>Top método</span><span>${s.topMetodo}</span></div>
-        <div class="vendedor-top-item"><span>Final generado</span><span>${fmt$(s.final)}</span></div>
-        <div class="vendedor-top-item"><span>Margen promedio</span><span>${s.margenProm.toFixed(1)}%</span></div>
+        <div class="vendedor-top-item"><span>Margen empresa</span><span>${s.margenProm.toFixed(1)}%</span></div>
         <div class="vendedor-top-item"><span>Tendencia período</span><span>${s.trend}</span></div>
       </div>
     </div>`).join('');
