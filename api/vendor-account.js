@@ -50,8 +50,8 @@ async function fetchCSV(sheetId, gid) {
 
 function parseCSVRows(text) {
   const lines = text.trim().split('\n').filter(l => l.trim());
-  if (lines.length < 2) return [];
-  return lines.slice(1).map(line => {
+  if (lines.length < 3) return [];
+  return lines.slice(2).map(line => {
     const cols = [];
     let cur = '', inQ = false;
     for (const ch of line) {
