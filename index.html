@@ -1221,6 +1221,7 @@ function applyFilters() {
     renderVendorView(window._currentUser);
     renderVendorAccount(window._currentUser);
   }
+  if (activeTab === 'cuentas') renderCuentasTable();
   renderActive();
 }
 
@@ -2710,6 +2711,10 @@ async function loadAdminCuentas() {
 function renderCuentasTable() {
   if (!_adminCuentas) return;
   const filterSheetId = document.getElementById('cuentas-filter-vendor').value;
+  const dateFrom = document.getElementById('f-date-from').value;
+  const dateTo   = document.getElementById('f-date-to').value;
+  const fromDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
+  const toDate   = dateTo   ? new Date(dateTo   + 'T23:59:59') : null;
 
   const movimientos = [];
   for (const v of _adminCuentas) {
@@ -2718,15 +2723,20 @@ function renderCuentasTable() {
     for (const r of (v.recibido || [])) movimientos.push({ ...r, tipo: 'recibido', vendor: v.name, sheetId: v.sheetId });
   }
 
-  movimientos.sort((a, b) => {
+  const filtered = movimientos.filter(m => {
+    const d = new Date(m.fecha.split('/').reverse().join('-'));
+    if (fromDate && d < fromDate) return false;
+    if (toDate   && d > toDate)   return false;
+    return true;
+  }).sort((a, b) => {
     const da = new Date(a.fecha.split('/').reverse().join('-'));
     const db = new Date(b.fecha.split('/').reverse().join('-'));
     return db - da;
   });
 
   const table = document.getElementById('cuentas-table');
-  if (!movimientos.length) {
-    table.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Sin movimientos</td></tr></tbody>';
+  if (!filtered.length) {
+    table.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Sin movimientos en el período</td></tr></tbody>';
     return;
   }
 
@@ -2734,7 +2744,7 @@ function renderCuentasTable() {
     <thead><tr>
       <th>Vendedor</th><th>Detalle</th><th>Tipo</th><th>Monto</th><th>Fecha</th><th></th>
     </tr></thead>
-    <tbody>${movimientos.map(m => {
+    <tbody>${filtered.map(m => {
       const sheetName = m.tipo === 'recibido' ? 'Recibido' : 'Retiros';
       const color     = m.tipo === 'recibido' ? 'var(--green)' : 'var(--red)';
       const badge     = m.tipo === 'recibido'
