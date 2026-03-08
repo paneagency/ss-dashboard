@@ -14,8 +14,31 @@ function getSheets() {
 
 function parseNum(val) {
   if (!val) return 0;
-  const s = String(val).trim().replace(/[$\s,]/g, '').replace(',', '.');
+  // Remove currency symbols and spaces, then handle thousand separators
+  let s = String(val).trim().replace(/[$\s]/g, '');
+  // If both dot and comma present: last one is decimal separator
+  if (s.includes('.') && s.includes(',')) {
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (s.includes(',')) {
+    const parts = s.split(',');
+    s = (parts.length === 2 && parts[1].length <= 2) ? s.replace(',', '.') : s.replace(/,/g, '');
+  }
   return parseFloat(s) || 0;
+}
+
+function parseCSVLine(line) {
+  const cols = [];
+  let cur = '', inQ = false;
+  for (const ch of line) {
+    if (ch === '"') inQ = !inQ;
+    else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  cols.push(cur.trim());
+  return cols;
 }
 
 async function fetchCSV(sheetId, gid) {
@@ -65,10 +88,10 @@ module.exports = async (req, res) => {
       const totalRetiros  = retiros.reduce((s, r) => s + r.monto, 0);
       const totalRecibido = recibido.reduce((s, r) => s + r.monto, 0);
 
-      // Sumar columna H (DIF %40, índice 7) de la hoja principal
-      const mainLines = mainText.trim().split('\n').slice(1);
+      // Sumar columna H (DIF %40, índice 7) desde fila 3 — igual que SUMA(H3:H992)
+      const mainLines = mainText.trim().split('\n').slice(2); // salta filas 1 y 2
       const totalCommissions = mainLines.reduce((s, line) => {
-        const cols = line.split(',');
+        const cols = parseCSVLine(line);
         return s + parseNum(cols[7]);
       }, 0);
 
