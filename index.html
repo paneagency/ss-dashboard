@@ -2519,7 +2519,12 @@ function renderVendorView(user) {
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-value">${k.value}</div>
       ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
-    </div>`).join('');
+    </div>`).join('') + `
+    <div class="kpi-card" id="vendor-saldo-kpi" style="--kpi-color:var(--yellow)">
+      <div class="kpi-icon">🏦</div>
+      <div class="kpi-label">Saldo a favor</div>
+      <div class="kpi-value" style="color:var(--muted)">…</div>
+    </div>`;
 
   // Tabla de sus ventas (más recientes primero)
   const rows = [...myData].sort((a,b) => b.fecha - a.fecha);
@@ -2571,15 +2576,12 @@ function renderVendorAccount(user) {
 
   const saldo = acc.saldo || 0;
 
-  // Saldo card (append to KPI grid)
-  const saldoCard = document.createElement('div');
-  saldoCard.className = 'kpi-card';
-  saldoCard.style.cssText = '--kpi-color:var(--yellow)';
-  saldoCard.innerHTML = `
-    <div class="kpi-icon">🏦</div>
-    <div class="kpi-label">Saldo a favor</div>
-    <div class="kpi-value" style="color:var(--green)">${fmt$(saldo)}</div>`;
-  document.getElementById('vendor-kpis').appendChild(saldoCard);
+  // Update saldo placeholder card
+  const saldoCard = document.getElementById('vendor-saldo-kpi');
+  if (saldoCard) {
+    saldoCard.querySelector('.kpi-value').style.color = 'var(--green)';
+    saldoCard.querySelector('.kpi-value').textContent = fmt$(saldo);
+  }
 
   // Movimientos table (retiros en rojo, recibido en verde, ordenados por fecha desc)
   const movimientos = [
