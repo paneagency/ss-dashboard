@@ -2727,8 +2727,10 @@ function renderVendedores() {
     const precio     = vd.reduce((s, r) => s + r.precio, 0);
     const clientes   = new Set(vd.map(r => r.artista)).size;
     const ticketProm = vd.length ? precio / vd.length : 0;
-    const pctTotal   = totalVentas ? (vd.length / totalVentas * 100).toFixed(1) : 0;
-    const pctNeto    = totalNeto   ? (neto / totalNeto * 100).toFixed(1) : 0;
+    const final      = vd.reduce((s, r) => s + r.final, 0);
+    const totalFinal = data.reduce((s, r) => s + r.final, 0);
+    const pctFinal   = totalFinal ? (final / totalFinal * 100).toFixed(1) : 0;
+    const margenProm = vd.length  ? vd.reduce((s, r) => s + r.margen, 0) / vd.length : 0;
 
     // Tendencia: comparar primera vs segunda mitad del período
     const sorted = [...vd].sort((a,b) => a.fecha - b.fecha);
@@ -2737,35 +2739,23 @@ function renderVendedores() {
     const secondHalf = sorted.slice(mid).length;
     const trend = secondHalf > firstHalf ? '↑' : secondHalf < firstHalf ? '↓' : '→';
 
-    // Mes con más ventas
-    const byMonth = {};
-    vd.forEach(r => {
-      const key = `${r.fecha.getFullYear()}-${String(r.fecha.getMonth()+1).padStart(2,'0')}`;
-      byMonth[key] = (byMonth[key] || 0) + 1;
-    });
-    const bestMonth = Object.entries(byMonth).sort((a,b) => b[1]-a[1])[0];
-    const bestMonthLabel = bestMonth ? (() => {
-      const [y, m] = bestMonth[0].split('-');
-      return `${MONTH_NAMES[parseInt(m)-1]} ${y}`;
-    })() : '—';
-
     return {
-      name, ops: vd.length, neto, precio, clientes, ticketProm,
-      pctTotal, pctNeto, trend, bestMonthLabel,
+      name, ops: vd.length, neto, final, precio, clientes, ticketProm,
+      pctFinal, margenProm, trend,
       topCliente: top(vd.map(r => r.artista)),
       topGenero:  top(vd.map(r => r.genero)),
       topMetodo:  top(vd.map(r => r.metodo)),
     };
   });
 
-  stats.sort((a, b) => b.neto - a.neto);
+  stats.sort((a, b) => b.final - a.final);
 
   // Renderizar cards
   document.getElementById('vendedores-cards').innerHTML = stats.map(s => `
     <div class="vendedor-card">
       <div class="vendedor-card-header">
         <div class="vendedor-card-name">${s.name}</div>
-        <div class="vendedor-card-pct">${s.pctTotal}% del total</div>
+        <div class="vendedor-card-pct">${s.pctFinal}% del final</div>
       </div>
       <div class="vendedor-stats">
         <div class="vendedor-stat">
@@ -2789,8 +2779,8 @@ function renderVendedores() {
         <div class="vendedor-top-item"><span>Top cliente</span><span>${s.topCliente}</span></div>
         <div class="vendedor-top-item"><span>Top género</span><span>${s.topGenero}</span></div>
         <div class="vendedor-top-item"><span>Top método</span><span>${s.topMetodo}</span></div>
-        <div class="vendedor-top-item"><span>Mejor mes</span><span>${s.bestMonthLabel}</span></div>
-        <div class="vendedor-top-item"><span>% del neto total</span><span>${s.pctNeto}%</span></div>
+        <div class="vendedor-top-item"><span>Final generado</span><span>${fmt$(s.final)}</span></div>
+        <div class="vendedor-top-item"><span>Margen promedio</span><span>${s.margenProm.toFixed(1)}%</span></div>
         <div class="vendedor-top-item"><span>Tendencia período</span><span>${s.trend}</span></div>
       </div>
     </div>`).join('');
@@ -2809,11 +2799,13 @@ function renderVendedores() {
   }
 
   const rows = [
-    { label: 'Ventas',          vals: stats.map(s => s.ops),         fmt: v => v,           higher: true },
-    { label: 'Neto generado',   vals: stats.map(s => s.neto),        fmt: v => fmt$(v),     higher: true },
-    { label: 'Clientes únicos', vals: stats.map(s => s.clientes),    fmt: v => v,           higher: true },
-    { label: 'Ticket promedio', vals: stats.map(s => s.ticketProm),  fmt: v => fmt$(v),     higher: true },
-    { label: '% del total',     vals: stats.map(s => parseFloat(s.pctTotal)), fmt: v => v+'%', higher: true },
+    { label: 'Ventas',           vals: stats.map(s => s.ops),                      fmt: v => v,                        higher: true },
+    { label: 'Final generado',   vals: stats.map(s => s.final),                    fmt: v => fmt$(v),                  higher: true },
+    { label: 'Neto generado',    vals: stats.map(s => s.neto),                     fmt: v => fmt$(v),                  higher: true },
+    { label: 'Margen promedio',  vals: stats.map(s => s.margenProm),               fmt: v => v.toFixed(1)+'%',         higher: true },
+    { label: 'Clientes únicos',  vals: stats.map(s => s.clientes),                 fmt: v => v,                        higher: true },
+    { label: 'Ticket promedio',  vals: stats.map(s => s.ticketProm),               fmt: v => fmt$(v),                  higher: true },
+    { label: '% del final total',vals: stats.map(s => parseFloat(s.pctFinal)),     fmt: v => v+'%',                    higher: true },
   ];
 
   document.getElementById('vendedores-compare').innerHTML = `
