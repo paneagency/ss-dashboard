@@ -385,12 +385,20 @@
     .vendor-sales-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
 
     /* ROLES: ocultar elementos según rol */
-    body.role-secondary .tab-btn:not([data-tab="resumen"]) { display: none; }
-    body.role-secondary #months-panel { display: none; }
-    body.role-secondary #filters-bar { display: none; }
-    body.role-secondary #kpi-grid { display: none; }
-    body.role-secondary #resumen-secondary-kpis { display: grid; }
-    #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
+    #resumen-secondary-kpis { display: none; }
+
+    /* Secondary admin: igual que vendedor pero con Nueva Venta */
+    body.role-secondary #data-badge { display: none !important; }
+    body.role-secondary #f-vendor { display: none; }
+    body.role-secondary #vendedor-view { display: block; }
+    body.role-secondary #tab-resumen { display: none !important; }
+    body.role-secondary .tab-btn[data-tab="resumen"]  { order: 1; }
+    body.role-secondary .tab-btn[data-tab="clientes"] { order: 2; }
+    body.role-secondary .tab-btn[data-tab="generos"]  { order: 3; }
+    body.role-secondary .tab-btn[data-tab="metodos"]  { order: 4; }
+    body.role-secondary .tab-btn[data-tab="temporal"] { order: 5; }
+    body.role-secondary .tab-btn[data-tab="insights"] { order: 6; }
+    body.role-secondary #vendor-today-section { display: block !important; }
 
     /* Clientes potenciales (vendedor insights) */
     .dormant-section { margin-top: 28px; }
@@ -672,6 +680,13 @@
     <div class="vendor-sub" id="vendor-sub"></div>
   </div>
   <div class="vendor-kpis" id="vendor-kpis"></div>
+  <!-- Ventas del día: solo secondary_admin -->
+  <div id="vendor-today-section" style="display:none;margin-bottom:28px">
+    <div class="vendor-sales-title">Ventas del día</div>
+    <div class="table-card" style="padding:16px 20px">
+      <div id="vendor-today-panel"></div>
+    </div>
+  </div>
   <div class="vendor-sales-title">Mis ventas</div>
   <div class="table-card">
     <div class="table-scroll"><table id="vendor-sales-table"></table></div>
@@ -1116,7 +1131,7 @@ function applyLoadedData(parsed) {
 
   populateFilters();
 
-  if (window._currentUser?.role === 'vendedor') {
+  if (['vendedor', 'secondary_admin'].includes(window._currentUser?.role)) {
     renderVendorView(window._currentUser);
     loadVendorAccount(window._currentUser);
     applyFilters();
@@ -1268,7 +1283,7 @@ function applyFilters() {
     return true;
   });
 
-  if (window._currentUser?.role === 'vendedor') {
+  if (['vendedor', 'secondary_admin'].includes(window._currentUser?.role)) {
     renderVendorView(window._currentUser);
     renderVendorAccount(window._currentUser);
   }
@@ -1293,7 +1308,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     activeTab = btn.dataset.tab;
     document.getElementById('tab-' + activeTab).classList.add('active');
-    if (window._currentUser?.role === 'vendedor') {
+    if (['vendedor', 'secondary_admin'].includes(window._currentUser?.role)) {
       document.getElementById('vendedor-view').style.display = activeTab === 'resumen' ? 'block' : 'none';
     }
     renderTab(activeTab);
@@ -1504,7 +1519,8 @@ function makeSortableTable(tableId, headers, rows, colTypes) {
 let _panelDayOffset = 0; // 0 = hoy, -1 = ayer, etc.
 
 function renderTodayPanel() {
-  const panel = document.getElementById('today-sales-panel');
+  const isSecondary = window._currentUser?.role === 'secondary_admin';
+  const panel = document.getElementById(isSecondary ? 'vendor-today-panel' : 'today-sales-panel');
   if (!panel) return;
 
   const target = new Date();
@@ -2347,8 +2363,8 @@ function openModal() {
   fillDatalist('list-metodos',  allData.map(r => r.metodo));
   fillDatalist('list-generos',  allData.map(r => r.genero));
 
-  // Pre-llenar vendedor si es rol vendedor
-  if (window._currentUser?.role === 'vendedor') {
+  // Pre-llenar vendedor si es rol vendedor o secondary_admin
+  if (['vendedor', 'secondary_admin'].includes(window._currentUser?.role)) {
     const ventaInput = document.getElementById('f-venta');
     ventaInput.value = window._currentUser.vendorName || window._currentUser.name;
     ventaInput.readOnly = true;
@@ -2562,8 +2578,10 @@ function applyRole(user) {
   window._currentUser = user;
   document.body.classList.remove('role-admin', 'role-secondary', 'role-vendedor');
   if (user.role === 'admin') document.body.classList.add('role-admin');
-  else if (user.role === 'secondary_admin') document.body.classList.add('role-secondary');
-  else if (user.role === 'vendedor') {
+  else if (user.role === 'secondary_admin') {
+    document.body.classList.add('role-secondary');
+    document.getElementById('tab-resumen').style.display = 'none';
+  } else if (user.role === 'vendedor') {
     document.body.classList.add('role-vendedor');
     document.getElementById('tab-resumen').style.display = 'none';
   }
@@ -2678,17 +2696,22 @@ function renderVendorView(user) {
       <div class="kpi-value" style="color:var(--muted)">…</div>
     </div>`;
 
+  // Ventas del día (solo secondary_admin)
+  const isSecondaryAdmin = user.role === 'secondary_admin';
+  if (isSecondaryAdmin) renderTodayPanel();
+
   // Tabla de sus ventas (más recientes primero)
   const rows = [...myData].sort((a,b) => b.fecha - a.fecha);
   const table = document.getElementById('vendor-sales-table');
   if (!rows.length) {
-    table.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Sin ventas en el período seleccionado</td></tr></tbody>';
+    table.innerHTML = `<tbody><tr><td colspan="${isSecondaryAdmin ? 7 : 6}" style="text-align:center;padding:32px;color:var(--muted)">Sin ventas en el período seleccionado</td></tr></tbody>`;
     return;
   }
-  const headers = ['Artista', 'Fecha', 'Precio', 'Neto', 'Tu Comisión', 'Método'];
+  const headers = ['Artista', 'Fecha', 'Precio', 'Neto', 'Tu Comisión', 'Método', ...(isSecondaryAdmin ? [''] : [])];
+  window._vendorSalesRows = rows;
   table.innerHTML = `
     <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map(r => {
+    <tbody>${rows.map((r, idx) => {
       const comm = r.neto * commission;
       return `<tr>
         <td>${r.artista}</td>
@@ -2697,12 +2720,39 @@ function renderVendorView(user) {
         <td>${fmt$(r.neto)}</td>
         <td style="color:var(--green);font-weight:600">${fmt$(comm)}</td>
         <td>${r.metodo}</td>
+        ${isSecondaryAdmin ? `<td><button class="btn-delete" onclick="deleteVendorSale(${idx})" title="Eliminar">🗑️</button></td>` : ''}
       </tr>`;
     }).join('')}</tbody>`;
 }
 
 function refreshVendorView() {
-  if (window._currentUser?.role === 'vendedor') renderVendorView(window._currentUser);
+  if (['vendedor', 'secondary_admin'].includes(window._currentUser?.role)) renderVendorView(window._currentUser);
+}
+
+async function deleteVendorSale(idx) {
+  const r = window._vendorSalesRows?.[idx];
+  if (!r) return;
+  const d = r.fecha;
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear();
+  if (!confirm(`¿Eliminar la venta de "${r.artista}" (${fmt$(r.precio)}) del ${dd}/${mm}/${yyyy}?\n\nEsta acción no se puede deshacer.`)) return;
+  showToast('Buscando fila en el Sheet...', 'success');
+  try {
+    const resp = await fetch('/api/sheets', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista: r.artista, venta: r.venta, precio: r.precio, fecha: `${yyyy}-${mm}-${dd}` }),
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || 'Error al eliminar');
+    const localIdx = allData.indexOf(r);
+    if (localIdx !== -1) allData.splice(localIdx, 1);
+    showToast(`Venta de "${r.artista}" eliminada`, 'success');
+    applyFilters();
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+  }
 }
 
 // ============================================================
