@@ -2721,6 +2721,12 @@ function renderVendedores() {
     return Object.entries(freq).sort((a,b) => b[1]-a[1])[0]?.[0] || '—';
   }
 
+  function topByFinal(rows, keyFn) {
+    const totals = {};
+    rows.forEach(r => { const k = keyFn(r); if (k) totals[k] = (totals[k] || 0) + r.final; });
+    return Object.entries(totals).sort((a,b) => b[1]-a[1])[0]?.[0] || '—';
+  }
+
   const stats = vendorNames.map(name => {
     const vd = data.filter(r => r.venta === name);
     const neto       = vd.reduce((s, r) => s + r.neto, 0);
@@ -2742,7 +2748,7 @@ function renderVendedores() {
     return {
       name, ops: vd.length, neto, final, precio, clientes, ticketProm,
       pctFinal, margenProm, trend,
-      topCliente: top(vd.map(r => r.artista)),
+      topCliente: topByFinal(vd, r => r.artista),
       topGenero:  top(vd.map(r => r.genero)),
       topMetodo:  top(vd.map(r => r.metodo)),
     };
