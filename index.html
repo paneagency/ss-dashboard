@@ -1822,7 +1822,7 @@ function renderClientes() {
     c.key,
     fmt$(c.precio),
     c.ops,
-    fmt$(c.neto * commission),
+    { html:`<span style="color:var(--green);font-weight:600">${fmt$(c.neto * commission)}</span>`, cls:'' },
     c.ops > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
     c.firstDate ? c.firstDate.toLocaleDateString('es-AR') : '—'
   ] : [
