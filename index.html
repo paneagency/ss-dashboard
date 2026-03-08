@@ -392,6 +392,12 @@
     body.role-secondary #resumen-secondary-kpis { display: grid; }
     #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
 
+    .vendor-saldo-card { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:24px 28px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+    .vendor-saldo-amount { font-size:36px; font-weight:800; color:var(--green); }
+    .vendor-saldo-label { font-size:13px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.06em; }
+    .vendor-saldo-breakdown { display:flex; gap:24px; flex-wrap:wrap; }
+    .vendor-saldo-item { font-size:13px; color:var(--muted); }
+    .vendor-saldo-item span { color:var(--text); font-weight:600; margin-left:4px; }
     body.role-vendedor header .header-right > button:last-child { display: none; }
     body.role-vendedor #f-vendor { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
@@ -483,6 +489,7 @@
         <button class="btn btn-ghost btn-sm" onclick="logout()">Salir</button>
       </div>
       <button class="btn btn-ghost btn-sm" id="refresh-btn" onclick="init()">↻ Actualizar</button>
+      <button class="btn btn-ghost btn-sm" id="btn-cuenta-vendedor" onclick="openVendorAccountModal()" style="display:none">💼 Cuenta Vendedor</button>
       <button class="btn btn-primary btn-sm" id="btn-nueva-venta" onclick="openModal()">+ Nueva Venta</button>
     </div>
   </div>
@@ -619,9 +626,60 @@
     <div class="vendor-sub" id="vendor-sub"></div>
   </div>
   <div class="vendor-kpis" id="vendor-kpis"></div>
+  <div id="vendor-saldo-section"></div>
   <div class="vendor-sales-title">Mis ventas</div>
   <div class="table-card">
     <div class="table-scroll"><table id="vendor-sales-table"></table></div>
+  </div>
+  <div id="vendor-movements-section" style="display:none">
+    <div class="vendor-sales-title" style="margin-top:28px">Movimientos de cuenta</div>
+    <div class="table-card">
+      <div class="table-scroll"><table id="vendor-movements-table"></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CUENTA VENDEDOR (admin) -->
+<div id="vendor-account-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeVendorAccountModal()">
+  <div class="modal-card" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Cuenta Vendedor</div>
+      <button class="modal-close" onclick="closeVendorAccountModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Vendedor</label>
+        <select class="form-input" id="va-vendor-select"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de movimiento</label>
+        <div style="display:flex;gap:12px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="va-type" value="retiros" checked> Retiro (pago al vendedor)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="va-type" value="recibido"> Recibido (ingreso)
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Detalle<span>*</span></label>
+        <input class="form-input" id="va-detalle" placeholder="Ej: Retiro PayPal" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Monto USD<span>*</span></label>
+        <input class="form-input" id="va-monto" type="number" step="0.01" placeholder="0.00" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha<span>*</span></label>
+        <input class="form-input" id="va-fecha" type="date" required>
+      </div>
+      <div id="va-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeVendorAccountModal()">Cancelar</button>
+      <button class="btn btn-primary" id="va-submit-btn" onclick="submitVendorMovement()">Guardar</button>
+    </div>
   </div>
 </div>
 
@@ -982,8 +1040,15 @@ function applyLoadedData(parsed) {
 
   if (window._currentUser?.role === 'vendedor') {
     renderVendorView(window._currentUser);
+    loadVendorAccount(window._currentUser);
     applyFilters();
     return;
+  }
+
+  // Mostrar botón cuenta vendedor solo para admin con vendedores configurados
+  const adminUser = window._currentUser;
+  if (adminUser && adminUser.role !== 'vendedor' && adminUser.role !== 'secondary_admin') {
+    document.getElementById('btn-cuenta-vendedor').style.display = 'inline-flex';
   }
 
   applyFilters();
@@ -2488,6 +2553,136 @@ function renderVendorView(user) {
 
 function refreshVendorView() {
   if (window._currentUser?.role === 'vendedor') renderVendorView(window._currentUser);
+}
+
+// ============================================================
+// VENDOR ACCOUNT (saldo, retiros, recibido)
+// ============================================================
+window._vendorAccount = null;
+
+async function loadVendorAccount(user) {
+  if (!user?.sheetId) return;
+  try {
+    const resp = await fetch(`/api/vendor-account?sheetId=${user.sheetId}`);
+    if (!resp.ok) throw new Error(await resp.text());
+    window._vendorAccount = await resp.json();
+    renderVendorAccount(user);
+  } catch(e) {
+    console.error('Error cargando cuenta vendedor:', e);
+  }
+}
+
+function renderVendorAccount(user) {
+  const acc = window._vendorAccount;
+  if (!acc) return;
+
+  const commission = user.commission || 0;
+  const vendorName = (user.vendorName || user.name).toLowerCase();
+  const totalCommissions = allData
+    .filter(r => r.venta.toLowerCase() === vendorName)
+    .reduce((s, r) => s + r.neto * commission, 0);
+
+  const saldo = totalCommissions + acc.totalRecibido - acc.totalRetiros;
+
+  // Saldo card
+  document.getElementById('vendor-saldo-section').innerHTML = `
+    <div class="vendor-saldo-card">
+      <div>
+        <div class="vendor-saldo-label">Saldo a favor</div>
+        <div class="vendor-saldo-amount">${fmt$(saldo)}</div>
+      </div>
+      <div class="vendor-saldo-breakdown">
+        <div class="vendor-saldo-item">Comisiones acumuladas <span>${fmt$(totalCommissions)}</span></div>
+        <div class="vendor-saldo-item">Recibido <span style="color:var(--green)">${fmt$(acc.totalRecibido)}</span></div>
+        <div class="vendor-saldo-item">Retirado <span style="color:var(--red)">−${fmt$(acc.totalRetiros)}</span></div>
+      </div>
+    </div>`;
+
+  // Movimientos table (retiros en rojo, recibido en verde, ordenados por fecha desc)
+  const movimientos = [
+    ...acc.retiros.map(r  => ({ ...r, tipo: 'retiro'   })),
+    ...acc.recibido.map(r => ({ ...r, tipo: 'recibido' })),
+  ].sort((a, b) => {
+    const da = new Date(a.fecha.split('/').reverse().join('-'));
+    const db = new Date(b.fecha.split('/').reverse().join('-'));
+    return db - da;
+  });
+
+  const movSection = document.getElementById('vendor-movements-section');
+  const movTable   = document.getElementById('vendor-movements-table');
+  if (!movimientos.length) { movSection.style.display = 'none'; return; }
+
+  movSection.style.display = 'block';
+  movTable.innerHTML = `
+    <thead><tr><th>Detalle</th><th>Tipo</th><th>Monto</th><th>Fecha</th></tr></thead>
+    <tbody>${movimientos.map(m => `<tr>
+      <td>${m.detalle}</td>
+      <td><span class="td-badge" style="background:${m.tipo==='recibido'?'rgba(16,185,129,0.1)':'rgba(248,81,73,0.1)'};color:${m.tipo==='recibido'?'var(--green)':'var(--red)'}">
+        ${m.tipo==='recibido' ? 'Ingreso' : 'Retiro'}
+      </span></td>
+      <td style="color:${m.tipo==='recibido'?'var(--green)':'var(--red)'};font-weight:600">
+        ${m.tipo==='recibido'?'+':'−'}${fmt$(m.monto)}
+      </td>
+      <td>${m.fecha}</td>
+    </tr>`).join('')}</tbody>`;
+}
+
+// ── ADMIN: modal cuenta vendedor ─────────────────────────────
+function openVendorAccountModal() {
+  const select = document.getElementById('va-vendor-select');
+  const vendors = window._currentUser?.vendorAccounts || [];
+  select.innerHTML = '<option value="">Seleccioná un vendedor</option>';
+  vendors.forEach(v => {
+    select.innerHTML += `<option value="${v.sheetId}">${v.name}</option>`;
+  });
+  document.getElementById('va-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('va-error').style.display = 'none';
+  document.getElementById('vendor-account-modal').style.display = 'flex';
+}
+
+function closeVendorAccountModal() {
+  document.getElementById('vendor-account-modal').style.display = 'none';
+  document.getElementById('va-detalle').value = '';
+  document.getElementById('va-monto').value = '';
+}
+
+async function submitVendorMovement() {
+  const sheetId = document.getElementById('va-vendor-select').value;
+  const type    = document.querySelector('input[name="va-type"]:checked').value;
+  const detalle = document.getElementById('va-detalle').value.trim();
+  const monto   = parseFloat(document.getElementById('va-monto').value);
+  const fecha   = document.getElementById('va-fecha').value;
+  const errEl   = document.getElementById('va-error');
+  const btn     = document.getElementById('va-submit-btn');
+
+  errEl.style.display = 'none';
+  if (!sheetId) { errEl.textContent = 'Seleccioná un vendedor'; errEl.style.display = 'block'; return; }
+  if (!detalle) { errEl.textContent = 'Ingresá un detalle'; errEl.style.display = 'block'; return; }
+  if (!monto || monto <= 0) { errEl.textContent = 'Ingresá un monto válido'; errEl.style.display = 'block'; return; }
+  if (!fecha) { errEl.textContent = 'Seleccioná una fecha'; errEl.style.display = 'block'; return; }
+
+  // Format date as dd/mm/yyyy for the sheet
+  const [y, m, d] = fecha.split('-');
+  const fechaSheet = `${d}/${m}/${y}`;
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const resp = await fetch('/api/vendor-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheetId, type, detalle, monto, fecha: fechaSheet }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Error al guardar');
+    closeVendorAccountModal();
+    showToast('Movimiento registrado correctamente', 'success');
+    // Recargar cuenta si el vendedor está logueado
+    if (window._currentUser?.sheetId === sheetId) await loadVendorAccount(window._currentUser);
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
 }
 
 </script>
