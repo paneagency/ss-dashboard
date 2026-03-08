@@ -1736,11 +1736,13 @@ function renderClientes() {
   const data = filteredData;
   const byClient = aggByClient(data);
 
-  // Primera compra real desde allData completo (ignora filtros de fecha)
+  // Primera compra y total ops desde allData completo (ignora filtros de fecha)
   const firstPurchaseAll = {};
+  const totalOpsAll = {};
   allData.forEach(r => {
     if (!firstPurchaseAll[r.artista] || r.fecha < firstPurchaseAll[r.artista])
       firstPurchaseAll[r.artista] = r.fecha;
+    totalOpsAll[r.artista] = (totalOpsAll[r.artista] || 0) + 1;
   });
 
   // Recurrentes
@@ -1830,7 +1832,7 @@ function renderClientes() {
     fmt$(c.precio),
     c.ops,
     { html:`<span style="color:var(--green);font-weight:600">${fmt$(c.neto * commission)}</span>`, cls:'' },
-    c.ops > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
+    totalOpsAll[c.key] > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
     firstPurchaseAll[c.key] ? firstPurchaseAll[c.key].toLocaleDateString('es-AR') : '—'
   ] : [
     { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
@@ -1840,7 +1842,7 @@ function renderClientes() {
     c.ops,
     fmt$(c.ticket),
     fmtPct(c.margen),
-    c.ops > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
+    totalOpsAll[c.key] > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
     firstPurchaseAll[c.key] ? firstPurchaseAll[c.key].toLocaleDateString('es-AR') : '—'
   ]);
 
