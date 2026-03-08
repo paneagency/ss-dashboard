@@ -2576,12 +2576,7 @@ function renderVendorAccount(user) {
   const acc = window._vendorAccount;
   if (!acc) return;
 
-  const commission = user.commission || 0;
-  const vendorName = (user.vendorName || user.name).toLowerCase();
-  const totalCommissions = allData
-    .filter(r => r.venta.toLowerCase() === vendorName)
-    .reduce((s, r) => s + r.neto * commission, 0);
-
+  const totalCommissions = acc.totalCommissions || 0;
   const saldo = totalCommissions + acc.totalRecibido - acc.totalRetiros;
 
   // Saldo card

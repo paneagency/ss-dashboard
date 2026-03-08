@@ -53,9 +53,10 @@ module.exports = async (req, res) => {
 
     // ── LEER movimientos ─────────────────────────────────────
     if (req.method === 'GET') {
-      const [retirosText, recibidoText] = await Promise.all([
+      const [retirosText, recibidoText, mainText] = await Promise.all([
         fetchCSV(sheetId, GID_RETIROS),
         fetchCSV(sheetId, GID_RECIBIDO),
+        fetchCSV(sheetId, '0'),
       ]);
 
       const retiros  = parseCSVRows(retirosText);
@@ -64,7 +65,14 @@ module.exports = async (req, res) => {
       const totalRetiros  = retiros.reduce((s, r) => s + r.monto, 0);
       const totalRecibido = recibido.reduce((s, r) => s + r.monto, 0);
 
-      return res.json({ retiros, recibido, totalRetiros, totalRecibido });
+      // Sumar columna H (DIF %40, índice 7) de la hoja principal
+      const mainLines = mainText.trim().split('\n').slice(1);
+      const totalCommissions = mainLines.reduce((s, line) => {
+        const cols = line.split(',');
+        return s + parseNum(cols[7]);
+      }, 0);
+
+      return res.json({ retiros, recibido, totalRetiros, totalRecibido, totalCommissions });
     }
 
     // ── AGREGAR movimiento ────────────────────────────────────
