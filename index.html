@@ -1815,7 +1815,17 @@ function renderClientes() {
   });
 
   // Table
-  const rows = sorted.map((c, i) => [
+  const isVendedor = window._currentUser?.role === 'vendedor';
+  const commission = isVendedor ? (window._currentUser.commission || 0) : 0;
+  const rows = sorted.map((c, i) => isVendedor ? [
+    { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+    c.key,
+    fmt$(c.precio),
+    c.ops,
+    fmt$(c.neto * commission),
+    c.ops > 1 ? { html:`<span class="td-badge" style="background:rgba(16,185,129,0.1);color:var(--green)">Recurrente</span>`, cls:'' } : { html:`<span class="td-badge" style="background:rgba(245,158,11,0.1);color:var(--amber)">Única</span>`, cls:'' },
+    c.firstDate ? c.firstDate.toLocaleDateString('es-AR') : '—'
+  ] : [
     { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
     c.key,
     fmt$(c.precio),
@@ -1828,7 +1838,9 @@ function renderClientes() {
   ]);
 
   makeSortableTable('table-clients',
-    ['#','Artista/Cliente','Ventas Brutas','Final','Ops','Ticket Prom','Margen %','Tipo','Primera Compra'],
+    isVendedor
+      ? ['#','Artista/Cliente','Ventas Brutas','Ops','Tu Comisión','Tipo','Primera Compra']
+      : ['#','Artista/Cliente','Ventas Brutas','Final','Ops','Ticket Prom','Margen %','Tipo','Primera Compra'],
     rows
   );
 }
