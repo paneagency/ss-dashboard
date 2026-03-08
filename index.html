@@ -1183,7 +1183,10 @@ function applyFilters() {
     return true;
   });
 
-  if (window._currentUser?.role === 'vendedor') renderVendorView(window._currentUser);
+  if (window._currentUser?.role === 'vendedor') {
+    renderVendorView(window._currentUser);
+    renderVendorAccount(window._currentUser);
+  }
   renderActive();
 }
 
@@ -2584,10 +2587,20 @@ function renderVendorAccount(user) {
   }
 
   // Movimientos table (retiros en rojo, recibido en verde, ordenados por fecha desc)
+  const dateFrom = document.getElementById('f-date-from').value;
+  const dateTo   = document.getElementById('f-date-to').value;
+  const fromDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
+  const toDate   = dateTo   ? new Date(dateTo   + 'T23:59:59') : null;
+
   const movimientos = [
     ...acc.retiros.map(r  => ({ ...r, tipo: 'retiro'   })),
     ...acc.recibido.map(r => ({ ...r, tipo: 'recibido' })),
-  ].sort((a, b) => {
+  ].filter(m => {
+    const d = new Date(m.fecha.split('/').reverse().join('-'));
+    if (fromDate && d < fromDate) return false;
+    if (toDate   && d > toDate)   return false;
+    return true;
+  }).sort((a, b) => {
     const da = new Date(a.fecha.split('/').reverse().join('-'));
     const db = new Date(b.fecha.split('/').reverse().join('-'));
     return db - da;
