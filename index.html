@@ -2289,7 +2289,7 @@ function renderInsights() {
   const dormant = Object.entries(clientMap)
     .filter(([, c]) => c.lastDate < cutoff)
     .sort((a, b) => b[1].totalFinal - a[1].totalFinal)
-    .slice(0, 5);
+    .slice(0, 10);
 
   if (!dormant.length) { dormantBox.innerHTML = ''; return; }
 
