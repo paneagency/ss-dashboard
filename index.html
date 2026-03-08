@@ -2815,6 +2815,9 @@ async function submitVendorMovement() {
     showToast('Movimiento registrado correctamente', 'success');
     // Recargar cuenta si el vendedor está logueado
     if (window._currentUser?.sheetId === sheetId) await loadVendorAccount(window._currentUser);
+    // Refrescar tab Cuentas si hay datos cargados
+    _adminCuentas = null;
+    if (activeTab === 'cuentas') loadAdminCuentas();
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
