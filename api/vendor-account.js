@@ -24,10 +24,13 @@ function parseNum(val) {
   return parseFloat(s) || 0;
 }
 
+// values[0]=row1(header), values[1]=row2(header), values[2]=row3(first data)
+// so sheet row = sliceIndex + 3
 function parseSheetRows(values) {
   if (!values || values.length < 3) return [];
   return values.slice(2)
-    .map(row => ({
+    .map((row, i) => ({
+      row:     i + 3,
       detalle: (row[0] || '').trim(),
       monto:   parseNum(row[1]),
       fecha:   (row[2] || '').trim(),
@@ -37,7 +40,7 @@ function parseSheetRows(values) {
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -92,6 +95,42 @@ module.exports = async (req, res) => {
       });
 
       return res.json({ ok: true, row: nextRow });
+    }
+
+    // ── BORRAR movimiento ─────────────────────────────────────
+    if (req.method === 'DELETE') {
+      const sheetName = req.query?.sheetName || req.body?.sheetName;
+      const row       = parseInt(req.query?.row || req.body?.row);
+      if (!sheetName || !row)
+        return res.status(400).json({ error: 'Faltan campos: sheetName, row' });
+      if (!['Retiros', 'Recibido'].includes(sheetName))
+        return res.status(400).json({ error: 'sheetName debe ser "Retiros" o "Recibido"' });
+
+      const sheets = getSheets();
+
+      // Obtener el ID numérico de la pestaña por nombre
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
+      const sheet = meta.data.sheets.find(s => s.properties.title === sheetName);
+      if (!sheet) return res.status(404).json({ error: `Pestaña "${sheetName}" no encontrada` });
+      const numericSheetId = sheet.properties.sheetId;
+
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: sheetId,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: {
+                sheetId:    numericSheetId,
+                dimension:  'ROWS',
+                startIndex: row - 1,  // 0-based
+                endIndex:   row,
+              },
+            },
+          }],
+        },
+      });
+
+      return res.json({ ok: true });
     }
 
     return res.status(405).json({ error: 'Método no permitido' });

@@ -392,6 +392,19 @@
     body.role-secondary #resumen-secondary-kpis { display: grid; }
     #resumen-secondary-kpis { display: none; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
 
+    /* Tab cuentas: solo admin */
+    .tab-btn[data-tab="cuentas"] { display: none; }
+    body.role-admin .tab-btn[data-tab="cuentas"] { display: inline-flex; }
+
+    /* Cuentas panel */
+    .cuentas-saldos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 16px; margin-bottom: 28px; }
+    .cuenta-vendor-card { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:20px 24px; }
+    .cuenta-vendor-name { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; }
+    .cuenta-vendor-saldo { font-size:28px; font-weight:800; color:var(--green); }
+    .cuentas-filter { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+    .btn-delete { background:none; border:none; cursor:pointer; color:var(--muted); font-size:15px; padding:4px 8px; border-radius:6px; transition:color .15s,background .15s; }
+    .btn-delete:hover { color:var(--red); background:rgba(248,81,73,0.1); }
+
     body.role-vendedor header .header-right > button:last-child { display: none; }
     body.role-vendedor #f-vendor { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
@@ -610,6 +623,7 @@
     <button class="tab-btn" data-tab="clientes">🎤 Clientes</button>
     <button class="tab-btn" data-tab="metodos">💳 Métodos</button>
     <button class="tab-btn" data-tab="insights">💡 Insights</button>
+    <button class="tab-btn" data-tab="cuentas">💼 Cuentas</button>
   </div>
 </div>
 
@@ -846,6 +860,26 @@
     <div id="projection-box"></div>
     <div id="alerts-box"></div>
     <div class="insights-grid" id="insights-grid"></div>
+  </section>
+
+  <!-- TAB: CUENTAS (admin only) -->
+  <section id="tab-cuentas" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Cuentas Vendedores</div>
+        <div class="section-subtitle">Saldos y movimientos de todos los vendedores</div>
+      </div>
+    </div>
+    <div class="cuentas-saldos" id="cuentas-saldos"></div>
+    <div class="cuentas-filter">
+      <span style="font-size:13px;color:var(--muted)">Vendedor:</span>
+      <select id="cuentas-filter-vendor" class="filter-control" onchange="renderCuentasTable()">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="table-card">
+      <div class="table-scroll"><table id="cuentas-table"></table></div>
+    </div>
   </section>
 
 </main>
@@ -1222,6 +1256,7 @@ function renderTab(tab) {
   else if (tab === 'clientes') renderClientes();
   else if (tab === 'metodos') renderMetodos();
   else if (tab === 'insights') renderInsights();
+  else if (tab === 'cuentas') loadAdminCuentas();
 }
 
 // ============================================================
@@ -2413,7 +2448,8 @@ function logout() {
 function applyRole(user) {
   window._currentUser = user;
   document.body.classList.remove('role-admin', 'role-secondary', 'role-vendedor');
-  if (user.role === 'secondary_admin') document.body.classList.add('role-secondary');
+  if (user.role === 'admin') document.body.classList.add('role-admin');
+  else if (user.role === 'secondary_admin') document.body.classList.add('role-secondary');
   else if (user.role === 'vendedor') {
     document.body.classList.add('role-vendedor');
     document.getElementById('tab-resumen').style.display = 'none';
@@ -2623,6 +2659,109 @@ function renderVendorAccount(user) {
       </td>
       <td>${m.fecha}</td>
     </tr>`).join('')}</tbody>`;
+}
+
+// ── ADMIN: tab Cuentas ───────────────────────────────────────
+let _adminCuentas = null;
+
+async function loadAdminCuentas() {
+  const vendors = window._currentUser?.vendorAccounts || [];
+  if (!vendors.length) {
+    document.getElementById('cuentas-saldos').innerHTML = '<p style="color:var(--muted);font-size:13px">No hay vendedores configurados.</p>';
+    return;
+  }
+
+  // Mostrar loading en tarjetas
+  document.getElementById('cuentas-saldos').innerHTML = vendors.map(v => `
+    <div class="cuenta-vendor-card">
+      <div class="cuenta-vendor-name">${v.name}</div>
+      <div class="cuenta-vendor-saldo" style="color:var(--muted)">…</div>
+    </div>`).join('');
+
+  // Cargar todos en paralelo
+  const results = await Promise.all(vendors.map(async v => {
+    try {
+      const resp = await fetch(`/api/vendor-account?sheetId=${v.sheetId}`);
+      if (!resp.ok) throw new Error(await resp.text());
+      const data = await resp.json();
+      return { ...v, ...data };
+    } catch(e) {
+      return { ...v, saldo: null, retiros: [], recibido: [], error: e.message };
+    }
+  }));
+
+  _adminCuentas = results;
+
+  // Actualizar tarjetas de saldo
+  document.getElementById('cuentas-saldos').innerHTML = results.map(v => `
+    <div class="cuenta-vendor-card">
+      <div class="cuenta-vendor-name">${v.name}</div>
+      <div class="cuenta-vendor-saldo">${v.saldo !== null ? fmt$(v.saldo) : '—'}</div>
+    </div>`).join('');
+
+  // Poblar filtro de vendedor
+  const sel = document.getElementById('cuentas-filter-vendor');
+  sel.innerHTML = '<option value="">Todos</option>' +
+    results.map(v => `<option value="${v.sheetId}">${v.name}</option>`).join('');
+
+  renderCuentasTable();
+}
+
+function renderCuentasTable() {
+  if (!_adminCuentas) return;
+  const filterSheetId = document.getElementById('cuentas-filter-vendor').value;
+
+  const movimientos = [];
+  for (const v of _adminCuentas) {
+    if (filterSheetId && v.sheetId !== filterSheetId) continue;
+    for (const r of (v.retiros  || [])) movimientos.push({ ...r, tipo: 'retiro',   vendor: v.name, sheetId: v.sheetId });
+    for (const r of (v.recibido || [])) movimientos.push({ ...r, tipo: 'recibido', vendor: v.name, sheetId: v.sheetId });
+  }
+
+  movimientos.sort((a, b) => {
+    const da = new Date(a.fecha.split('/').reverse().join('-'));
+    const db = new Date(b.fecha.split('/').reverse().join('-'));
+    return db - da;
+  });
+
+  const table = document.getElementById('cuentas-table');
+  if (!movimientos.length) {
+    table.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Sin movimientos</td></tr></tbody>';
+    return;
+  }
+
+  table.innerHTML = `
+    <thead><tr>
+      <th>Vendedor</th><th>Detalle</th><th>Tipo</th><th>Monto</th><th>Fecha</th><th></th>
+    </tr></thead>
+    <tbody>${movimientos.map(m => {
+      const sheetName = m.tipo === 'recibido' ? 'Recibido' : 'Retiros';
+      const color     = m.tipo === 'recibido' ? 'var(--green)' : 'var(--red)';
+      const badge     = m.tipo === 'recibido'
+        ? 'rgba(16,185,129,0.1)' : 'rgba(248,81,73,0.1)';
+      return `<tr>
+        <td style="font-weight:600">${m.vendor}</td>
+        <td>${m.detalle}</td>
+        <td><span class="td-badge" style="background:${badge};color:${color}">${m.tipo === 'recibido' ? 'Ingreso' : 'Retiro'}</span></td>
+        <td style="color:${color};font-weight:600">${m.tipo === 'recibido' ? '+' : '−'}${fmt$(m.monto)}</td>
+        <td>${m.fecha}</td>
+        <td><button class="btn-delete" onclick="deleteMovimiento('${m.sheetId}','${sheetName}',${m.row},'${m.vendor}')" title="Eliminar">🗑️</button></td>
+      </tr>`;
+    }).join('')}</tbody>`;
+}
+
+async function deleteMovimiento(sheetId, sheetName, row, vendorName) {
+  if (!confirm(`¿Eliminar este movimiento de ${vendorName}?\nEsta acción no se puede deshacer.`)) return;
+  try {
+    const resp = await fetch(`/api/vendor-account?sheetId=${sheetId}&sheetName=${sheetName}&row=${row}`, {
+      method: 'DELETE',
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    _adminCuentas = null;
+    await loadAdminCuentas();
+  } catch(e) {
+    alert('Error al eliminar: ' + e.message);
+  }
 }
 
 // ── ADMIN: modal cuenta vendedor ─────────────────────────────
