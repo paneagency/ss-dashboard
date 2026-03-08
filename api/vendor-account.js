@@ -76,10 +76,12 @@ module.exports = async (req, res) => {
 
     // ── LEER movimientos ─────────────────────────────────────
     if (req.method === 'GET') {
-      const [retirosText, recibidoText, mainText] = await Promise.all([
+      const sheets = getSheets();
+
+      const [retirosText, recibidoText, saldoResp] = await Promise.all([
         fetchCSV(sheetId, GID_RETIROS),
         fetchCSV(sheetId, GID_RECIBIDO),
-        fetchCSV(sheetId, '0'),
+        sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: 'J2' }),
       ]);
 
       const retiros  = parseCSVRows(retirosText);
@@ -88,14 +90,11 @@ module.exports = async (req, res) => {
       const totalRetiros  = retiros.reduce((s, r) => s + r.monto, 0);
       const totalRecibido = recibido.reduce((s, r) => s + r.monto, 0);
 
-      // Sumar columna H (DIF %40, índice 7) desde fila 3 — igual que SUMA(H3:H992)
-      const mainLines = mainText.trim().split('\n').slice(2); // salta filas 1 y 2
-      const totalCommissions = mainLines.reduce((s, line) => {
-        const cols = parseCSVLine(line);
-        return s + parseNum(cols[7]);
-      }, 0);
+      // Leer saldo directamente de J2 (ya calculado por la fórmula del sheet)
+      const saldoRaw = saldoResp.data.values?.[0]?.[0] ?? '0';
+      const saldo = parseNum(saldoRaw);
 
-      return res.json({ retiros, recibido, totalRetiros, totalRecibido, totalCommissions });
+      return res.json({ retiros, recibido, totalRetiros, totalRecibido, saldo });
     }
 
     // ── AGREGAR movimiento ────────────────────────────────────

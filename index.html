@@ -2576,8 +2576,7 @@ function renderVendorAccount(user) {
   const acc = window._vendorAccount;
   if (!acc) return;
 
-  const totalCommissions = acc.totalCommissions || 0;
-  const saldo = totalCommissions + acc.totalRecibido - acc.totalRetiros;
+  const saldo = acc.saldo || 0;
 
   // Saldo card
   document.getElementById('vendor-saldo-section').innerHTML = `
@@ -2587,9 +2586,8 @@ function renderVendorAccount(user) {
         <div class="vendor-saldo-amount">${fmt$(saldo)}</div>
       </div>
       <div class="vendor-saldo-breakdown">
-        <div class="vendor-saldo-item">Comisiones acumuladas <span>${fmt$(totalCommissions)}</span></div>
-        <div class="vendor-saldo-item">Recibido <span style="color:var(--green)">${fmt$(acc.totalRecibido)}</span></div>
         <div class="vendor-saldo-item">Retirado <span style="color:var(--red)">−${fmt$(acc.totalRetiros)}</span></div>
+        <div class="vendor-saldo-item">Recibido <span style="color:var(--green)">+${fmt$(acc.totalRecibido)}</span></div>
       </div>
     </div>`;
 
