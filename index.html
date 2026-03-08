@@ -1804,11 +1804,9 @@ function renderClientes() {
     }
   });
 
-  // New clients per month
-  const firstPurchase = {};
-  data.forEach(r => { if (!firstPurchase[r.artista] || r.fecha < firstPurchase[r.artista]) firstPurchase[r.artista] = r.fecha; });
+  // New clients per month (desde allData para mostrar historia completa)
   const newByMonth = new Map();
-  Object.values(firstPurchase).forEach(d => { const k = monthKey(d); newByMonth.set(k, (newByMonth.get(k)||0)+1); });
+  Object.values(firstPurchaseAll).forEach(d => { const k = monthKey(d); newByMonth.set(k, (newByMonth.get(k)||0)+1); });
   const newMonths = [...newByMonth.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
 
   mkChart('chart-client-new', {
