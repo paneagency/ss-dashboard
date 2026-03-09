@@ -2135,22 +2135,25 @@ function renderClientes() {
 function renderMetodos() {
   const data = filteredData;
   const byMethod = aggByMethod(data);
+  const totalPrecio = sum(byMethod, m => m.precio) || 1;
+  const totalNeto   = sum(byMethod, m => m.neto)   || 1;
+  const totalFinal  = sum(byMethod, m => m.final)  || 1;
 
   mkChart('chart-method-grouped', {
     type: 'bar',
     data: {
       labels: byMethod.map(m => m.key),
       datasets: [
-        { label:'Precio Bruto', data: byMethod.map(m => m.precio), backgroundColor: PALETTE[0]+'cc', borderRadius:4 },
-        { label:'Neto', data: byMethod.map(m => m.neto), backgroundColor: PALETTE[1]+'cc', borderRadius:4 },
-        { label:'Final', data: byMethod.map(m => m.final), backgroundColor: PALETTE[2]+'cc', borderRadius:4 }
+        { label:'% Precio Bruto', data: byMethod.map(m => +(m.precio / totalPrecio * 100).toFixed(1)), backgroundColor: PALETTE[0]+'cc', borderRadius:4 },
+        { label:'% Neto',         data: byMethod.map(m => +(m.neto   / totalNeto   * 100).toFixed(1)), backgroundColor: PALETTE[1]+'cc', borderRadius:4 },
+        { label:'% Final',        data: byMethod.map(m => +(m.final  / totalFinal  * 100).toFixed(1)), backgroundColor: PALETTE[2]+'cc', borderRadius:4 }
       ]
     },
     options: {
       plugins:{legend:{position:'top',labels:{color:tickColor}}},
       scales:{
         x:axisDefaults(),
-        y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} }
+        y:{ ...axisDefaults('%'), ticks:{color:tickColor, callback:v=>v+'%'}, max:100 }
       }
     }
   });
@@ -2159,9 +2162,15 @@ function renderMetodos() {
     type: 'doughnut',
     data: {
       labels: byMethod.map(m => m.key),
-      datasets: [{ data: byMethod.map(m => m.precio), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
+      datasets: [{ data: byMethod.map(m => +(m.precio / totalPrecio * 100).toFixed(1)), backgroundColor: PALETTE, borderColor:'#161b22', borderWidth:2 }]
     },
-    options: { cutout:'55%', plugins:{legend:{position:'bottom',labels:{color:tickColor,padding:10}}} }
+    options: {
+      cutout:'55%',
+      plugins:{
+        legend:{position:'bottom',labels:{color:tickColor,padding:10}},
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` } }
+      }
+    }
   });
 
   mkChart('chart-method-commission', {
