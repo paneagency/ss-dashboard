@@ -1919,10 +1919,9 @@ function renderGeneros() {
       fmtPct(g.precio / totalPrecio * 100),
       isSecondaryAdmin ? fmt$(g.neto * vendorCommission) : fmtPct(g.final / totalFinal * 100),
       { html: `<span style="display:block;text-align:center">${g.ops}</span>`, cls:'' },
-      fmtPct(g.margen)
     ]);
     makeSortableTable('table-genres',
-      ['#','Género','% Ventas Brutas', isSecondaryAdmin ? 'Tu Comisión' : '% Final','Ops','Margen %'],
+      ['#','Género','% Ventas Brutas', isSecondaryAdmin ? 'Tu Comisión' : '% Final','Ops'],
       tableRows
     );
 
@@ -1984,10 +1983,9 @@ function renderGeneros() {
       fmt$(g.final),
       g.ops,
       fmt$(g.ticket),
-      fmtPct(g.margen)
     ]);
     makeSortableTable('table-genres',
-      ['#','Género','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Margen %'],
+      ['#','Género','Ventas Brutas','Neto','Final','Ops','Ticket Prom'],
       rows
     );
   }
