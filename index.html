@@ -2254,7 +2254,7 @@ function renderInsights() {
   document.getElementById('alerts-box').innerHTML = alertsHtml;
 
   // Insight cards
-  const isVendedor = window._currentUser?.role === 'vendedor';
+  const isVendedor = ['vendedor', 'secondary_admin'].includes(window._currentUser?.role);
   const insightCards = isVendedor ? [
     byClient[0] && { icon:'⭐', cls:'good', title:'Cliente Principal', value: byClient[0].key, desc:`${fmt$(byClient[0].final)} en ingresos finales · ${byClient[0].ops} compras`, color:PALETTE[4] },
     topGenreVol && { icon:'📢', cls:'info', title:'Género con Mayor Volumen', value: topGenreVol.key, desc:`${topGenreVol.ops} operaciones · ${fmt$(topGenreVol.precio)} en ventas brutas`, color:PALETTE[3] },
