@@ -1265,7 +1265,7 @@ function applyFilters() {
   const dateFrom = document.getElementById('f-date-from').value;
   const dateTo = document.getElementById('f-date-to').value;
   const user = window._currentUser;
-  const vendor = user?.role === 'vendedor'
+  const vendor = ['vendedor', 'secondary_admin'].includes(user?.role)
     ? (user.vendorName || user.name)
     : document.getElementById('f-vendor').value;
   const genre = document.getElementById('f-genre').value;
@@ -1986,7 +1986,7 @@ function renderClientes() {
 
   // Primera compra y total ops desde allData completo (ignora filtros de fecha)
   // Para vendedor: solo sus propias ventas
-  const isVendedor = window._currentUser?.role === 'vendedor';
+  const isVendedor = ['vendedor', 'secondary_admin'].includes(window._currentUser?.role);
   const vendorName = isVendedor ? (window._currentUser.vendorName || window._currentUser.name).toLowerCase() : null;
   const baseData = isVendedor ? allData.filter(r => r.venta.toLowerCase() === vendorName) : allData;
   const firstPurchaseAll = {};
