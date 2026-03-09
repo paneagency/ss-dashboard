@@ -1833,7 +1833,9 @@ function renderTemporal() {
 function renderGeneros() {
   const data = filteredData;
   const byGenre = aggByGenre(data);
-  const isVendedor = window._currentUser?.role === 'vendedor';
+  const isVendedor = ['vendedor', 'secondary_admin'].includes(window._currentUser?.role);
+  const isSecondaryAdmin = window._currentUser?.role === 'secondary_admin';
+  const vendorCommission = window._currentUser?.commission || 0;
 
   const totalPrecio = sum(byGenre, g => g.precio) || 1;
   const totalFinal  = sum(byGenre, g => g.final)  || 1;
@@ -1855,18 +1857,32 @@ function renderGeneros() {
       }
     });
 
-    // Bar: % del final por género
-    mkChart('chart-genre-bar', {
-      type: 'bar',
-      data: {
-        labels: byGenre.map(g => g.key),
-        datasets: [{ label:'% Final', data: byGenre.map(g => +(g.final / totalFinal * 100).toFixed(1)), backgroundColor: PALETTE.map(c => c+'cc'), borderRadius: 5 }]
-      },
-      options: {
-        plugins:{legend:{labels:{color:tickColor}}},
-        scales:{ x:axisDefaults(), y:{ ...axisDefaults('%'), ticks:{color:tickColor, callback:v => v+'%'}, max:100 } }
-      }
-    });
+    // Bar: comisión por género (secondary_admin) o % del final (vendedor)
+    if (isSecondaryAdmin) {
+      mkChart('chart-genre-bar', {
+        type: 'bar',
+        data: {
+          labels: byGenre.map(g => g.key),
+          datasets: [{ label:'Tu Comisión', data: byGenre.map(g => +(g.neto * vendorCommission).toFixed(2)), backgroundColor: PALETTE.map(c => c+'cc'), borderRadius: 5 }]
+        },
+        options: {
+          plugins:{legend:{labels:{color:tickColor}}},
+          scales:{ x:axisDefaults(), y:{ ...axisDefaults('$'), ticks:{color:tickColor, callback:v=>'$'+v.toLocaleString('es-AR')} } }
+        }
+      });
+    } else {
+      mkChart('chart-genre-bar', {
+        type: 'bar',
+        data: {
+          labels: byGenre.map(g => g.key),
+          datasets: [{ label:'% Final', data: byGenre.map(g => +(g.final / totalFinal * 100).toFixed(1)), backgroundColor: PALETTE.map(c => c+'cc'), borderRadius: 5 }]
+        },
+        options: {
+          plugins:{legend:{labels:{color:tickColor}}},
+          scales:{ x:axisDefaults(), y:{ ...axisDefaults('%'), ticks:{color:tickColor, callback:v => v+'%'}, max:100 } }
+        }
+      });
+    }
 
     // Evolution: % apilado por mes
     const months = [...new Set(data.map(r => r.monthKey))].sort();
@@ -1901,12 +1917,12 @@ function renderGeneros() {
       { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
       g.key,
       fmtPct(g.precio / totalPrecio * 100),
-      fmtPct(g.final  / totalFinal  * 100),
+      isSecondaryAdmin ? fmt$(g.neto * vendorCommission) : fmtPct(g.final / totalFinal * 100),
       { html: `<span style="display:block;text-align:center">${g.ops}</span>`, cls:'' },
       fmtPct(g.margen)
     ]);
     makeSortableTable('table-genres',
-      ['#','Género','% Ventas Brutas','% Final','Ops','Margen %'],
+      ['#','Género','% Ventas Brutas', isSecondaryAdmin ? 'Tu Comisión' : '% Final','Ops','Margen %'],
       tableRows
     );
 
