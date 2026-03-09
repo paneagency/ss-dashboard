@@ -2184,22 +2184,35 @@ function renderMetodos() {
 
   // Efficiency rank: final / precio
   const ranked = [...byMethod].sort((a,b) => (b.final/b.precio) - (a.final/a.precio));
+  const isVendedorRole = ['vendedor', 'secondary_admin'].includes(window._currentUser?.role);
+  const userCommission = window._currentUser?.commission || 0;
 
-  const rows = ranked.map((m, i) => [
-    { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
-    m.key,
-    fmt$(m.precio),
-    fmt$(m.neto),
-    fmt$(m.final),
-    m.ops,
-    fmt$(m.ticket),
-    fmtPct(m.comision),
-    fmtPct(m.margen),
-    fmtPct(m.final/m.precio*100)
-  ]);
+  const rows = isVendedorRole
+    ? ranked.map((m, i) => [
+        { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+        m.key,
+        m.ops,
+        fmt$(m.ticket),
+        fmtPct(m.comision),
+        fmt$(m.neto * userCommission)
+      ])
+    : ranked.map((m, i) => [
+        { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
+        m.key,
+        fmt$(m.precio),
+        fmt$(m.neto),
+        fmt$(m.final),
+        m.ops,
+        fmt$(m.ticket),
+        fmtPct(m.comision),
+        fmtPct(m.margen),
+        fmtPct(m.final/m.precio*100)
+      ]);
 
   makeSortableTable('table-methods',
-    ['#','Método','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Comisión Prom','Margen %','Eficiencia (Final/Bruto)'],
+    isVendedorRole
+      ? ['#','Método','Ops','Ticket Prom','Comisión Prom','Tu Comisión']
+      : ['#','Método','Ventas Brutas','Neto','Final','Ops','Ticket Prom','Comisión Prom','Margen %','Eficiencia (Final/Bruto)'],
     rows
   );
 }
