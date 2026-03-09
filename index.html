@@ -2704,10 +2704,10 @@ function renderVendorView(user) {
   const rows = [...myData].sort((a,b) => b.fecha - a.fecha);
   const table = document.getElementById('vendor-sales-table');
   if (!rows.length) {
-    table.innerHTML = `<tbody><tr><td colspan="${isSecondaryAdmin ? 7 : 6}" style="text-align:center;padding:32px;color:var(--muted)">Sin ventas en el período seleccionado</td></tr></tbody>`;
+    table.innerHTML = `<tbody><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">Sin ventas en el período seleccionado</td></tr></tbody>`;
     return;
   }
-  const headers = ['Artista', 'Fecha', 'Precio', 'Neto', 'Tu Comisión', 'Método', ...(isSecondaryAdmin ? [''] : [])];
+  const headers = ['Artista', 'Fecha', 'Precio', 'Neto', 'Tu Comisión', 'Método'];
   window._vendorSalesRows = rows;
   table.innerHTML = `
     <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
@@ -2720,7 +2720,6 @@ function renderVendorView(user) {
         <td>${fmt$(r.neto)}</td>
         <td style="color:var(--green);font-weight:600">${fmt$(comm)}</td>
         <td>${r.metodo}</td>
-        ${isSecondaryAdmin ? `<td><button class="btn-delete" onclick="deleteVendorSale(${idx})" title="Eliminar">🗑️</button></td>` : ''}
       </tr>`;
     }).join('')}</tbody>`;
 }
