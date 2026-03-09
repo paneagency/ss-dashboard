@@ -2144,9 +2144,7 @@ function renderMetodos() {
     data: {
       labels: byMethod.map(m => m.key),
       datasets: [
-        { label:'% Precio Bruto', data: byMethod.map(m => +(m.precio / totalPrecio * 100).toFixed(1)), backgroundColor: PALETTE[0]+'cc', borderRadius:4 },
-        { label:'% Neto',         data: byMethod.map(m => +(m.neto   / totalNeto   * 100).toFixed(1)), backgroundColor: PALETTE[1]+'cc', borderRadius:4 },
-        { label:'% Final',        data: byMethod.map(m => +(m.final  / totalFinal  * 100).toFixed(1)), backgroundColor: PALETTE[2]+'cc', borderRadius:4 }
+        { label:'% Final', data: byMethod.map(m => +(m.final / totalFinal * 100).toFixed(1)), backgroundColor: byMethod.map((_,i) => PALETTE[i%PALETTE.length]+'cc'), borderRadius:4 }
       ]
     },
     options: {
