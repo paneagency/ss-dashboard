@@ -2191,7 +2191,7 @@ function renderMetodos() {
     ? ranked.map((m, i) => [
         { html:`<span class="td-rank">#${i+1}</span>`, cls:'' },
         m.key,
-        m.ops,
+        Math.round(m.ops),
         fmt$(m.ticket),
         fmtPct(m.comision),
         fmt$(m.neto * userCommission)
