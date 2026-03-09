@@ -1715,10 +1715,17 @@ function renderResumen() {
   const todayData = allData.filter(r => r.fecha.toDateString() === todayStr);
   const todayFinal = sum(todayData, r => r.final);
   const todayOps   = todayData.length;
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayNew = todayData.filter(r => !allData.some(d => d.artista === r.artista && d.fecha < todayStart)).length;
+  const todayRec = todayOps - todayNew;
+  const todaySubParts = [];
+  if (todayRec > 0) todaySubParts.push(`${todayRec} recurrente${todayRec > 1 ? 's' : ''}`);
+  if (todayNew > 0) todaySubParts.push(`${todayNew} nuevo${todayNew > 1 ? 's' : ''}`);
+  const todaySub = todayOps > 0 ? todaySubParts.join(' · ') : 'Sin ventas hoy';
 
   const kpis = [
     { icon:'✅', label:'Final Total', value:fmt$(totalFinal), sub:`Ingreso real`, color:'var(--green)', badge:momBadge },
-    { icon:'📅', label:'Final Hoy', value: todayFinal > 0 ? fmt$(todayFinal) : '$0', sub: todayOps > 0 ? `${todayOps} op${todayOps>1?'s':''} del día` : 'Sin ventas hoy', color:'var(--teal)' },
+    { icon:'📅', label:'Final Hoy', value: todayFinal > 0 ? fmt$(todayFinal) : '$0', sub: todaySub, color:'var(--teal)' },
     { icon:'💰', label:'Ventas Brutas', value:fmt$(totalPrecio), sub:`Precio bruto total`, color:'var(--indigo)' },
     { icon:'📤', label:'Gasto Total', value:fmt$(totalGasto), sub:`${fmtPct(totalGasto/totalPrecio*100)} del bruto`, color:'var(--red)' },
     { icon:'📊', label:'Neto Total', value:fmt$(totalNeto), sub:`Bruto - Gasto`, color:'var(--blue)' },
@@ -2688,14 +2695,22 @@ function renderVendorView(user) {
   const myCommission = totalNeto * commission;
   const ops          = myData.length;
   const todayStr     = now.toDateString();
-  const todayOps     = myAll.filter(r => r.fecha.toDateString() === todayStr).length;
+  const todayRows    = myAll.filter(r => r.fecha.toDateString() === todayStr);
+  const todayOps     = todayRows.length;
+  const vTodayStart  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const vTodayNew    = todayRows.filter(r => !myAll.some(d => d.artista === r.artista && d.fecha < vTodayStart)).length;
+  const vTodayRec    = todayOps - vTodayNew;
+  const vTodayParts  = [];
+  if (vTodayRec > 0) vTodayParts.push(`${vTodayRec} recurrente${vTodayRec > 1 ? 's' : ''}`);
+  if (vTodayNew > 0) vTodayParts.push(`${vTodayNew} nuevo${vTodayNew > 1 ? 's' : ''}`);
+  const vTodaySub    = todayOps > 0 ? vTodayParts.join(' · ') : 'Operaciones del día';
 
   document.getElementById('vendor-greeting').textContent = `Hola, ${user.name}`;
   document.getElementById('vendor-sub').textContent = `Comisión ${(commission*100).toFixed(0)}% sobre el neto`;
 
   const kpis = [
     { icon:'💰', label:'Tu Comisión', value: fmt$(myCommission), sub:`${ops} op${ops!==1?'s':''} · Neto: ${fmt$(totalNeto)}`, color:'var(--green)' },
-    { icon:'📅', label:'Ventas Hoy', value: todayOps, sub:'Operaciones del día', color:'var(--teal)' },
+    { icon:'📅', label:'Ventas Hoy', value: todayOps, sub: vTodaySub, color:'var(--teal)' },
     { icon:'📊', label:'Total período', value: ops, sub:'Operaciones filtradas', color:'var(--indigo)' },
   ];
   document.getElementById('vendor-kpis').innerHTML = kpis.map(k => `
