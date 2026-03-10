@@ -64,8 +64,9 @@ module.exports = async (req, res) => {
       });
       const nextRow = (colResp.data.values || []).length + 1;
 
-      // Fórmulas en columnas H e I
+      // Fórmulas en columnas G, H e I
       const rowToWrite = [...values];
+      rowToWrite[6] = `=(E${nextRow} - F${nextRow}) * (1 - D${nextRow} / 100)`;
       rowToWrite[7] = `=BUSCARV(B${nextRow}, Vendedores!A:B, 2, FALSO)`;
       rowToWrite[8] = `=G${nextRow} * (1 - H${nextRow} / 100)`;
 
