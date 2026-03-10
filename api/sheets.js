@@ -64,9 +64,10 @@ module.exports = async (req, res) => {
       });
       const nextRow = (colResp.data.values || []).length + 1;
 
-      // Preservar fórmula de columna H (índice 7 = MARGEN_PCT)
+      // Fórmulas en columnas H e I
       const rowToWrite = [...values];
       rowToWrite[7] = `=BUSCARV(B${nextRow}, Vendedores!A:B, 2, FALSO)`;
+      rowToWrite[8] = `=G${nextRow} * (1 - H${nextRow} / 100)`;
 
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
