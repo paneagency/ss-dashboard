@@ -1766,12 +1766,16 @@ function renderTemporal() {
   const data = filteredData;
   const byMonth = aggByMonth(data);
   const labels = byMonth.map(m => m.label);
+  const isVendedorRole = ['vendedor', 'secondary_admin'].includes(window._currentUser?.role);
+  const userCommission = window._currentUser?.commission || 0;
 
   mkChart('chart-temporal-revenue', {
     type: 'line',
     data: {
       labels,
-      datasets: [
+      datasets: isVendedorRole ? [
+        { label:'Tu Comisión', data: byMonth.map(m => +(m.neto * userCommission).toFixed(2)), borderColor: PALETTE[1], backgroundColor: PALETTE[1]+'15', tension: 0.3, fill: true, pointRadius: 5 }
+      ] : [
         { label:'Precio Bruto', data: byMonth.map(m => m.precio), borderColor: PALETTE[0], backgroundColor: PALETTE[0]+'15', tension: 0.3, fill: true, pointRadius: 5 },
         { label:'Neto', data: byMonth.map(m => m.neto), borderColor: PALETTE[1], tension: 0.3, fill: false, pointRadius: 5 },
         { label:'Final', data: byMonth.map(m => m.final), borderColor: PALETTE[2], tension: 0.3, fill: false, pointRadius: 5 }
@@ -1823,7 +1827,7 @@ function renderTemporal() {
     type: 'bar',
     data: {
       labels,
-      datasets: [{ label:'Final', data: byMonth.map(m => m.final), backgroundColor: byMonth.map(m => PALETTE[1]+'cc'), borderRadius: 6 }]
+      datasets: [{ label: isVendedorRole ? 'Tu Comisión' : 'Final', data: byMonth.map(m => isVendedorRole ? +(m.neto * userCommission).toFixed(2) : m.final), backgroundColor: byMonth.map(() => PALETTE[1]+'cc'), borderRadius: 6 }]
     },
     options: {
       plugins:{legend:{labels:{color:tickColor}}},
