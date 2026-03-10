@@ -593,7 +593,7 @@
             <datalist id="list-metodos"></datalist>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">Comisión %</label>
             <input class="form-input" id="f-comision" type="number" step="0.01" min="0" max="100" placeholder="0">
           </div>
@@ -610,19 +610,19 @@
             <input class="form-input" id="f-gasto" type="number" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
           </div>
 
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">Neto</label>
             <input class="form-input auto" id="f-neto" type="number" step="0.01" placeholder="Auto">
             <span class="form-hint">Precio − Gasto (editable)</span>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">Final</label>
             <input class="form-input auto" id="f-final" type="number" step="0.01" placeholder="Auto" oninput="recalcMargen()">
             <span class="form-hint">Ingreso real recibido (editable)</span>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" style="display:none">
             <label class="form-label">Margen %</label>
             <input class="form-input auto" id="f-margen" type="number" step="0.01" placeholder="Auto">
             <span class="form-hint">Final / Precio × 100 (auto)</span>
