@@ -1121,6 +1121,16 @@ async function fetchFromAPI() {
 function applyLoadedData(parsed) {
   if (!parsed.length) throw new Error('No se encontraron registros válidos en el archivo.');
   allData = parsed;
+  // Re-inyectar ventas registradas localmente que aún no están en el CSV cacheado
+  if (window._localSales?.length) {
+    const cutoff = Date.now() - 10 * 60 * 1000; // 10 minutos
+    window._localSales = window._localSales.filter(s => s._addedAt > cutoff);
+    window._localSales.forEach(s => {
+      const exists = allData.some(r => r.artista === s.artista && r.venta === s.venta &&
+        r.fecha.toDateString() === s.fecha.toDateString() && r.precio === s.precio);
+      if (!exists) allData.push(s);
+    });
+  }
   document.getElementById('data-badge').style.display = 'flex';
   document.getElementById('badge-text').textContent = `${allData.length} registros`;
   document.getElementById('header-subtitle').textContent = `Actualizado ${new Date().toLocaleString('es-AR')}`;
@@ -1663,12 +1673,12 @@ function renderMonthsPanel() {
 function renderResumen() {
   if (window._currentUser?.role === 'vendedor') return;
   const data = filteredData;
-  if (!data.length) { document.getElementById('kpi-grid').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin datos para los filtros seleccionados</div>'; return; }
 
-  // Admin Secundario: KPIs restringidos
+  // Admin Secundario: siempre renderizar el panel de hoy aunque no haya filteredData
   if (window._currentUser?.role === 'secondary_admin') {
-    renderSecondaryAdminKpis(data);
     renderTodayPanel();
+    if (!data.length) { document.getElementById('kpi-grid').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin datos para los filtros seleccionados</div>'; return; }
+    renderSecondaryAdminKpis(data);
     // Vendor donut
     const byVendor = aggByVendor(data).slice(0, 8);
     mkChart('chart-resumen-vendor-donut', {
@@ -2513,7 +2523,7 @@ async function submitSale(e) {
     closeModal();
 
     const fecha = new Date(+fy, +fm - 1, +fd);
-    allData.push({
+    const newRow = {
       artista:  artista || 'Sin artista',
       venta:    venta   || 'Sin vendedor',
       metodo:   metodo  || 'Sin método',
@@ -2525,8 +2535,12 @@ async function submitSale(e) {
       margen:   parseFloat(margen)   || 0,
       final:    parseFloat(final)    || 0,
       fecha,
-      monthKey: monthKey(fecha)
-    });
+      monthKey: monthKey(fecha),
+      _addedAt: Date.now()
+    };
+    allData.push(newRow);
+    window._localSales = window._localSales || [];
+    window._localSales.push(newRow);
     document.getElementById('badge-text').textContent = `${allData.length} registros`;
     applyFilters();
 
