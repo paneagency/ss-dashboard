@@ -2579,7 +2579,7 @@ async function deleteSale(idx) {
 
   if (!confirm(`¿Eliminar la venta de "${r.artista}" (${fmt$(r.precio)}) del ${dd}/${mm}/${yyyy}?\n\nEsta acción no se puede deshacer.`)) return;
 
-  showToast('Buscando fila en el Sheet...', 'success');
+  showToast('Borrando venta...', 'success');
 
   try {
     const resp = await fetch('/api/sheets', {
@@ -2807,7 +2807,7 @@ async function deleteVendorSale(idx) {
   const mm = String(d.getMonth()+1).padStart(2,'0');
   const yyyy = d.getFullYear();
   if (!confirm(`¿Eliminar la venta de "${r.artista}" (${fmt$(r.precio)}) del ${dd}/${mm}/${yyyy}?\n\nEsta acción no se puede deshacer.`)) return;
-  showToast('Buscando fila en el Sheet...', 'success');
+  showToast('Borrando venta...', 'success');
   try {
     const resp = await fetch('/api/sheets', {
       method: 'DELETE',
