@@ -2412,8 +2412,8 @@ function openModal() {
   fillDatalist('list-metodos',  allData.map(r => r.metodo));
   fillDatalist('list-generos',  allData.map(r => r.genero));
 
-  // Pre-llenar vendedor si es rol vendedor o secondary_admin
-  if (['vendedor', 'secondary_admin'].includes(window._currentUser?.role)) {
+  // Pre-llenar vendedor si es rol vendedor (readOnly); secondary_admin puede elegir
+  if (window._currentUser?.role === 'vendedor') {
     const ventaInput = document.getElementById('f-venta');
     ventaInput.value = window._currentUser.vendorName || window._currentUser.name;
     ventaInput.readOnly = true;
