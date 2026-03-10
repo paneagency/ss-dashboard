@@ -1121,14 +1121,20 @@ async function fetchFromAPI() {
 function applyLoadedData(parsed) {
   if (!parsed.length) throw new Error('No se encontraron registros válidos en el archivo.');
   allData = parsed;
+  const cacheCutoff = Date.now() - 10 * 60 * 1000; // 10 minutos
+  const sameRow = (a, b) => a.artista === b.artista && a.venta === b.venta &&
+    a.fecha.toDateString() === b.fecha.toDateString() && a.precio === b.precio;
+
+  // Filtrar ventas eliminadas localmente que el CSV aún tiene cacheadas
+  if (window._deletedSales?.length) {
+    window._deletedSales = window._deletedSales.filter(s => s._deletedAt > cacheCutoff);
+    allData = allData.filter(r => !window._deletedSales.some(d => sameRow(d, r)));
+  }
   // Re-inyectar ventas registradas localmente que aún no están en el CSV cacheado
   if (window._localSales?.length) {
-    const cutoff = Date.now() - 10 * 60 * 1000; // 10 minutos
-    window._localSales = window._localSales.filter(s => s._addedAt > cutoff);
+    window._localSales = window._localSales.filter(s => s._addedAt > cacheCutoff);
     window._localSales.forEach(s => {
-      const exists = allData.some(r => r.artista === s.artista && r.venta === s.venta &&
-        r.fecha.toDateString() === s.fecha.toDateString() && r.precio === s.precio);
-      if (!exists) allData.push(s);
+      if (!allData.some(r => sameRow(r, s))) allData.push(s);
     });
   }
   document.getElementById('data-badge').style.display = 'flex';
@@ -2592,6 +2598,14 @@ async function deleteSale(idx) {
 
     const localIdx = allData.indexOf(r);
     if (localIdx !== -1) allData.splice(localIdx, 1);
+    // Trackear como eliminada (para sobrevivir re-fetches del CSV cacheado)
+    window._deletedSales = window._deletedSales || [];
+    window._deletedSales.push({ artista: r.artista, venta: r.venta, fecha: r.fecha, precio: r.precio, _deletedAt: Date.now() });
+    // Quitar de _localSales si estaba
+    if (window._localSales) {
+      window._localSales = window._localSales.filter(s => !( s.artista === r.artista && s.venta === r.venta &&
+        s.fecha.toDateString() === r.fecha.toDateString() && s.precio === r.precio));
+    }
     document.getElementById('badge-text').textContent = `${allData.length} registros`;
 
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
