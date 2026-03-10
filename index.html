@@ -2254,10 +2254,14 @@ function renderInsights() {
 
   // Projection
   const now = new Date();
+  const isVendedorRole = ['vendedor', 'secondary_admin'].includes(window._currentUser?.role);
+  const userCommission = window._currentUser?.commission || 0;
   const curMonthData = data.filter(r => r.fecha.getMonth() === now.getMonth() && r.fecha.getFullYear() === now.getFullYear());
   const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
   const dayOfMonth = now.getDate();
-  const curFinal = sum(curMonthData, r => r.final);
+  const curFinal = isVendedorRole
+    ? sum(curMonthData, r => r.neto) * userCommission
+    : sum(curMonthData, r => r.final);
   const dailyRate = dayOfMonth > 0 ? curFinal / dayOfMonth : 0;
   const projected = dailyRate * daysInMonth;
   const daysLeft = daysInMonth - dayOfMonth;
@@ -2267,8 +2271,8 @@ function renderInsights() {
       <div class="projection-card">
         <div class="projection-title">📅 Proyección de Cierre — ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}</div>
         <div class="projection-grid">
-          <div class="proj-item"><div class="pv" style="color:var(--green)">${fmt$(projected)}</div><div class="pl">Final proyectado</div></div>
-          <div class="proj-item"><div class="pv">${fmt$(curFinal)}</div><div class="pl">Acumulado actual</div></div>
+          <div class="proj-item"><div class="pv" style="color:var(--green)">${fmt$(projected)}</div><div class="pl">${isVendedorRole ? 'Comisión proyectada' : 'Final proyectado'}</div></div>
+          <div class="proj-item"><div class="pv">${fmt$(curFinal)}</div><div class="pl">${isVendedorRole ? 'Tu comisión acumulada' : 'Acumulado actual'}</div></div>
           <div class="proj-item"><div class="pv">${fmt$(dailyRate)}</div><div class="pl">Ritmo diario</div></div>
           <div class="proj-item"><div class="pv">${daysLeft}</div><div class="pl">Días restantes</div></div>
           <div class="proj-item"><div class="pv">${curMonthData.length}</div><div class="pl">Ops en el mes</div></div>
