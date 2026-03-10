@@ -64,11 +64,15 @@ module.exports = async (req, res) => {
       });
       const nextRow = (colResp.data.values || []).length + 1;
 
+      // Preservar fórmula de columna H (índice 7 = MARGEN_PCT)
+      const rowToWrite = [...values];
+      rowToWrite[7] = `=BUSCARV(B${nextRow},Vendedores!A:B,2,FALSO)`;
+
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `A${nextRow}:K${nextRow}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [values] },
+        requestBody: { values: [rowToWrite] },
       });
 
       return res.json({ ok: true, row: nextRow });
