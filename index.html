@@ -2817,7 +2817,7 @@ async function submitSale(e) {
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, precio, metodo }),
+      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, precio, metodo, gasto, neto, margen, final }),
     }).catch(err => console.warn('Campaign registration failed (non-fatal):', err));
 
     const fecha = new Date(+fy, +fm - 1, +fd);

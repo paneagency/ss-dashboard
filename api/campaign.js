@@ -52,8 +52,8 @@ async function ensureSheets(sheets) {
     headerData.push({ range: `${CLIENTES_SHEET}!A1:G1`,
       values: [['ID','NOMBRE','GÉNERO','TELÉFONO','SPOTIFY','INSTAGRAM','FECHA_PRIMERA_COMPRA']] });
   if (toCreate.includes(CAMPANAS_SHEET))
-    headerData.push({ range: `${CAMPANAS_SHEET}!A1:H1`,
-      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO']] });
+    headerData.push({ range: `${CAMPANAS_SHEET}!A1:O1`,
+      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO']] });
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
@@ -189,7 +189,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, precio, metodo } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, precio, metodo, gasto, neto, margen, final } = req.body;
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
@@ -207,9 +207,9 @@ module.exports = async (req, res) => {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:H`,
+        range: `${CAMPANAS_SHEET}!A:O`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa']] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '']] },
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento });
