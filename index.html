@@ -423,6 +423,34 @@
     body.role-admin .tab-btn[data-tab="cuentas"],
     body.role-admin .tab-btn[data-tab="vendedores"] { display: inline-flex; }
 
+    /* Campañas: visible para admin y secondary_admin */
+    .tab-btn[data-tab="campanias"] { display: none; }
+    body.role-admin .tab-btn[data-tab="campanias"],
+    body.role-secondary .tab-btn[data-tab="campanias"] { display: inline-flex; }
+
+    /* Campañas list */
+    .campania-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      display: flex; align-items: center; gap: 16px; margin-bottom: 10px;
+      transition: border-color 0.2s;
+    }
+    .campania-card:hover { border-color: var(--border2); }
+    .campania-badge {
+      width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; line-height: 1;
+    }
+    .campania-badge .badge-days-label { font-size: 9px; font-weight: 600; text-transform: uppercase; margin-top: 2px; }
+    .campania-info { flex: 1; min-width: 0; }
+    .campania-artista { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+    .campania-meta { font-size: 12px; color: var(--muted); }
+    .campania-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .btn-renovar { background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .btn-renovar:hover { background: rgba(16,185,129,0.2); }
+    .btn-no-renueva { background: rgba(248,81,73,0.08); color: var(--red); border: 1px solid rgba(248,81,73,0.2); }
+    .btn-no-renueva:hover { background: rgba(248,81,73,0.15); }
+
     /* Vendedores panel */
     .vendedores-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 20px; margin-bottom: 32px; }
     .vendedor-card { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:24px; }
@@ -731,7 +759,26 @@
 
           <div class="form-group">
             <label class="form-label">Fecha<span>*</span></label>
-            <input class="form-input" id="f-fecha" type="date" required>
+            <input class="form-input" id="f-fecha" type="date" required oninput="updateVencimiento()">
+
+          <div class="form-section" style="margin-top:4px">Campaña de Spotify</div>
+
+          <div class="form-group">
+            <label class="form-label">Duración<span>*</span></label>
+            <select class="form-input" id="f-duracion" onchange="updateVencimiento()">
+              <option value="7">7 días</option>
+              <option value="14">14 días</option>
+              <option value="30" selected>30 días</option>
+              <option value="60">60 días</option>
+              <option value="90">90 días</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Vence el</label>
+            <input class="form-input auto" id="f-vencimiento" type="text" readonly placeholder="Auto">
+            <span class="form-hint">Calculado desde fecha + duración</span>
+          </div>
           </div>
 
           <div class="form-section">Comercial</div>
@@ -824,6 +871,7 @@
     <button class="tab-btn" data-tab="clientes">🎤 Clientes</button>
     <button class="tab-btn" data-tab="metodos">💳 Métodos</button>
     <button class="tab-btn" data-tab="insights">💡 Ideas</button>
+    <button class="tab-btn" data-tab="campanias">📅 Campañas</button>
     <button class="tab-btn" data-tab="vendedores">🧑‍💼 Vendedores</button>
     <button class="tab-btn" data-tab="cuentas">💼 Cuentas</button>
   </div>
@@ -1084,6 +1132,52 @@
   </section>
 
   <!-- TAB: CUENTAS (admin only) -->
+  <!-- TAB: CAMPAÑAS -->
+  <section id="tab-campanias" class="tab-panel">
+    <div class="section-header">
+      <div>
+        <div class="section-title">📅 Campañas Activas</div>
+        <div class="section-subtitle">Promociones en curso y vencimientos</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="camp-filter-vendor" class="filter-control" onchange="renderCampaniasTab()" style="min-width:160px">
+          <option value="all">Todos los vendedores</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadCampanias()">↻ Actualizar</button>
+      </div>
+    </div>
+    <div id="campanias-list"></div>
+  </section>
+
+  <!-- Modal: Renovar campaña -->
+  <div id="renovar-modal" class="modal-overlay" onclick="if(event.target===this)closeRenovarModal()">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <span class="modal-title">Renovar campaña</span>
+        <button class="modal-close" onclick="closeRenovarModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="renovar-artista-label" style="font-size:15px;font-weight:600;margin-bottom:16px"></p>
+        <div class="form-group">
+          <label class="form-label">Duración de renovación</label>
+          <select class="form-input" id="renovar-duracion">
+            <option value="7">7 días</option>
+            <option value="14">14 días</option>
+            <option value="30" selected>30 días</option>
+            <option value="60">60 días</option>
+            <option value="90">90 días</option>
+          </select>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:10px">La campaña se extenderá desde el vencimiento actual.</p>
+        <div id="renovar-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeRenovarModal()">Cancelar</button>
+        <button class="btn btn-primary" id="renovar-submit-btn" onclick="submitRenovar()">Renovar</button>
+      </div>
+    </div>
+  </div>
+
   <section id="tab-cuentas" class="tab-panel">
     <div class="section-header">
       <div>
@@ -1528,6 +1622,7 @@ function renderTab(tab) {
   else if (tab === 'insights') renderInsights();
   else if (tab === 'vendedores') renderVendedores();
   else if (tab === 'cuentas') loadAdminCuentas();
+  else if (tab === 'campanias') loadCampanias();
 }
 
 // ============================================================
@@ -2604,8 +2699,19 @@ window.addEventListener('DOMContentLoaded', init);
 // ── NUEVA VENTA ────────────────────────────────────────────
 
 // ── MODAL ──────────────────────────────────────────────────
+function updateVencimiento() {
+  const fechaVal = document.getElementById('f-fecha').value;
+  const duracion = parseInt(document.getElementById('f-duracion').value) || 30;
+  const el = document.getElementById('f-vencimiento');
+  if (!fechaVal) { el.value = ''; return; }
+  const d = new Date(fechaVal + 'T12:00:00');
+  d.setDate(d.getDate() + duracion);
+  el.value = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 function openModal() {
   document.getElementById('f-fecha').value = localDateStr(new Date());
+  updateVencimiento();
 
   if (window._currentUser?.role === 'vendedor') {
     const ventaInput = document.getElementById('f-venta');
@@ -2706,6 +2812,14 @@ async function submitSale(e) {
     showToast('Venta Registrada', 'success');
     closeModal();
 
+    // Registrar campaña en background (no bloquea el flujo principal)
+    const duracion = parseInt(document.getElementById('f-duracion').value) || 30;
+    fetch('/api/campaign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, precio, metodo }),
+    }).catch(err => console.warn('Campaign registration failed (non-fatal):', err));
+
     const fecha = new Date(+fy, +fm - 1, +fd);
     const newRow = {
       artista:  artista || 'Sin artista',
@@ -2733,6 +2847,155 @@ async function submitSale(e) {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Registrar Venta';
+  }
+}
+
+// ── CAMPAÑAS ───────────────────────────────────────────────
+let _campanias = [];
+
+async function loadCampanias() {
+  const role    = window._currentUser?.role;
+  const vendor  = window._currentUser?.vendorName;
+  const isAdmin = role === 'admin' || role === 'secondary_admin';
+  const param   = isAdmin ? 'all' : (vendor || 'all');
+
+  const list = document.getElementById('campanias-list');
+  if (list) list.innerHTML = '<div style="color:var(--muted);padding:24px">Cargando campañas...</div>';
+
+  try {
+    const resp = await fetch(`/api/campaign?vendedor=${encodeURIComponent(param)}`);
+    const data = await resp.json();
+    _campanias = data.campanias || [];
+    renderCampaniasTab();
+    // Poblar filtro de vendedor (solo admin)
+    if (isAdmin) {
+      const vendores = [...new Set(_campanias.map(c => c.vendedor).filter(Boolean))].sort();
+      const sel = document.getElementById('camp-filter-vendor');
+      if (sel) {
+        sel.innerHTML = '<option value="all">Todos los vendedores</option>' +
+          vendores.map(v => `<option value="${v}">${v}</option>`).join('');
+      }
+    }
+  } catch(e) {
+    const list = document.getElementById('campanias-list');
+    if (list) list.innerHTML = `<div style="color:var(--red);padding:24px">Error: ${e.message}</div>`;
+  }
+}
+
+function renderCampaniasTab() {
+  const list = document.getElementById('campanias-list');
+  if (!list) return;
+  const filterVendor = (document.getElementById('camp-filter-vendor')?.value) || 'all';
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  let data = filterVendor === 'all'
+    ? _campanias
+    : _campanias.filter(c => c.vendedor === filterVendor);
+
+  data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
+
+  if (!data.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📅</div><p>No hay campañas activas</p></div>';
+    return;
+  }
+
+  list.innerHTML = data.map(c => {
+    const venc    = new Date(c.fechaVencimiento + 'T12:00:00');
+    const diffMs  = venc - today;
+    const days    = Math.round(diffMs / 86400000);
+    const daysLbl = days < 0 ? 'Vencida' : days === 0 ? 'Hoy' : `${days}d`;
+
+    let badgeBg, badgeColor, borderColor;
+    if (days < 0)      { badgeBg = 'rgba(248,81,73,0.15)';   badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
+    else if (days <= 3){ badgeBg = 'rgba(245,158,11,0.15)';  badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
+    else if (days <= 7){ badgeBg = 'rgba(245,158,11,0.08)';  badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.2)'; }
+    else               { badgeBg = 'rgba(16,185,129,0.12)';  badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.25)'; }
+
+    const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    return `
+    <div class="campania-card" style="border-color:${borderColor}">
+      <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
+        ${daysLbl}
+        <span class="badge-days-label">${days >= 0 ? 'restantes' : ''}</span>
+      </div>
+      <div class="campania-info">
+        <div class="campania-artista">${c.artista}</div>
+        <div class="campania-meta">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
+      </div>
+      <div class="campania-actions">
+        <button class="btn btn-sm btn-renovar" onclick="openRenovarModal(${c.row})" touch-action="manipulation">↻ Renovar</button>
+        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${c.row})" touch-action="manipulation">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Modal renovar
+let _renovarRow = null;
+function openRenovarModal(row) {
+  _renovarRow = row;
+  const camp = _campanias.find(c => c.row === row);
+  if (!camp) return;
+  document.getElementById('renovar-artista-label').textContent = `🎵 ${camp.artista} — ${camp.vendedor}`;
+  document.getElementById('renovar-duracion').value = camp.duracion || 30;
+  document.getElementById('renovar-error').style.display = 'none';
+  const m = document.getElementById('renovar-modal');
+  m.style.display = 'flex';
+  requestAnimationFrame(() => m.classList.add('open'));
+}
+function closeRenovarModal() {
+  const m = document.getElementById('renovar-modal');
+  m.classList.remove('open');
+  setTimeout(() => { m.style.display = 'none'; }, 200);
+  _renovarRow = null;
+}
+
+async function submitRenovar() {
+  const camp = _campanias.find(c => c.row === _renovarRow);
+  if (!camp) return;
+  const btn = document.getElementById('renovar-submit-btn');
+  btn.disabled = true; btn.textContent = 'Renovando...';
+  const errEl = document.getElementById('renovar-error');
+  errEl.style.display = 'none';
+  try {
+    const duracion = parseInt(document.getElementById('renovar-duracion').value) || 30;
+    const resp = await fetch('/api/campaign', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
+        duracion, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    closeRenovarModal();
+    showToast(`✅ ${camp.artista} renovada hasta ${data.nuevaFechaVenc}`, 'success');
+    await loadCampanias();
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Renovar';
+  }
+}
+
+async function confirmarNoRenueva(row) {
+  const camp = _campanias.find(c => c.row === row);
+  if (!camp) return;
+  if (!confirm(`¿Marcar "${camp.artista}" como no renovada? Se eliminará del calendario.`)) return;
+  try {
+    const resp = await fetch('/api/campaign', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    showToast(`${camp.artista} marcada como finalizada`, 'success');
+    await loadCampanias();
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
   }
 }
 
