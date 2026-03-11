@@ -758,6 +758,16 @@
           </div>
 
           <div class="form-group">
+            <label class="form-label">Link de canción</label>
+            <input class="form-input" id="f-link" type="url" placeholder="https://open.spotify.com/...">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Pauta / Promoción</label>
+            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Ej: Playlist Submission 30 días, 3 pitches incluidos..." style="resize:vertical;line-height:1.4"></textarea>
+          </div>
+
+          <div class="form-group">
             <label class="form-label">Fecha<span>*</span></label>
             <input class="form-input" id="f-fecha" type="date" required oninput="updateVencimiento()">
 
@@ -2833,6 +2843,8 @@ async function submitSale(e) {
     const final    = document.getElementById('f-final').value.trim();
     const fechaRaw = document.getElementById('f-fecha').value;   // YYYY-MM-DD
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
+    const pauta    = document.getElementById('f-pauta').value.trim();
+    const link     = document.getElementById('f-link').value.trim();
 
     const [fy, fm, fd] = fechaRaw.split('-');
     const fechaFmt = `${fd}/${fm}/${fy}`;
@@ -2857,7 +2869,7 @@ async function submitSale(e) {
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, precio, metodo, gasto }),
+      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, precio, metodo, gasto, pauta, link }),
     }).catch(err => console.warn('Campaign registration failed (non-fatal):', err));
 
     const fecha = new Date(+fy, +fm - 1, +fd);

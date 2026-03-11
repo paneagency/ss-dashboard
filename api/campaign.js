@@ -106,18 +106,22 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta) {
 
 // ── Helpers: Calendar ──────────────────────────────────────────
 
-function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo) {
+function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link) {
+  const parts = [];
+  if (pauta) parts.push(pauta);
+  if (link)  parts.push(link);
+  if (!parts.length) parts.push(`Vendedor: ${vendedor}\nDuración: ${duracion} días\nPrecio: $${precio}\nMétodo: ${metodo}`);
   return {
     summary:     `(${vendedor}) - ${artista}`,
-    description: `Vendedor: ${vendedor}\nDuración: ${duracion} días\nPrecio: $${precio}\nMétodo: ${metodo}`,
+    description: parts.join('\n'),
     start: { date: fechaVencimiento },
     end:   { date: fechaVencimiento },
     colorId: '2',
   };
 }
 
-async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo) {
-  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo);
+async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link) {
+  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link);
   const vendorCalId = VENDOR_CALS[vendedor];
   const [masterRes, vendorRes] = await Promise.all([
     cal.events.insert({ calendarId: MASTER_CAL,    requestBody: event }),
@@ -211,7 +215,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, precio, metodo, gasto } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, precio, metodo, gasto, pauta, link } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
@@ -221,7 +225,7 @@ module.exports = async (req, res) => {
 
       let masterEventId = '', vendorEventId = '';
       try {
-        const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '');
+        const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '');
         masterEventId = ids.masterEventId;
         vendorEventId = ids.vendorEventId;
       } catch(calErr) {
