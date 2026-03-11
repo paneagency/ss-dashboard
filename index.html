@@ -1342,6 +1342,7 @@ async function init() {
       document.getElementById('load-detail').textContent = 'Procesando datos...';
       loadData(text);
       document.getElementById('loading').style.display = 'none';
+      resetMobileZoom();
       return;
     } catch(e) {
       lastError = e;
@@ -2779,8 +2780,18 @@ function showLoginScreen() {
   document.getElementById('loading').style.display = 'none';
 }
 
+function resetMobileZoom() {
+  // iOS Safari: temporarily lock maximum-scale to snap zoom back to 1:1,
+  // then restore to allow user zoom. Fixes stale zoom state after login.
+  const vp = document.querySelector('meta[name=viewport]');
+  if (!vp) return;
+  vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0';
+  setTimeout(() => { vp.content = 'width=device-width, initial-scale=1.0'; }, 100);
+}
+
 function hideLoginScreen() {
   document.getElementById('login-overlay').style.display = 'none';
+  resetMobileZoom();
 }
 
 function logout() {
