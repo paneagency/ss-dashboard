@@ -7,9 +7,18 @@ const CAMPANAS_SHEET = 'CampañasCalendario';
 // ── Calendarios ────────────────────────────────────────────────
 const MASTER_CAL  = 'paneagency@gmail.com';
 const VENDOR_CALS = {
-  'Pane Agency':         'e2645026fe0ceccee8a8942f709b4f8a7c6e7646950c36b82d548b6295ae55ff@group.calendar.google.com',
-  'Santi - Pane Agency': '80255759be0dfe38e43ac89857f08c16e55dbcf7f65a1420ce968758997e2655@group.calendar.google.com',
-  'Moscu':               'abf54a8eec6e02c1e66334afc7d5a8070db80a00a55b54eaef4f3e5f04f676c8@group.calendar.google.com',
+  'Pane Agency':        'e2645026fe0ceccee8a8942f709b4f8a7c6e7646950c36b82d548b6295ae55ff@group.calendar.google.com',
+  'Santivgg':           '80255759be0dfe38e43ac89857f08c16e55dbcf7f65a1420ce968758997e2655@group.calendar.google.com',
+  'Bizarro':            '5abd76466dc9ee1a9b4e86822cd1ad2b8f659881d4c60671a94936cbcf198876@group.calendar.google.com',
+  'Mariana Gagliardi':  'e21d08bee0274f9545842aa69f9d77e311cf5fdb26bc43a59f0ed5ab2066c6e7@group.calendar.google.com',
+  'Mariana Mazu':       '4880346ff5999d806cfc670e9452d54e39eb830010f19061a569e220005e6995@group.calendar.google.com',
+  'Martin Ciolfi':      '191359f0544e99e6433590ffd3dafc7277716a7578b645444184e300750e3115@group.calendar.google.com',
+  'Maxi Jayat':         '63464bc0aba05756866cd406bc52db5933a5f6f4928d98fdac0b13583a8e7904@group.calendar.google.com',
+  'Melboss':            '56dae3ce019a26a4028b2bf95a6720d5601b23475c72cfde4e7e849173549666@group.calendar.google.com',
+  'Moscu':              'abf54a8eec6e02c1e66334afc7d5a8070db80a00a55b54eaef4f3e5f04f676c8@group.calendar.google.com',
+  'Pablo Galleguillos': '6420d18ad20d054f99be6c4e71e086d5e02d624bdba3291944d497b01a93db49@group.calendar.google.com',
+  'Tobias Ehlen':       '1feef31ac54a013871bb35c6612cebb0af0c6d08ea0c17b1fd90dd4897191390@group.calendar.google.com',
+  'Tomas Magna':        '10de3039123c75d84404f5fae5526ffc19d582b4ba798cabf1333e8fa6e3f84c@group.calendar.google.com',
 };
 
 // ── Auth ───────────────────────────────────────────────────────
