@@ -119,7 +119,6 @@ async function deleteCalEvents(cal, vendedor, masterEventId, vendorEventId) {
           .catch(e => { results.errors.push('vendor: ' + e.message); })
       : null,
   ].filter(Boolean));
-  console.log('[deleteCalEvents]', JSON.stringify(results));
   return results;
 }
 
@@ -256,8 +255,6 @@ module.exports = async (req, res) => {
           range: `${CAMPANAS_SHEET}!A:H`,
         });
         const campRows = (campResp.data.values || []).slice(1);
-        console.log('[campaign delete] buscando artista:', artista, 'vendedor:', vendedor);
-        console.log('[campaign delete] filas en sheet:', campRows.map(r => ({ artista: r[0], vendedor: r[1], estado: r[7] })));
         // Buscar la ÚLTIMA campaña activa para ese artista (más reciente)
         let match = -1;
         for (let i = campRows.length - 1; i >= 0; i--) {
@@ -269,7 +266,6 @@ module.exports = async (req, res) => {
             break;
           }
         }
-        console.log('[campaign delete] match index:', match);
         if (match === -1) return res.json({ ok: true, skipped: true }); // No hay campaña activa, no es error
         row           = match + 2; // +1 header, +1 base-1
         masterEventId = campRows[match][5] || '';

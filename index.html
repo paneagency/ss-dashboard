@@ -3054,8 +3054,7 @@ async function deleteSale(idx) {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ artista: r.artista, vendedor: r.venta }),
-    }).then(res => res.json()).then(d => console.log('[campaign delete]', d)).catch(e => console.error('[campaign delete error]', e));
-
+    }).catch(() => {});
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
 
@@ -3295,7 +3294,7 @@ async function deleteVendorSale(idx) {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ artista: r.artista, vendedor: r.venta }),
-    }).then(res => res.json()).then(d => console.log('[campaign delete]', d)).catch(e => console.error('[campaign delete error]', e));
+    }).catch(() => {});
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
   } catch(err) {
