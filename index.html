@@ -776,8 +776,8 @@
 
           <div class="form-group">
             <label class="form-label">Vence el</label>
-            <input class="form-input auto" id="f-vencimiento" type="text" readonly placeholder="Auto">
-            <span class="form-hint">Calculado desde fecha + duración</span>
+            <input class="form-input" id="f-vencimiento" type="date">
+            <span class="form-hint">Auto calculado, podés modificarlo</span>
           </div>
           </div>
 
@@ -2714,7 +2714,7 @@ function updateVencimiento() {
   if (!fechaVal) { el.value = ''; return; }
   const d = new Date(fechaVal + 'T12:00:00');
   d.setDate(d.getDate() + duracion);
-  el.value = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  el.value = d.toISOString().slice(0, 10);
 }
 
 function autofillFromArtist() {
@@ -2848,7 +2848,10 @@ async function submitSale(e) {
     closeModal();
 
     // Registrar campaña en background (no bloquea el flujo principal)
-    const duracion = parseInt(document.getElementById('f-duracion').value) || 30;
+    const vencimientoVal = document.getElementById('f-vencimiento').value;
+    const duracion = (vencimientoVal && fechaRaw)
+      ? Math.round((new Date(vencimientoVal) - new Date(fechaRaw)) / 86400000)
+      : (parseInt(document.getElementById('f-duracion').value) || 30);
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
