@@ -2844,14 +2844,14 @@ async function submitSale(e) {
     const result = await resp.json();
     if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
 
-    showToast('Venta Registrada', 'success');
-    closeModal();
-
-    // Registrar campaña en background (no bloquea el flujo principal)
+    // Leer estos valores ANTES de closeModal() porque resetea el form
     const vencimientoVal = document.getElementById('f-vencimiento').value;
     const duracion = (vencimientoVal && fechaRaw)
       ? Math.round((new Date(vencimientoVal) - new Date(fechaRaw)) / 86400000)
       : (parseInt(document.getElementById('f-duracion').value) || 30);
+
+    showToast('Venta Registrada', 'success');
+    closeModal();
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
