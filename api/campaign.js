@@ -238,10 +238,33 @@ module.exports = async (req, res) => {
       return res.json({ ok: true, nuevaFechaVenc });
     }
 
-    // ── DELETE: no renueva ────────────────────────────────────
+    // ── DELETE: no renueva / borrar campaña por artista ──────
     if (req.method === 'DELETE') {
-      const { row, masterEventId, vendorEventId, vendedor } = req.body;
-      if (!row) return res.status(400).json({ error: 'row requerido' });
+      let { row, masterEventId, vendorEventId, vendedor, artista } = req.body;
+
+      // Si no viene row, buscar por artista+vendedor
+      if (!row && artista) {
+        const campResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:H`,
+        });
+        const campRows = (campResp.data.values || []).slice(1);
+        console.log('[campaign delete] buscando artista:', artista, 'vendedor:', vendedor);
+        console.log('[campaign delete] filas en sheet:', campRows.map(r => ({ artista: r[0], vendedor: r[1], estado: r[7] })));
+        const match = campRows.findIndex(r =>
+          (r[0] || '').toLowerCase().trim() === artista.toLowerCase().trim() &&
+          (!vendedor || (r[1] || '').toLowerCase().trim() === vendedor.toLowerCase().trim()) &&
+          (r[7] || '') === 'activa'
+        );
+        console.log('[campaign delete] match index:', match);
+        if (match === -1) return res.json({ ok: true, skipped: true }); // No hay campaña activa, no es error
+        row           = match + 2; // +1 header, +1 base-1
+        masterEventId = campRows[match][5] || '';
+        vendorEventId = campRows[match][6] || '';
+        vendedor      = campRows[match][1] || vendedor;
+      }
+
+      if (!row) return res.status(400).json({ error: 'row o artista requerido' });
 
       await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
 

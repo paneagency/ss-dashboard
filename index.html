@@ -3283,6 +3283,12 @@ async function deleteVendorSale(idx) {
     if (!resp.ok) throw new Error(result.error || 'Error al eliminar');
     const localIdx = allData.indexOf(r);
     if (localIdx !== -1) allData.splice(localIdx, 1);
+    // Borrar campaña de calendario asociada (si existe)
+    fetch('/api/campaign', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista: r.artista, vendedor: r.venta }),
+    }).then(res => res.json()).then(d => console.log('[campaign delete]', d)).catch(e => console.error('[campaign delete error]', e));
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
   } catch(err) {
