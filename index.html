@@ -487,9 +487,9 @@
         scrollbar-width: none;
       }
       .filters-inner::-webkit-scrollbar { display: none; }
-      .filter-label { font-size: 11px; white-space: nowrap; }
+      .filter-label { display: none; }
       .filter-control { font-size: 12px; padding: 5px 7px; }
-      input[type="date"].filter-control { width: 116px; }
+      input[type="date"].filter-control { width: 130px; }
       select.filter-control { min-width: 100px; max-width: 130px; }
       .filter-sep { display: none; }
 
@@ -522,6 +522,16 @@
 
       /* --- Cuentas saldos --- */
       .cuentas-saldos { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+      /* --- Cards de meses: scrollables horizontalmente --- */
+      #months-panel > div {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 4px;
+      }
+      #months-panel > div::-webkit-scrollbar { display: none; }
+      #months-panel > div > div { min-width: 200px !important; }
 
       /* --- Proyección --- */
       .projection-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
@@ -583,9 +593,11 @@
       /* Cuentas saldos: 1 col en muy pequeño */
       .cuentas-saldos { grid-template-columns: 1fr; }
 
-      /* Botón cuenta vendedor: solo ícono */
+      /* Botones header: solo íconos */
       #btn-cuenta-vendedor { font-size: 0; padding: 6px 8px; }
       #btn-cuenta-vendedor::before { content: '💼'; font-size: 16px; }
+      .logout-btn { font-size: 0 !important; padding: 6px 8px; }
+      .logout-btn::before { content: '↩'; font-size: 16px; }
     }
   </style>
 </head>
@@ -665,7 +677,7 @@
       </div>
       <div class="user-badge" id="user-badge" style="display:none">
         <strong id="user-badge-name"></strong>
-        <button class="btn btn-ghost btn-sm" onclick="logout()">Salir</button>
+        <button class="btn btn-ghost btn-sm logout-btn" onclick="logout()">Salir</button>
       </div>
       <button class="btn btn-ghost btn-sm" id="refresh-btn" onclick="init()">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="btn-cuenta-vendedor" onclick="openVendorAccountModal()" style="display:none">💼 Cuenta Vendedor</button>
