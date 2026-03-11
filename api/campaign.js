@@ -83,14 +83,10 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta) {
 }
 
 // ── Helpers: Calendar ──────────────────────────────────────────
-function fmtDate(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00');
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
 
 function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo) {
   return {
-    summary:     `🎵 ${artista} · Vence ${fmtDate(fechaVencimiento)}`,
+    summary:     `(${vendedor}) - ${artista}`,
     description: `Vendedor: ${vendedor}\nDuración: ${duracion} días\nPrecio: $${precio}\nMétodo: ${metodo}`,
     start: { date: fechaVencimiento },
     end:   { date: fechaVencimiento },
