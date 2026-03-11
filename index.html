@@ -1301,6 +1301,12 @@ function applyLoadedData(parsed) {
   }
 
   applyFilters();
+
+  // Pre-poblar datalists del modal una sola vez (no en cada apertura)
+  fillDatalist('list-artistas', allData.map(r => r.artista));
+  fillDatalist('list-ventas',   allData.map(r => r.venta));
+  fillDatalist('list-metodos',  allData.map(r => r.metodo));
+  fillDatalist('list-generos',  allData.map(r => r.genero));
 }
 
 function loadData(text) {
@@ -2560,17 +2566,8 @@ window.addEventListener('DOMContentLoaded', init);
 
 // ── MODAL ──────────────────────────────────────────────────
 function openModal() {
-  // Pre-set fecha de hoy
-  const today = localDateStr(new Date());
-  document.getElementById('f-fecha').value = today;
+  document.getElementById('f-fecha').value = localDateStr(new Date());
 
-  // Poblar datalists con valores únicos del dataset actual
-  fillDatalist('list-artistas', allData.map(r => r.artista));
-  fillDatalist('list-ventas',   allData.map(r => r.venta));
-  fillDatalist('list-metodos',  allData.map(r => r.metodo));
-  fillDatalist('list-generos',  allData.map(r => r.genero));
-
-  // Pre-llenar vendedor si es rol vendedor (readOnly); secondary_admin puede elegir
   if (window._currentUser?.role === 'vendedor') {
     const ventaInput = document.getElementById('f-venta');
     ventaInput.value = window._currentUser.vendorName || window._currentUser.name;
@@ -2578,8 +2575,8 @@ function openModal() {
   }
 
   document.getElementById('modal-overlay').classList.add('open');
-  document.getElementById('f-artista').focus();
-
+  // focus solo en desktop (en mobile dispara teclado virtual y causa reflow)
+  if (window.innerWidth > 768) document.getElementById('f-artista').focus();
 }
 
 function closeModal() {
