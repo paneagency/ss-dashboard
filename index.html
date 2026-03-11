@@ -747,7 +747,7 @@
 
           <div class="form-group full">
             <label class="form-label">Artista / Cliente<span>*</span></label>
-            <input class="form-input" id="f-artista" list="list-artistas" placeholder="Nombre del artista" required>
+            <input class="form-input" id="f-artista" list="list-artistas" placeholder="Nombre del artista" required oninput="autofillFromArtist()">
             <datalist id="list-artistas"></datalist>
           </div>
 
@@ -2715,6 +2715,33 @@ function updateVencimiento() {
   const d = new Date(fechaVal + 'T12:00:00');
   d.setDate(d.getDate() + duracion);
   el.value = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function autofillFromArtist() {
+  const val = document.getElementById('f-artista').value.trim().toLowerCase();
+  if (!val || !allData?.length) return;
+
+  const matches = allData.filter(r => r.artista?.toLowerCase() === val);
+  if (!matches.length) return;
+
+  // Última transacción por fecha
+  const latest = matches.sort((a, b) => b.fecha - a.fecha)[0];
+
+  if (latest.genero && latest.genero !== 'Sin género') {
+    document.getElementById('f-genero').value = latest.genero;
+  }
+
+  // No tocar vendedor si el rol es vendedor (ya está bloqueado como readonly)
+  const role = window._currentUser?.role;
+  if (role !== 'vendedor' && latest.venta) {
+    document.getElementById('f-venta').value = latest.venta;
+  }
+
+  if (latest.metodo) {
+    document.getElementById('f-metodo').value = latest.metodo;
+    autoComision();
+    recalcular();
+  }
 }
 
 function openModal() {
