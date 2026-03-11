@@ -393,6 +393,7 @@
 
     /* Secondary admin: igual que vendedor pero con Nueva Venta */
     body.role-secondary #data-badge { display: none !important; }
+    body.role-secondary #btn-cuenta-vendedor { display: none !important; }
     body.role-secondary #f-vendor { display: none; }
     body.role-secondary #vendedor-view { display: block; }
     body.role-secondary #tab-resumen { display: none !important; }
@@ -454,6 +455,8 @@
     .btn-delete:hover { color:var(--red); background:rgba(248,81,73,0.1); }
 
     body.role-vendedor header .header-right > button:last-child { display: none; }
+    body.role-vendedor #btn-cuenta-vendedor { display: none !important; }
+    body.role-vendedor #btn-nueva-venta { display: none !important; }
     body.role-vendedor #data-badge { display: none !important; }
     body.role-vendedor #f-vendor { display: none; }
     body.role-vendedor #vendedor-view { display: block; }
