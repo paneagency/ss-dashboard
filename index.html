@@ -66,7 +66,8 @@
     .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border2); }
     .csv-paste-area { width:100%; min-height:90px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); color:var(--text); font-family:monospace; font-size:12px; padding:10px; resize:vertical; outline:none; }
     .csv-paste-area:focus { border-color:var(--indigo); }
-    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-sm); border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+    button, a, [onclick], .tab-btn, .month-nav-btn, .btn-delete { touch-action: manipulation; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-sm); border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.15s; touch-action: manipulation; }
     .btn-primary { background: var(--indigo); color: #fff; }
     .btn-primary:hover { background: var(--indigo-dark); }
     .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border2); }
