@@ -3049,6 +3049,13 @@ async function deleteSale(idx) {
     }
     document.getElementById('badge-text').textContent = `${allData.length} registros`;
 
+    // Borrar campaña de calendario asociada (si existe)
+    fetch('/api/campaign', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista: r.artista, vendedor: r.venta }),
+    }).then(res => res.json()).then(d => console.log('[campaign delete]', d)).catch(e => console.error('[campaign delete error]', e));
+
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
 
