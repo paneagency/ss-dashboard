@@ -1413,7 +1413,7 @@ function applyLoadedData(parsed) {
 
   // Pre-poblar datalists del modal una sola vez (no en cada apertura)
   fillDatalist('list-artistas', allData.map(r => r.artista));
-  fillDatalist('list-ventas',   allData.map(r => r.venta));
+  fillDatalist('list-ventas',   window._vendors || allData.map(r => r.venta));
   fillDatalist('list-metodos',  allData.map(r => r.metodo));
   fillDatalist('list-generos',  allData.map(r => r.genero));
 }
@@ -1458,6 +1458,14 @@ async function init() {
       loadData(text);
       document.getElementById('loading').style.display = 'none';
       resetMobileZoom();
+      // Cargar lista de vendedores activos desde hoja Vendedores
+      fetch('/api/sheets').then(r => r.json()).then(d => {
+        if (d.vendors) {
+          window._vendors = d.vendors.map(v => v.name);
+          fillSelect('f-vendor', window._vendors);
+          fillDatalist('list-ventas', window._vendors);
+        }
+      }).catch(() => {});
       return;
     } catch(e) {
       lastError = e;
@@ -1551,7 +1559,7 @@ function populateFilters() {
   const sourceData = user?.role === 'vendedor'
     ? allData.filter(r => r.venta.toLowerCase() === (user.vendorName || user.name).toLowerCase())
     : allData;
-  fillSelect('f-vendor', allData.map(r => r.venta));
+  fillSelect('f-vendor', window._vendors || allData.map(r => r.venta));
   fillSelect('f-genre',  sourceData.map(r => r.genero));
   fillSelect('f-client', sourceData.map(r => r.artista));
   fillSelect('f-method', sourceData.map(r => r.metodo));

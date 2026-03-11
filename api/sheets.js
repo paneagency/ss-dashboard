@@ -46,12 +46,25 @@ function normFecha(s) {
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
     const sheets = getSheets();
+
+    // ── LISTA DE VENDEDORES ────────────────────────────────────
+    if (req.method === 'GET') {
+      const resp = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Vendedores!A:B',
+      });
+      const rows = (resp.data.values || []).slice(1); // skip header
+      const vendors = rows
+        .filter(r => r[0]?.trim())
+        .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0 }));
+      return res.json({ vendors });
+    }
 
     // ── AGREGAR VENTA ─────────────────────────────────────────
     if (req.method === 'POST') {
