@@ -106,14 +106,21 @@ async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracio
 
 async function deleteCalEvents(cal, vendedor, masterEventId, vendorEventId) {
   const vendorCalId = VENDOR_CALS[vendedor];
+  const results = { masterEventId, vendorEventId, vendorCalId, errors: [] };
   await Promise.all([
     masterEventId
-      ? cal.events.delete({ calendarId: MASTER_CAL, eventId: masterEventId }).catch(() => {})
+      ? cal.events.delete({ calendarId: MASTER_CAL, eventId: masterEventId })
+          .then(() => { results.masterDeleted = true; })
+          .catch(e => { results.errors.push('master: ' + e.message); })
       : null,
     (vendorEventId && vendorCalId)
-      ? cal.events.delete({ calendarId: vendorCalId, eventId: vendorEventId }).catch(() => {})
+      ? cal.events.delete({ calendarId: vendorCalId, eventId: vendorEventId })
+          .then(() => { results.vendorDeleted = true; })
+          .catch(e => { results.errors.push('vendor: ' + e.message); })
       : null,
   ].filter(Boolean));
+  console.log('[deleteCalEvents]', JSON.stringify(results));
+  return results;
 }
 
 function addDays(dateStr, days) {
@@ -266,7 +273,7 @@ module.exports = async (req, res) => {
 
       if (!row) return res.status(400).json({ error: 'row o artista requerido' });
 
-      await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
+      const calResult = await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
 
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
@@ -275,7 +282,7 @@ module.exports = async (req, res) => {
         requestBody: { values: [['finalizada']] },
       });
 
-      return res.json({ ok: true });
+      return res.json({ ok: true, debug: calResult });
     }
 
     return res.status(405).json({ error: 'Método no permitido' });
