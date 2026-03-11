@@ -764,7 +764,7 @@
 
           <div class="form-group">
             <label class="form-label">Pauta / Promoción</label>
-            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Ej: Playlist Submission 30 días, 3 pitches incluidos..." style="resize:vertical;line-height:1.4"></textarea>
+            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Ej: Playlist Submission 30 días, 3 pitches incluidos..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta()"></textarea>
           </div>
 
           <div class="form-group">
@@ -2727,6 +2727,23 @@ function updateVencimiento() {
   const d = new Date(fechaVal + 'T12:00:00');
   d.setDate(d.getDate() + duracion);
   el.value = d.toISOString().slice(0, 10);
+}
+
+function autofillPrecioFromPauta() {
+  const text = document.getElementById('f-pauta').value;
+  if (!text) return;
+
+  // Busca "Promo: X usd" primero (precio con descuento aplicado)
+  let m = text.match(/Promo:\s*([\d.,]+)\s*usd/i);
+  // Si no hay promo, busca "Total: X usd" que NO esté tachado (~...~)
+  if (!m) m = text.match(/(?<!~)Total:\s*([\d.,]+)\s*usd/i);
+  if (!m) return;
+
+  const precio = parseFloat(m[1].replace(',', '.'));
+  if (!precio) return;
+
+  document.getElementById('f-precio').value = precio;
+  recalcular();
 }
 
 function autofillFromArtist() {
