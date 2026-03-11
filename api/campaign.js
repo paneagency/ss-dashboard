@@ -21,6 +21,28 @@ const VENDOR_CALS = {
   'Tomas Magna':        '10de3039123c75d84404f5fae5526ffc19d582b4ba798cabf1333e8fa6e3f84c@group.calendar.google.com',
 };
 
+// ── Comisiones ─────────────────────────────────────────────────
+const METHOD_COMMISSIONS = {
+  'PayPal': 11, 'Wise': 5.2, 'Mercado Pago': 11,
+  'Transferencia Ars': 1, 'Sin Comision': 0,
+};
+
+function calcFinancials(precio, gasto, metodo, vendedor) {
+  const p = parseFloat(precio) || 0;
+  const g = parseFloat(gasto)  || 0;
+  const methodPct = METHOD_COMMISSIONS[metodo] ?? 0;
+  const users = JSON.parse(process.env.USERS_CONFIG || '{"users":[]}').users;
+  const vendorCommission = users.find(u => u.vendorName === vendedor)?.commission ?? 0;
+  const neto  = (p - g) * (1 - methodPct / 100);
+  const final = neto * (1 - vendorCommission);
+  const margen = vendorCommission * 100;
+  return {
+    neto:   +neto.toFixed(2),
+    final:  +final.toFixed(2),
+    margen: +margen.toFixed(2),
+  };
+}
+
 // ── Auth ───────────────────────────────────────────────────────
 function getAuth() {
   const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
@@ -189,7 +211,8 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, precio, metodo, gasto, neto, margen, final } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, precio, metodo, gasto } = req.body;
+      const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
