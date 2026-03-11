@@ -1541,20 +1541,22 @@ function updateMobilePeriodLabel() {
   }
 }
 
+function fillSelect(id, values) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const cur = el.value;
+  const first = el.options[0];
+  el.innerHTML = '';
+  el.appendChild(first);
+  [...new Set(values)].filter(Boolean).sort().forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    el.appendChild(o);
+  });
+  el.value = cur;
+}
+
 function populateFilters() {
-  const fillSelect = (id, values) => {
-    const el = document.getElementById(id);
-    const cur = el.value;
-    const first = el.options[0];
-    el.innerHTML = '';
-    el.appendChild(first);
-    [...new Set(values)].sort().forEach(v => {
-      const o = document.createElement('option');
-      o.value = v; o.textContent = v;
-      el.appendChild(o);
-    });
-    el.value = cur;
-  };
   const user = window._currentUser;
   const sourceData = user?.role === 'vendedor'
     ? allData.filter(r => r.venta.toLowerCase() === (user.vendorName || user.name).toLowerCase())
