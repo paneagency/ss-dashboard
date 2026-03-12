@@ -243,9 +243,9 @@ module.exports = async (req, res) => {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:P`,
+        range: `${CAMPANAS_SHEET}!A:Q`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos]] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '']] },
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento });
