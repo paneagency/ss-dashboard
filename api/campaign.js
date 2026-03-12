@@ -255,7 +255,7 @@ module.exports = async (req, res) => {
 
     // ── PUT: renovar campaña ──────────────────────────────────
     if (req.method === 'PUT') {
-      const { row, artista, vendedor, duracion, masterEventId, vendorEventId, precio, metodo } = req.body;
+      const { row, artista, vendedor, duracion, masterEventId, vendorEventId, precio, metodo, pauta, gastosRows } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
       // Leer vencimiento actual para usarlo como base de la renovación
@@ -263,25 +263,31 @@ module.exports = async (req, res) => {
         spreadsheetId: SPREADSHEET_ID,
         range: `${CAMPANAS_SHEET}!D${row}`,
       });
-      const baseDate           = campResp.data.values?.[0]?.[0] || new Date().toISOString().split('T')[0];
-      const nuevaFechaVenc     = addDays(baseDate, duracion);
+      const baseDate       = campResp.data.values?.[0]?.[0] || new Date().toISOString().split('T')[0];
+      const nuevaFechaVenc = addDays(baseDate, duracion);
 
       await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
 
       let newMasterId = '', newVendorId = '';
       try {
-        const ids = await createCalEvents(cal, artista, vendedor, nuevaFechaVenc, duracion, precio || 0, metodo || '');
-        newMasterId  = ids.masterEventId;
-        newVendorId  = ids.vendorEventId;
+        const ids = await createCalEvents(cal, artista, vendedor, nuevaFechaVenc, duracion, precio || 0, metodo || '', pauta || '', gastosRows || []);
+        newMasterId = ids.masterEventId;
+        newVendorId = ids.vendorEventId;
       } catch(calErr) {
         console.error('Calendar error (non-fatal):', calErr.message);
       }
 
+      // Actualizar fecha, duración, eventos Calendar y también pauta/gastos si vienen
+      const detalleGastos = (gastosRows || [])
+        .filter(r => r.amount > 0)
+        .map(r => `(${r.amount})${r.provider ? ' ' + r.provider : ''}`)
+        .join('\n');
+
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!D${row}:H${row}`,
+        range: `${CAMPANAS_SHEET}!D${row}:Q${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa']] },
+        requestBody: { values: [[nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', '', '', '', '', '', detalleGastos, pauta || '']] },
       });
 
       return res.json({ ok: true, nuevaFechaVenc });

@@ -1175,29 +1175,67 @@
 
   <!-- Modal: Renovar campaña -->
   <div id="renovar-modal" class="modal-overlay" onclick="if(event.target===this)closeRenovarModal()">
-    <div class="modal" style="max-width:400px">
+    <div class="modal">
       <div class="modal-header">
         <span class="modal-title">Renovar campaña</span>
         <button class="modal-close" onclick="closeRenovarModal()">✕</button>
       </div>
       <div class="modal-body">
         <p id="renovar-artista-label" style="font-size:15px;font-weight:600;margin-bottom:16px"></p>
-        <div class="form-group">
-          <label class="form-label">Duración de renovación</label>
-          <select class="form-input" id="renovar-duracion">
-            <option value="7">7 días</option>
-            <option value="14">14 días</option>
-            <option value="30" selected>30 días</option>
-            <option value="60">60 días</option>
-            <option value="90">90 días</option>
-          </select>
+        <div class="form-grid">
+          <div class="form-section">Campaña</div>
+
+          <div class="form-group">
+            <label class="form-label">Duración<span>*</span></label>
+            <select class="form-input" id="renovar-duracion">
+              <option value="7">7 días</option>
+              <option value="14">14 días</option>
+              <option value="30" selected>30 días</option>
+              <option value="60">60 días</option>
+              <option value="90">90 días</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Fecha de renovación<span>*</span></label>
+            <input class="form-input" id="renovar-fecha" type="date">
+            <span class="form-hint">Fecha en que se registra la nueva venta</span>
+          </div>
+
+          <div class="form-section">Comercial</div>
+
+          <div class="form-group">
+            <label class="form-label">Método de cobro</label>
+            <input class="form-input" id="renovar-metodo" list="list-metodos" oninput="renovarAutoComision()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Precio bruto</label>
+            <input class="form-input" id="renovar-precio" type="number" step="0.01" min="0" placeholder="0.00" oninput="renovarRecalcular()">
+            <input type="hidden" id="renovar-comision-hidden" value="0">
+          </div>
+
+          <div class="form-group full">
+            <label class="form-label">Gasto / Proveedores</label>
+            <div id="renovar-gasto-rows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addRenovarGastoRow()" style="margin-top:6px;font-size:12px">+ Agregar proveedor</button>
+            <input type="hidden" id="renovar-gasto" value="0">
+          </div>
+
+          <div class="form-section">Pauta</div>
+
+          <div class="form-group full">
+            <label class="form-label">Pauta / Promoción</label>
+            <textarea class="form-input" id="renovar-pauta" rows="4" style="resize:vertical;line-height:1.4" oninput="renovarAutofillPrecio()"></textarea>
+          </div>
+
         </div>
-        <p style="font-size:12px;color:var(--muted);margin-top:10px">La campaña se extenderá desde el vencimiento actual.</p>
+        <p style="font-size:12px;color:var(--muted);margin-top:10px">La campaña se extenderá desde el vencimiento actual. Se registrará una nueva venta automáticamente.</p>
         <div id="renovar-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeRenovarModal()">Cancelar</button>
-        <button class="btn btn-primary" id="renovar-submit-btn" onclick="submitRenovar()">Renovar</button>
+        <button class="btn btn-primary" id="renovar-submit-btn" onclick="submitRenovar()">Renovar y registrar venta</button>
       </div>
     </div>
   </div>
@@ -3099,17 +3137,70 @@ function copiarPauta(idx) {
 
 // Modal renovar
 let _renovarRow = null;
+
+function renovarAutoComision() {
+  const metodo = document.getElementById('renovar-metodo').value.trim().toLowerCase();
+  const pct = COMISIONES[metodo];
+  if (pct !== undefined) document.getElementById('renovar-comision-hidden').value = pct;
+}
+
+function renovarRecalcular() {
+  const total = [...document.querySelectorAll('#renovar-gasto-rows .gasto-amount')]
+    .reduce((sum, el) => sum + (parseFloat(el.value) || 0), 0);
+  document.getElementById('renovar-gasto').value = total;
+}
+
+function addRenovarGastoRow(amount, provider) {
+  const container = document.getElementById('renovar-gasto-rows');
+  const row = document.createElement('div');
+  row.className = 'gasto-row';
+  row.innerHTML = `
+    <input type="number" class="form-input gasto-amount" step="0.01" min="0" placeholder="0.00" value="${amount || ''}" oninput="renovarRecalcular()">
+    <input type="text" class="form-input gasto-provider" list="list-providers" placeholder="Proveedor (opcional)" value="${provider || ''}">
+    <button type="button" class="btn-remove-gasto" onclick="this.closest('.gasto-row').remove();renovarRecalcular()" title="Eliminar">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function renovarAutofillPrecio() {
+  const text = document.getElementById('renovar-pauta').value;
+  if (!text) return;
+  let m = text.match(/Promo:\s*([\d.,]+)\s*usd/i);
+  if (!m) m = text.match(/(?<!~)Total:\s*([\d.,]+)\s*usd/i);
+  if (!m) return;
+  const precio = parseFloat(m[1].replace(',', '.'));
+  if (precio) { document.getElementById('renovar-precio').value = precio; }
+  // Auto-detectar proveedores
+  const lines = text.split('\n');
+  const gastoLines = lines.map(l => l.trim().match(/^\((\d+(?:\.\d+)?)\)\s+(.+)$/)).filter(Boolean);
+  if (gastoLines.length) {
+    document.getElementById('renovar-gasto-rows').innerHTML = '';
+    gastoLines.forEach(m2 => addRenovarGastoRow(parseFloat(m2[1]), m2[2].trim()));
+    renovarRecalcular();
+  }
+}
+
 function openRenovarModal(row) {
   _renovarRow = row;
   const camp = _campanias.find(c => c.row === row);
   if (!camp) return;
+
   document.getElementById('renovar-artista-label').textContent = `🎵 ${camp.artista} — ${camp.vendedor}`;
   document.getElementById('renovar-duracion').value = camp.duracion || 30;
+  document.getElementById('renovar-fecha').value = localDateStr(new Date());
+  document.getElementById('renovar-metodo').value = camp.metodo || '';
+  document.getElementById('renovar-precio').value = camp.precio || '';
+  document.getElementById('renovar-pauta').value = camp.pauta || '';
+  document.getElementById('renovar-gasto').value = '0';
+  document.getElementById('renovar-gasto-rows').innerHTML = '';
+  addRenovarGastoRow();
   document.getElementById('renovar-error').style.display = 'none';
+
   const m = document.getElementById('renovar-modal');
   m.style.display = 'flex';
   requestAnimationFrame(() => m.classList.add('open'));
 }
+
 function closeRenovarModal() {
   const m = document.getElementById('renovar-modal');
   m.classList.remove('open');
@@ -3124,25 +3215,58 @@ async function submitRenovar() {
   btn.disabled = true; btn.textContent = 'Renovando...';
   const errEl = document.getElementById('renovar-error');
   errEl.style.display = 'none';
+
   try {
-    const duracion = parseInt(document.getElementById('renovar-duracion').value) || 30;
-    const resp = await fetch('/api/campaign', {
+    const duracion  = parseInt(document.getElementById('renovar-duracion').value) || 30;
+    const fechaRaw  = document.getElementById('renovar-fecha').value;
+    const metodo    = document.getElementById('renovar-metodo').value.trim();
+    const precio    = document.getElementById('renovar-precio').value.trim();
+    const gasto     = document.getElementById('renovar-gasto').value || '0';
+    const pauta     = document.getElementById('renovar-pauta').value.trim();
+    const gastosRows = [...document.querySelectorAll('#renovar-gasto-rows .gasto-row')].map(r => ({
+      amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
+      provider: r.querySelector('.gasto-provider').value.trim(),
+    })).filter(r => r.amount > 0);
+
+    // Calcular comisión por método
+    const comisionPct = COMISIONES[metodo.toLowerCase()] ?? 0;
+
+    // 1. Renovar campaña y calendario
+    const campResp = await fetch('/api/campaign', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
         duracion, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
+        precio, metodo, pauta, gastosRows,
       }),
     });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    const campData = await campResp.json();
+    if (!campResp.ok) throw new Error(campData.error || `HTTP ${campResp.status}`);
+
+    // 2. Registrar nueva venta en sheet principal
+    if (precio) {
+      const [fy, fm, fd] = fechaRaw.split('-');
+      const fechaFmt = `${fd}/${fm}/${fy}`;
+      const precioN  = parseFloat(precio) || 0;
+      const gastoN   = parseFloat(gasto)  || 0;
+      const neto     = (precioN - gastoN) * (1 - comisionPct / 100);
+      const margen   = precioN > 0 ? (neto / precioN * 100).toFixed(2) : 0;
+      const row = [camp.artista, camp.vendedor, metodo, comisionPct, precio, gasto, neto.toFixed(2), margen, '', fechaFmt, camp.genero || ''];
+      await fetch('/api/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: row }),
+      });
+    }
+
     closeRenovarModal();
-    showToast(`✅ ${camp.artista} renovada hasta ${data.nuevaFechaVenc}`, 'success');
+    showToast(`✅ ${camp.artista} renovada hasta ${campData.nuevaFechaVenc}`, 'success');
     await loadCampanias();
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
-    btn.disabled = false; btn.textContent = 'Renovar';
+    btn.disabled = false; btn.textContent = 'Renovar y registrar venta';
   }
 }
 
