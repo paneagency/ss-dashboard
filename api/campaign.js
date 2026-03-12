@@ -89,7 +89,7 @@ async function lookupClientDB(sheets, artista) {
   try {
     const resp = await sheets.spreadsheets.values.get({
       spreadsheetId: CLIENTES_DB_ID,
-      range: `${CLIENTES_DB_SHEET}!A:E`,
+      range: `${CLIENTES_DB_SHEET}!A:F`,
     });
     const rows = (resp.data.values || []).slice(1);
     const match = rows.find(r =>
