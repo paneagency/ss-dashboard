@@ -260,12 +260,15 @@ module.exports = async (req, res) => {
       const { row, artista, vendedor, duracion, masterEventId, vendorEventId, precio, metodo, pauta, gastosRows } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
-      // Leer vencimiento actual para usarlo como base de la renovación
+      // Leer fila completa actual para obtener fechaInicio, genero y vencimiento base
       const campResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!D${row}`,
+        range: `${CAMPANAS_SHEET}!A${row}:Q${row}`,
       });
-      const baseDate       = campResp.data.values?.[0]?.[0] || new Date().toISOString().split('T')[0];
+      const oldRow     = campResp.data.values?.[0] || [];
+      const fechaInicio = oldRow[2] || new Date().toISOString().split('T')[0];
+      const baseDate    = oldRow[3] || new Date().toISOString().split('T')[0];
+      const genero      = oldRow[14] || '';
       const nuevaFechaVenc = addDays(baseDate, duracion);
 
       await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
@@ -279,17 +282,25 @@ module.exports = async (req, res) => {
         console.error('Calendar error (non-fatal):', calErr.message);
       }
 
-      // Actualizar fecha, duración, eventos Calendar y también pauta/gastos si vienen
       const detalleGastos = (gastosRows || [])
         .filter(r => r.amount > 0)
         .map(r => `(${r.amount})${r.provider ? ' ' + r.provider : ''}`)
         .join('\n');
 
+      // 1. Marcar fila vieja como "renovada"
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!D${row}:Q${row}`,
+        range: `${CAMPANAS_SHEET}!H${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', '', '', '', '', '', detalleGastos, pauta || '']] },
+        requestBody: { values: [['renovada']] },
+      });
+
+      // 2. Agregar nueva fila activa con los datos actualizados
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CAMPANAS_SHEET}!A:Q`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', '', '', '', '', genero, detalleGastos, pauta || '']] },
       });
 
       return res.json({ ok: true, nuevaFechaVenc });
