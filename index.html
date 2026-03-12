@@ -3162,20 +3162,20 @@ async function renovarRapido(idx) {
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
 
     // Registrar nueva venta automáticamente
-    if (camp.precio) {
-      const today = localDateStr(new Date());
-      const [fy, fm, fd] = today.split('-');
-      const comisionPct = COMISIONES[camp.metodo?.toLowerCase()] ?? 0;
-      const precioN = parseFloat(camp.precio) || 0;
-      const gastoN  = parseFloat(camp.gasto)  || 0;
-      const neto    = (precioN - gastoN) * (1 - comisionPct / 100);
-      const margen  = precioN > 0 ? (neto / precioN * 100).toFixed(2) : 0;
-      await fetch('/api/sheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo, comisionPct, camp.precio, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''] }),
-      });
-    }
+    const today = localDateStr(new Date());
+    const [fy, fm, fd] = today.split('-');
+    const comisionPct = COMISIONES[(camp.metodo || '').toLowerCase()] ?? 0;
+    const precioN = parseFloat(camp.precio) || 0;
+    const gastoN  = parseFloat(camp.gasto)  || 0;
+    const neto    = (precioN - gastoN) * (1 - comisionPct / 100);
+    const margen  = precioN > 0 ? (neto / precioN * 100).toFixed(2) : 0;
+    const saleResp = await fetch('/api/sheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo || '', comisionPct, precioN, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''] }),
+    });
+    const saleData = await saleResp.json();
+    if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
 
     showToast(`✅ ${camp.artista} renovada hasta ${data.nuevaFechaVenc}`, 'success');
     await loadCampanias();
@@ -3306,20 +3306,20 @@ async function submitRenovar() {
     if (!campResp.ok) throw new Error(campData.error || `HTTP ${campResp.status}`);
 
     // 2. Registrar nueva venta en sheet principal
-    if (precio) {
-      const [fy, fm, fd] = fechaRaw.split('-');
-      const fechaFmt = `${fd}/${fm}/${fy}`;
-      const precioN  = parseFloat(precio) || 0;
-      const gastoN   = parseFloat(gasto)  || 0;
-      const neto     = (precioN - gastoN) * (1 - comisionPct / 100);
-      const margen   = precioN > 0 ? (neto / precioN * 100).toFixed(2) : 0;
-      const row = [camp.artista, camp.vendedor, metodo, comisionPct, precio, gasto, neto.toFixed(2), margen, '', fechaFmt, camp.genero || ''];
-      await fetch('/api/sheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: row }),
-      });
-    }
+    const [fy, fm, fd] = fechaRaw.split('-');
+    const fechaFmt = `${fd}/${fm}/${fy}`;
+    const precioN  = parseFloat(precio) || 0;
+    const gastoN   = parseFloat(gasto)  || 0;
+    const neto     = (precioN - gastoN) * (1 - comisionPct / 100);
+    const margenN  = precioN > 0 ? (neto / precioN * 100).toFixed(2) : 0;
+    const saleRow  = [camp.artista, camp.vendedor, metodo, comisionPct, precioN, gastoN, neto.toFixed(2), margenN, '', fechaFmt, camp.genero || ''];
+    const saleResp = await fetch('/api/sheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: saleRow }),
+    });
+    const saleData = await saleResp.json();
+    if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
 
     closeRenovarModal();
     showToast(`✅ ${camp.artista} renovada hasta ${campData.nuevaFechaVenc}`, 'success');
