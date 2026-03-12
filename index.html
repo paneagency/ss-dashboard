@@ -1197,6 +1197,12 @@
           </div>
 
           <div class="form-group">
+            <label class="form-label">Fecha vencimiento</label>
+            <input class="form-input" id="renovar-fechavenc" type="date">
+            <span class="form-hint">Editar: usa esta fecha. Renovar: extiende desde aquí.</span>
+          </div>
+
+          <div class="form-group">
             <label class="form-label">Fecha de renovación<span>*</span></label>
             <input class="form-input" id="renovar-fecha" type="date">
             <span class="form-hint">Fecha en que se registra la nueva venta</span>
@@ -1235,6 +1241,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeRenovarModal()">Cancelar</button>
+        <button class="btn btn-ghost" id="editar-actual-btn" onclick="submitEditarActual()">Editar actual</button>
         <button class="btn btn-primary" id="renovar-submit-btn" onclick="submitRenovar()">Renovar y registrar venta</button>
       </div>
     </div>
@@ -3244,6 +3251,7 @@ function openRenovarModal(row) {
 
   document.getElementById('renovar-artista-label').textContent = `${camp.artista} — ${camp.vendedor}`;
   document.getElementById('renovar-duracion').value = camp.duracion || 30;
+  document.getElementById('renovar-fechavenc').value = camp.fechaVencimiento || '';
   document.getElementById('renovar-fecha').value = localDateStr(new Date());
   document.getElementById('renovar-metodo').value = camp.metodo || '';
   renovarAutoComision();
@@ -3334,6 +3342,50 @@ async function submitRenovar() {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
     btn.disabled = false; btn.textContent = 'Renovar y registrar venta';
+  }
+}
+
+async function submitEditarActual() {
+  const camp = _campanias.find(c => c.row === _renovarRow);
+  if (!camp) return;
+  const btn = document.getElementById('editar-actual-btn');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  const errEl = document.getElementById('renovar-error');
+  errEl.style.display = 'none';
+
+  try {
+    const duracion     = parseInt(document.getElementById('renovar-duracion').value) || 30;
+    const fechaVencimiento = document.getElementById('renovar-fechavenc').value;
+    const metodo       = document.getElementById('renovar-metodo').value.trim();
+    const precio       = document.getElementById('renovar-precio').value.trim();
+    const gasto        = document.getElementById('renovar-gasto').value || '0';
+    const pauta        = document.getElementById('renovar-pauta').value.trim();
+    const gastosRows   = [...document.querySelectorAll('#renovar-gasto-rows .gasto-row')].map(r => ({
+      amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
+      provider: r.querySelector('.gasto-provider').value.trim(),
+    })).filter(r => r.amount > 0);
+
+    const resp = await fetch('/api/campaign', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        editOnly: true,
+        row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
+        duracion, fechaVencimiento,
+        masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
+        precio, gasto, metodo, pauta, gastosRows, genero: camp.genero,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+
+    closeRenovarModal();
+    showToast(`✅ ${camp.artista} actualizada`, 'success');
+    await loadCampanias();
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Editar actual';
   }
 }
 
