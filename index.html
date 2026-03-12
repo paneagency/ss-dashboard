@@ -1190,9 +1190,9 @@
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn btn-sm camp-view-btn active" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
-      <button class="btn btn-sm camp-view-btn" data-view="calendario" onclick="setCampView('calendario')">📅 Calendario</button>
+      <button class="btn btn-sm camp-view-btn active" data-view="calendario" onclick="setCampView('calendario')">📅 Calendario</button>
       <button class="btn btn-sm camp-view-btn" data-view="hoy" onclick="setCampView('hoy')">⚡ Hoy</button>
+      <button class="btn btn-sm camp-view-btn" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
       <button class="btn btn-sm camp-view-btn" data-view="vencidas" onclick="setCampView('vencidas')">⚠️ Vencidas</button>
     </div>
     <div id="campanias-list"></div>
@@ -3064,7 +3064,7 @@ async function submitSale(e) {
 
 // ── CAMPAÑAS ───────────────────────────────────────────────
 let _campanias = [];
-let _campView = 'lista';
+let _campView = 'calendario';
 let _campCalMonth = new Date();
 
 function setCampView(v) {
@@ -3232,7 +3232,7 @@ function renderCampCalendario(data, today) {
       const days  = Math.round((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000);
       const color = days < 0 ? 'var(--red)' : days <= 3 ? 'var(--amber)' : 'var(--green)';
       const bg    = days < 0 ? 'rgba(248,81,73,0.15)' : days <= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
-      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color}" title="${c.artista} — ${c.vendedor}">${c.artista}</div>`;
+      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};cursor:pointer" onclick="showCampCalDetail(${c.row})" title="${c.artista} — ${c.vendedor}">${c.artista}</div>`;
     }).join('');
 
     html += `<div class="camp-cal-day${isToday ? ' today' : ''}">
@@ -3252,7 +3252,62 @@ function renderCampCalendario(data, today) {
     html += `<p style="font-size:12px;color:var(--muted);margin-top:12px;text-align:center">${outsideMonth.length} campaña(s) activa(s) en otros meses</p>`;
   }
 
+  html += `<div id="camp-cal-detail" style="margin-top:16px"></div>`;
+
   list.innerHTML = html;
+}
+
+let _campCalDetailRow = null;
+function showCampCalDetail(row) {
+  const detail = document.getElementById('camp-cal-detail');
+  if (!detail) return;
+  // Toggle: si ya está abierto el mismo, lo cierra
+  if (_campCalDetailRow === row) {
+    _campCalDetailRow = null;
+    detail.innerHTML = '';
+    return;
+  }
+  _campCalDetailRow = row;
+  const c = _campanias.find(c => c.row === row);
+  if (!c) return;
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const venc    = new Date(c.fechaVencimiento + 'T12:00:00');
+  const days    = Math.round((venc - today) / 86400000);
+  const daysLbl = days < 0 ? 'Vencida' : days === 0 ? 'Hoy' : `${days}d`;
+  const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  let badgeBg, badgeColor, borderColor;
+  if (days < 0)       { badgeBg = 'rgba(248,81,73,0.15)';  badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
+  else if (days <= 3) { badgeBg = 'rgba(245,158,11,0.15)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
+  else if (days <= 7) { badgeBg = 'rgba(245,158,11,0.08)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.2)'; }
+  else                { badgeBg = 'rgba(16,185,129,0.12)'; badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.25)'; }
+
+  const hasPauta  = !!c.pauta;
+  const hasGastos = !!c.detalleGastos;
+  const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+  const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+
+  detail.innerHTML = `
+    <div class="campania-card" style="border-color:${borderColor}">
+      <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
+        ${daysLbl}
+        <span class="badge-days-label">${days >= 0 ? 'restantes' : ''}</span>
+      </div>
+      <div class="campania-info">
+        <div class="campania-artista">${c.artista}</div>
+        <div class="campania-meta">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
+      </div>
+      <div class="campania-actions" onclick="event.stopPropagation()">
+        ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})" title="Copiar pauta">📋</button>` : ''}
+        ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${row},'gastos-cal')" title="Ver gastos">💰</button>` : ''}
+        <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${row})" title="Editar campaña">⚙️</button>
+        <button class="btn btn-sm btn-renovar" onclick="renovarRapido(${row})">↻ Renovar</button>
+        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${row})">✕</button>
+      </div>
+      ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-cal">${pautaEsc}</div>` : ''}
+      ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-cal">${gastosEsc}</div>` : ''}
+    </div>`;
 }
 
 function toggleCampExpand(idx, tipo) {
