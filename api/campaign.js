@@ -236,11 +236,16 @@ module.exports = async (req, res) => {
         console.error('Calendar error (non-fatal):', calErr.message);
       }
 
+      const detalleGastos = (gastosRows || [])
+        .filter(r => r.amount > 0)
+        .map(r => `(${r.amount})${r.provider ? ' ' + r.provider : ''}`)
+        .join('\n');
+
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:O`,
+        range: `${CAMPANAS_SHEET}!A:P`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '']] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos]] },
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento });
