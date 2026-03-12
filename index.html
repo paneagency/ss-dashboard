@@ -1177,7 +1177,7 @@
   <div id="renovar-modal" class="modal-overlay" onclick="if(event.target===this)closeRenovarModal()">
     <div class="modal">
       <div class="modal-header">
-        <span class="modal-title">Renovar campaña</span>
+        <span class="modal-title">Editar campaña</span>
         <button class="modal-close" onclick="closeRenovarModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -3095,7 +3095,7 @@ function renderCampaniasTab() {
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
 
     return `
-    <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor}">
+    <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
         ${daysLbl}
         <span class="badge-days-label">${days >= 0 ? 'restantes' : ''}</span>
@@ -3104,11 +3104,11 @@ function renderCampaniasTab() {
         <div class="campania-artista">${c.artista}</div>
         <div class="campania-meta">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
       </div>
-      <div class="campania-actions">
-        ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.12);color:var(--indigo);border:1px solid rgba(99,102,241,0.3)" onclick="toggleCampExpand(${idx},'pauta')" title="Ver pauta">📄</button>` : ''}
+      <div class="campania-actions" onclick="event.stopPropagation()">
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
-        <button class="btn btn-sm btn-renovar" onclick="openRenovarModal(${idx})" touch-action="manipulation">↻ Renovar</button>
+        <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
+        <button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>
         <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
@@ -3135,7 +3135,51 @@ function copiarPauta(idx) {
     .catch(() => showToast('No se pudo copiar', 'error'));
 }
 
-// Modal renovar
+// ── Renovar rápido (sin modal) ──────────────────────────────
+async function renovarRapido(idx) {
+  const camp = _campanias.find(c => c.row === idx);
+  if (!camp) return;
+  const btn = document.getElementById(`renovar-btn-${idx}`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+
+  try {
+    const resp = await fetch('/api/campaign', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
+        duracion: camp.duracion, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
+        precio: camp.precio, metodo: camp.metodo, pauta: camp.pauta,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+
+    // Registrar nueva venta automáticamente
+    if (camp.precio) {
+      const today = localDateStr(new Date());
+      const [fy, fm, fd] = today.split('-');
+      const comisionPct = COMISIONES[camp.metodo?.toLowerCase()] ?? 0;
+      const precioN = parseFloat(camp.precio) || 0;
+      const gastoN  = parseFloat(camp.gasto)  || 0;
+      const neto    = (precioN - gastoN) * (1 - comisionPct / 100);
+      const margen  = precioN > 0 ? (neto / precioN * 100).toFixed(2) : 0;
+      await fetch('/api/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo, comisionPct, camp.precio, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''] }),
+      });
+    }
+
+    showToast(`✅ ${camp.artista} renovada hasta ${data.nuevaFechaVenc}`, 'success');
+    await loadCampanias();
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Renovar'; }
+  }
+}
+
+// Modal editar campaña
 let _renovarRow = null;
 
 function renovarAutoComision() {
@@ -3180,6 +3224,7 @@ function renovarAutofillPrecio() {
   }
 }
 
+function openEditModal(row) { openRenovarModal(row); }
 function openRenovarModal(row) {
   _renovarRow = row;
   const camp = _campanias.find(c => c.row === row);
