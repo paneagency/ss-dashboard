@@ -1,8 +1,10 @@
 const { google } = require('googleapis');
 
-const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
-const CLIENTES_SHEET = 'Clientes';
-const CAMPANAS_SHEET = 'CampañasCalendario';
+const SPREADSHEET_ID    = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
+const CLIENTES_SHEET    = 'Clientes';
+const CAMPANAS_SHEET    = 'CampañasCalendario';
+const CLIENTES_DB_ID    = '1-RgACwkV412FbwWe8J1PvI3gaftwY5w276v1NY3tyxc';
+const CLIENTES_DB_SHEET = '2025';
 
 // ── Calendarios ────────────────────────────────────────────────
 const MASTER_CAL  = 'paneagency@gmail.com';
@@ -71,8 +73,8 @@ async function ensureSheets(sheets) {
 
   const headerData = [];
   if (toCreate.includes(CLIENTES_SHEET))
-    headerData.push({ range: `${CLIENTES_SHEET}!A1:G1`,
-      values: [['ID','NOMBRE','GÉNERO','TELÉFONO','SPOTIFY','INSTAGRAM','FECHA_PRIMERA_COMPRA']] });
+    headerData.push({ range: `${CLIENTES_SHEET}!A1:I1`,
+      values: [['ID','NOMBRE','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','INSTAGRAM','FECHA_PRIMERA_COMPRA']] });
   if (toCreate.includes(CAMPANAS_SHEET))
     headerData.push({ range: `${CAMPANAS_SHEET}!A1:O1`,
       values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO']] });
@@ -81,6 +83,30 @@ async function ensureSheets(sheets) {
     spreadsheetId: SPREADSHEET_ID,
     requestBody: { valueInputOption: 'RAW', data: headerData },
   });
+}
+
+async function lookupClientDB(sheets, artista) {
+  try {
+    const resp = await sheets.spreadsheets.values.get({
+      spreadsheetId: CLIENTES_DB_ID,
+      range: `${CLIENTES_DB_SHEET}!A:F`,
+    });
+    const rows = (resp.data.values || []).slice(1);
+    const match = rows.find(r =>
+      (r[0] || '').toLowerCase().trim() === artista.toLowerCase().trim()
+    );
+    if (!match) return null;
+    return {
+      spotify: match[1] || '',
+      genero:  match[2] || '',
+      pais:    match[3] || '',
+      telefono: match[4] || '',
+      email:   match[5] || '',
+    };
+  } catch (e) {
+    console.warn('lookupClientDB error:', e.message);
+    return null;
+  }
 }
 
 async function getOrCreateClient(sheets, artista, genero, fechaVenta) {
@@ -94,12 +120,22 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta) {
   );
   if (found) return found[0];
 
-  const newId = `C${String(rows.length).padStart(3, '0')}`; // rows.length includes header
+  const db = await lookupClientDB(sheets, artista);
+  const newId = `C${String(rows.length).padStart(3, '0')}`;
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${CLIENTES_SHEET}!A:G`,
+    range: `${CLIENTES_SHEET}!A:I`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[newId, artista, genero || '', '', '', '', fechaVenta]] },
+    requestBody: { values: [[
+      newId, artista,
+      genero || db?.genero || '',
+      db?.pais     || '',
+      db?.telefono || '',
+      db?.email    || '',
+      db?.spotify  || '',
+      '',
+      fechaVenta,
+    ]] },
   });
   return newId;
 }
@@ -183,14 +219,15 @@ module.exports = async (req, res) => {
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CLIENTES_SHEET}!A:G`,
+          range: `${CLIENTES_SHEET}!A:I`,
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
           clients: rows.map(r => ({
             id: r[0], nombre: r[1], genero: r[2],
-            telefono: r[3], spotify: r[4], instagram: r[5],
-            fechaPrimeraCompra: r[6],
+            pais: r[3], telefono: r[4], email: r[5],
+            spotify: r[6], instagram: r[7],
+            fechaPrimeraCompra: r[8],
           })),
         });
       }
