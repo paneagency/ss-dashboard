@@ -1217,7 +1217,7 @@
 
           <div class="form-group">
             <label class="form-label">Precio bruto</label>
-            <input class="form-input" id="renovar-precio" type="number" step="0.01" min="0" placeholder="0.00" oninput="renovarRecalcular()">
+            <input class="form-input" id="renovar-precio" type="number" step="0.01" min="0" placeholder="0.00" oninput="renovarRecalcular();renovarSyncPrecioToPauta()">
             <input type="hidden" id="renovar-comision-hidden" value="0">
           </div>
 
@@ -3223,6 +3223,19 @@ function addRenovarGastoRow(amount, provider) {
     <button type="button" class="btn-remove-gasto" onclick="this.closest('.gasto-row').remove();renovarRecalcular()" title="Eliminar">✕</button>
   `;
   container.appendChild(row);
+}
+
+function renovarSyncPrecioToPauta() {
+  const precio = parseFloat(document.getElementById('renovar-precio').value);
+  if (!precio) return;
+  const el = document.getElementById('renovar-pauta');
+  const text = el.value;
+  const regex = /((?:Total|Promo):\s*)(\d+(?:[.,]\d+)?)(\s*usd)/gi;
+  let lastMatch = null;
+  let m;
+  while ((m = regex.exec(text)) !== null) lastMatch = m;
+  if (!lastMatch) return;
+  el.value = text.slice(0, lastMatch.index) + lastMatch[1] + precio + lastMatch[3] + text.slice(lastMatch.index + lastMatch[0].length);
 }
 
 function renovarAutofillPrecio() {
