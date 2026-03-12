@@ -3155,7 +3155,8 @@ async function renovarRapido(idx) {
       body: JSON.stringify({
         row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
         duracion: camp.duracion, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
-        precio: camp.precio, metodo: camp.metodo, pauta: camp.pauta, gastosRows,
+        precio: camp.precio, gasto: camp.gasto, metodo: camp.metodo, pauta: camp.pauta,
+        gastosRows, genero: camp.genero,
       }),
     });
     const data = await resp.json();
@@ -3299,7 +3300,7 @@ async function submitRenovar() {
       body: JSON.stringify({
         row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
         duracion, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
-        precio, metodo, pauta, gastosRows,
+        precio, gasto, metodo, pauta, gastosRows, genero: camp.genero,
       }),
     });
     const campData = await campResp.json();
