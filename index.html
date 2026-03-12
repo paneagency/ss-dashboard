@@ -337,6 +337,11 @@
     .form-input.auto { border-style: dashed; color: var(--muted); }
     .form-input.auto:focus { border-style: solid; color: var(--text); }
     .form-hint { font-size: 11px; color: var(--muted2); }
+    .gasto-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .gasto-row .gasto-amount { width: 90px; flex-shrink: 0; }
+    .gasto-row .gasto-provider { flex: 1; }
+    .gasto-row .btn-remove-gasto { flex-shrink: 0; padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .gasto-row .btn-remove-gasto:hover { color: var(--danger, #e55); border-color: var(--danger, #e55); }
     .form-section { font-size: 11px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); grid-column: 1/-1; }
     .auth-bar {
       display: flex; align-items: center; gap: 12px; padding: 12px 16px;
@@ -817,9 +822,11 @@
             <input class="form-input" id="f-precio" type="number" step="0.01" min="0" placeholder="0.00" oninput="recalcular()" required>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Gasto</label>
-            <input class="form-input" id="f-gasto" type="number" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
+          <div class="form-group full">
+            <label class="form-label">Gasto / Proveedores</label>
+            <div id="gasto-rows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addGastoRow()" style="margin-top:6px;font-size:12px">+ Agregar proveedor</button>
+            <input type="hidden" id="f-gasto" value="0">
           </div>
 
           <div class="form-group" style="display:none">
@@ -849,6 +856,7 @@
     </div>
   </div>
 </div>
+<datalist id="list-providers"></datalist>
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
@@ -1474,6 +1482,10 @@ async function init() {
           window._vendors = d.vendors.map(v => v.name);
           fillSelect('f-vendor', window._vendors);
           fillDatalist('list-ventas', window._vendors);
+        }
+        if (d.providers) {
+          window._providers = d.providers;
+          fillDatalist('list-providers', window._providers);
         }
       }).catch(() => {});
       return;
@@ -2744,6 +2756,46 @@ function autofillPrecioFromPauta() {
 
   document.getElementById('f-precio').value = precio;
   recalcular();
+
+  // También detecta líneas de gasto tipo "(35) Daniel Rios" y pre-rellena filas
+  autofillGastosFromPauta(text);
+}
+
+function addGastoRow(amount, provider) {
+  const container = document.getElementById('gasto-rows');
+  const row = document.createElement('div');
+  row.className = 'gasto-row';
+  row.innerHTML = `
+    <input type="number" class="form-input gasto-amount" step="0.01" min="0" placeholder="0.00" value="${amount || ''}" oninput="recalcularGasto()">
+    <input type="text" class="form-input gasto-provider" list="list-providers" placeholder="Proveedor (opcional)" value="${provider || ''}">
+    <button type="button" class="btn-remove-gasto" onclick="removeGastoRow(this)" title="Eliminar">✕</button>
+  `;
+  container.appendChild(row);
+  recalcularGasto();
+}
+
+function removeGastoRow(btn) {
+  btn.closest('.gasto-row').remove();
+  recalcularGasto();
+}
+
+function recalcularGasto() {
+  const total = [...document.querySelectorAll('.gasto-amount')]
+    .reduce((sum, el) => sum + (parseFloat(el.value) || 0), 0);
+  document.getElementById('f-gasto').value = total;
+  recalcular();
+}
+
+function autofillGastosFromPauta(text) {
+  const lines = text.split('\n');
+  const gastoLines = lines
+    .map(l => l.trim().match(/^\((\d+(?:\.\d+)?)\)\s+(.+)$/))
+    .filter(Boolean);
+  if (!gastoLines.length) return;
+
+  // Limpiar filas existentes y agregar las detectadas
+  document.getElementById('gasto-rows').innerHTML = '';
+  gastoLines.forEach(m => addGastoRow(parseFloat(m[1]), m[2].trim()));
 }
 
 function autofillFromArtist() {
@@ -2783,6 +2835,10 @@ function openModal() {
     ventaInput.readOnly = true;
   }
 
+  // Iniciar con una fila de gasto vacía
+  document.getElementById('gasto-rows').innerHTML = '';
+  addGastoRow();
+
   document.getElementById('modal-overlay').classList.add('open');
   // focus solo en desktop (en mobile dispara teclado virtual y causa reflow)
   if (window.innerWidth > 768) document.getElementById('f-artista').focus();
@@ -2791,6 +2847,8 @@ function openModal() {
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
   document.getElementById('sale-form').reset();
+  document.getElementById('gasto-rows').innerHTML = '';
+  document.getElementById('f-gasto').value = '0';
   document.getElementById('f-neto').value = '';
   document.getElementById('f-final').value = '';
   document.getElementById('f-margen').value = '';

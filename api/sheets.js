@@ -55,15 +55,16 @@ module.exports = async (req, res) => {
 
     // ── LISTA DE VENDEDORES ────────────────────────────────────
     if (req.method === 'GET') {
-      const resp = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Vendedores!A:B',
-      });
-      const rows = (resp.data.values || []).slice(1); // skip header
-      const vendors = rows
+      const [vendResp, provResp] = await Promise.all([
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:B' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Proveedores!A:A' }).catch(() => ({ data: { values: [] } })),
+      ]);
+      const vendors = (vendResp.data.values || []).slice(1)
         .filter(r => r[0]?.trim())
         .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0 }));
-      return res.json({ vendors });
+      const providers = (provResp.data.values || []).slice(1)
+        .map(r => r[0]?.trim()).filter(Boolean);
+      return res.json({ vendors, providers });
     }
 
     // ── AGREGAR VENTA ─────────────────────────────────────────
