@@ -3143,13 +3143,19 @@ async function renovarRapido(idx) {
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
 
   try {
+    // Reconstruir gastosRows desde detalleGastos guardado
+    const gastosRows = (camp.detalleGastos || '').split('\n')
+      .map(l => l.trim().match(/^\((\d+(?:\.\d+)?)\)\s*(.*)?$/))
+      .filter(Boolean)
+      .map(m => ({ amount: parseFloat(m[1]), provider: (m[2] || '').trim() }));
+
     const resp = await fetch('/api/campaign', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
         duracion: camp.duracion, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
-        precio: camp.precio, metodo: camp.metodo, pauta: camp.pauta,
+        precio: camp.precio, metodo: camp.metodo, pauta: camp.pauta, gastosRows,
       }),
     });
     const data = await resp.json();

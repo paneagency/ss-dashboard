@@ -208,6 +208,8 @@ module.exports = async (req, res) => {
           duracion: parseInt(r[4]) || 30,
           masterEventId: r[5] || '', vendorEventId: r[6] || '',
           estado: r[7] || '',
+          metodo: r[8] || '', precio: r[9] || '', gasto: r[10] || '',
+          genero: r[14] || '',
           detalleGastos: r[15] || '',
           pauta: r[16] || '',
         }))
