@@ -1198,6 +1198,12 @@
     <div id="campanias-list"></div>
   </section>
 
+  <!-- Popover: detalle campaña calendario -->
+  <div id="camp-cal-popover" style="display:none;position:fixed;z-index:1100;max-width:360px;width:90vw;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.5);padding:16px">
+    <button onclick="closeCampCalPopover()" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;line-height:1">✕</button>
+    <div id="camp-cal-popover-content"></div>
+  </div>
+
   <!-- Modal: Renovar campaña -->
   <div id="renovar-modal" class="modal-overlay" onclick="if(event.target===this)closeRenovarModal()">
     <div class="modal">
@@ -3232,7 +3238,7 @@ function renderCampCalendario(data, today) {
       const days  = Math.round((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000);
       const color = days < 0 ? 'var(--red)' : days <= 3 ? 'var(--amber)' : 'var(--green)';
       const bg    = days < 0 ? 'rgba(248,81,73,0.15)' : days <= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
-      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};cursor:pointer" onclick="showCampCalDetail(${c.row})" title="${c.artista} — ${c.vendedor}">${c.artista}</div>`;
+      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};cursor:pointer" onclick="showCampCalDetail(event,${c.row})" title="${c.artista} — ${c.vendedor}">${c.artista}</div>`;
     }).join('');
 
     html += `<div class="camp-cal-day${isToday ? ' today' : ''}">
@@ -3252,21 +3258,19 @@ function renderCampCalendario(data, today) {
     html += `<p style="font-size:12px;color:var(--muted);margin-top:12px;text-align:center">${outsideMonth.length} campaña(s) activa(s) en otros meses</p>`;
   }
 
-  html += `<div id="camp-cal-detail" style="margin-top:16px"></div>`;
-
   list.innerHTML = html;
 }
 
 let _campCalDetailRow = null;
-function showCampCalDetail(row) {
-  const detail = document.getElementById('camp-cal-detail');
-  if (!detail) return;
-  // Toggle: si ya está abierto el mismo, lo cierra
-  if (_campCalDetailRow === row) {
-    _campCalDetailRow = null;
-    detail.innerHTML = '';
-    return;
-  }
+function closeCampCalPopover() {
+  _campCalDetailRow = null;
+  const pop = document.getElementById('camp-cal-popover');
+  if (pop) pop.style.display = 'none';
+}
+function showCampCalDetail(evt, row) {
+  evt.stopPropagation();
+  // Toggle
+  if (_campCalDetailRow === row) { closeCampCalPopover(); return; }
   _campCalDetailRow = row;
   const c = _campanias.find(c => c.row === row);
   if (!c) return;
@@ -3288,26 +3292,45 @@ function showCampCalDetail(row) {
   const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
   const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
 
-  detail.innerHTML = `
-    <div class="campania-card" style="border-color:${borderColor}">
-      <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
-        ${daysLbl}
-        <span class="badge-days-label">${days >= 0 ? 'restantes' : ''}</span>
+  const pop = document.getElementById('camp-cal-popover');
+  const content = document.getElementById('camp-cal-popover-content');
+  content.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-right:20px">
+      <div style="background:${badgeBg};color:${badgeColor};border-radius:8px;padding:6px 10px;font-weight:700;font-size:14px;flex-shrink:0">${daysLbl}${days >= 0 ? '<div style="font-size:9px;font-weight:400">restantes</div>' : ''}</div>
+      <div>
+        <div style="font-weight:600;font-size:15px">${c.artista}</div>
+        <div style="font-size:12px;color:var(--muted)">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
       </div>
-      <div class="campania-info">
-        <div class="campania-artista">${c.artista}</div>
-        <div class="campania-meta">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
-      </div>
-      <div class="campania-actions" onclick="event.stopPropagation()">
-        ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})" title="Copiar pauta">📋</button>` : ''}
-        ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${row},'gastos-cal')" title="Ver gastos">💰</button>` : ''}
-        <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${row})" title="Editar campaña">⚙️</button>
-        <button class="btn btn-sm btn-renovar" onclick="renovarRapido(${row})">↻ Renovar</button>
-        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${row})">✕</button>
-      </div>
-      ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-cal">${pautaEsc}</div>` : ''}
-      ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-cal">${gastosEsc}</div>` : ''}
-    </div>`;
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${hasPauta||hasGastos?'10px':'0'}">
+      ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})">📋 Copiar pauta</button>` : ''}
+      ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">💰 Gastos</button><div class="campania-expand" style="width:100%;margin-top:6px">${gastosEsc}</div>` : ''}
+      <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${row});closeCampCalPopover()">⚙️ Editar</button>
+      <button class="btn btn-sm btn-renovar" onclick="renovarRapido(${row});closeCampCalPopover()">↻ Renovar</button>
+      <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${row});closeCampCalPopover()">✕ No renueva</button>
+    </div>
+    ${hasPauta ? `<div style="font-size:12px;color:var(--muted);white-space:pre-wrap;line-height:1.5;max-height:120px;overflow-y:auto;border-top:1px solid var(--border);padding-top:8px">${pautaEsc}</div>` : ''}
+  `;
+
+  // Posicionar cerca del chip
+  pop.style.display = 'block';
+  const chipRect = evt.target.getBoundingClientRect();
+  const popW = 360;
+  const popH = pop.offsetHeight || 200;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let left = chipRect.right + 8;
+  if (left + popW > vw - 8) left = chipRect.left - popW - 8;
+  if (left < 8) left = 8;
+
+  let top = chipRect.top;
+  if (top + popH > vh - 8) top = vh - popH - 8;
+  if (top < 8) top = 8;
+
+  pop.style.left = left + 'px';
+  pop.style.top  = top  + 'px';
+  pop.style.borderColor = borderColor;
 }
 
 function toggleCampExpand(idx, tipo) {
@@ -3755,6 +3778,14 @@ async function handleLogin() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
   document.getElementById('login-username').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+});
+
+// Cerrar popover campaña al hacer click fuera
+document.addEventListener('click', e => {
+  const pop = document.getElementById('camp-cal-popover');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target)) {
+    closeCampCalPopover();
+  }
 });
 
 // ── ADMIN SECUNDARIO ────────────────────────────────────────
