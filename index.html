@@ -2781,7 +2781,12 @@ function updateVencimiento() {
   const el = document.getElementById('f-vencimiento');
   if (!fechaVal) { el.value = ''; return; }
   const d = new Date(fechaVal + 'T12:00:00');
-  d.setDate(d.getDate() + duracion);
+  const monthMap = { 30: 1, 60: 2, 90: 3 };
+  if (monthMap[duracion]) {
+    d.setMonth(d.getMonth() + monthMap[duracion]);
+  } else {
+    d.setDate(d.getDate() + duracion);
+  }
   el.value = d.toISOString().slice(0, 10);
 }
 
