@@ -3230,15 +3230,25 @@ function openRenovarModal(row) {
   const camp = _campanias.find(c => c.row === row);
   if (!camp) return;
 
-  document.getElementById('renovar-artista-label').textContent = `🎵 ${camp.artista} — ${camp.vendedor}`;
+  document.getElementById('renovar-artista-label').textContent = `${camp.artista} — ${camp.vendedor}`;
   document.getElementById('renovar-duracion').value = camp.duracion || 30;
   document.getElementById('renovar-fecha').value = localDateStr(new Date());
   document.getElementById('renovar-metodo').value = camp.metodo || '';
+  renovarAutoComision();
   document.getElementById('renovar-precio').value = camp.precio || '';
   document.getElementById('renovar-pauta').value = camp.pauta || '';
-  document.getElementById('renovar-gasto').value = '0';
+
+  // Pre-rellenar filas de gasto desde detalleGastos "(35) Daniel Rios"
   document.getElementById('renovar-gasto-rows').innerHTML = '';
-  addRenovarGastoRow();
+  const gastoLines = (camp.detalleGastos || '').split('\n')
+    .map(l => l.trim().match(/^\((\d+(?:\.\d+)?)\)\s*(.*)?$/))
+    .filter(Boolean);
+  if (gastoLines.length) {
+    gastoLines.forEach(m2 => addRenovarGastoRow(parseFloat(m2[1]), (m2[2] || '').trim()));
+  } else {
+    addRenovarGastoRow();
+  }
+  renovarRecalcular();
   document.getElementById('renovar-error').style.display = 'none';
 
   const m = document.getElementById('renovar-modal');
