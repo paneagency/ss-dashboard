@@ -89,7 +89,7 @@ async function lookupClientDB(sheets, artista) {
   try {
     const resp = await sheets.spreadsheets.values.get({
       spreadsheetId: CLIENTES_DB_ID,
-      range: `${CLIENTES_DB_SHEET}!A:F`,
+      range: `${CLIENTES_DB_SHEET}!A:E`,
     });
     const rows = (resp.data.values || []).slice(1);
     const match = rows.find(r =>
@@ -97,11 +97,9 @@ async function lookupClientDB(sheets, artista) {
     );
     if (!match) return null;
     return {
-      spotify: match[1] || '',
-      genero:  match[2] || '',
-      pais:    match[3] || '',
+      pais:     match[3] || '',
       telefono: match[4] || '',
-      email:   match[5] || '',
+      email:    match[5] || '',
     };
   } catch (e) {
     console.warn('lookupClientDB error:', e.message);
@@ -128,11 +126,11 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[
       newId, artista,
-      genero || db?.genero || '',
+      genero || '',
       db?.pais     || '',
       db?.telefono || '',
       db?.email    || '',
-      db?.spotify  || '',
+      '',
       '',
       fechaVenta,
     ]] },
