@@ -438,8 +438,14 @@
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 16px 20px;
       display: flex; align-items: center; gap: 16px; margin-bottom: 10px;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s; flex-wrap: wrap;
     }
+    .campania-expand {
+      width: 100%; display: none; margin-top: 10px; padding-top: 10px;
+      border-top: 1px solid var(--border); font-size: 13px; color: var(--text);
+      white-space: pre-wrap; line-height: 1.6;
+    }
+    .campania-expand.open { display: block; }
     .campania-card:hover { border-color: var(--border2); }
     .campania-badge {
       width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
@@ -3044,8 +3050,14 @@ function renderCampaniasTab() {
 
     const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+    const idx = c.row;
+    const hasPauta  = !!c.pauta;
+    const hasGastos = !!c.detalleGastos;
+    const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+
     return `
-    <div class="campania-card" style="border-color:${borderColor}">
+    <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor}">
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
         ${daysLbl}
         <span class="badge-days-label">${days >= 0 ? 'restantes' : ''}</span>
@@ -3055,11 +3067,34 @@ function renderCampaniasTab() {
         <div class="campania-meta">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
       </div>
       <div class="campania-actions">
-        <button class="btn btn-sm btn-renovar" onclick="openRenovarModal(${c.row})" touch-action="manipulation">↻ Renovar</button>
-        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${c.row})" touch-action="manipulation">✕</button>
+        ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.12);color:var(--indigo);border:1px solid rgba(99,102,241,0.3)" onclick="toggleCampExpand(${idx},'pauta')" title="Ver pauta">📄</button>` : ''}
+        ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
+        ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
+        <button class="btn btn-sm btn-renovar" onclick="openRenovarModal(${idx})" touch-action="manipulation">↻ Renovar</button>
+        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
       </div>
+      ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
+      ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+function toggleCampExpand(idx, tipo) {
+  const el = document.getElementById(`camp-expand-${tipo}-${idx}`);
+  if (!el) return;
+  // Cerrar el otro si está abierto
+  const otro = tipo === 'pauta' ? 'gastos' : 'pauta';
+  const elOtro = document.getElementById(`camp-expand-${otro}-${idx}`);
+  if (elOtro) elOtro.classList.remove('open');
+  el.classList.toggle('open');
+}
+
+function copiarPauta(idx) {
+  const el = document.getElementById(`camp-expand-pauta-${idx}`);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent.trim())
+    .then(() => showToast('Pauta copiada', 'success'))
+    .catch(() => showToast('No se pudo copiar', 'error'));
 }
 
 // Modal renovar

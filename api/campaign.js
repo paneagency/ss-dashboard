@@ -198,7 +198,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:H`,
+        range: `${CAMPANAS_SHEET}!A:Q`,
       });
       let campanias = (resp.data.values || []).slice(1)
         .map((r, i) => ({
@@ -208,6 +208,8 @@ module.exports = async (req, res) => {
           duracion: parseInt(r[4]) || 30,
           masterEventId: r[5] || '', vendorEventId: r[6] || '',
           estado: r[7] || '',
+          detalleGastos: r[15] || '',
+          pauta: r[16] || '',
         }))
         .filter(c => c.estado === 'activa' && c.artista);
 
