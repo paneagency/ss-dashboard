@@ -1095,12 +1095,12 @@
   <!-- TAB: CLIENTES -->
   <section id="tab-clientes" class="tab-panel">
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-      <button class="btn btn-sm camp-view-btn active" data-clview="analisis" onclick="setClientesView('analisis')">📊 Análisis</button>
-      <button class="btn btn-sm camp-view-btn" data-clview="directorio" onclick="setClientesView('directorio')">📋 Directorio</button>
+      <button class="btn btn-sm camp-view-btn active" data-clview="directorio" onclick="setClientesView('directorio')">📋 Directorio</button>
+      <button class="btn btn-sm camp-view-btn" data-clview="analisis" onclick="setClientesView('analisis')">📊 Análisis</button>
     </div>
 
     <!-- Vista: Análisis -->
-    <div id="clientes-view-analisis">
+    <div id="clientes-view-analisis" style="display:none">
       <div class="section-header">
         <div>
           <div class="section-title">Análisis por Cliente / Artista</div>
@@ -1133,7 +1133,7 @@
     </div>
 
     <!-- Vista: Directorio -->
-    <div id="clientes-view-directorio" style="display:none">
+    <div id="clientes-view-directorio">
       <div class="table-card">
         <div class="table-header-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span class="table-title">📋 Directorio de Clientes</span>
@@ -1863,7 +1863,7 @@ function renderTab(tab) {
   if (tab === 'resumen') renderResumen();
   else if (tab === 'temporal') renderTemporal();
   else if (tab === 'generos') renderGeneros();
-  else if (tab === 'clientes') renderClientes();
+  else if (tab === 'clientes') renderDirectorio();
   else if (tab === 'metodos') renderMetodos();
   else if (tab === 'insights') renderInsights();
   else if (tab === 'vendedores') renderVendedores();
@@ -2556,6 +2556,7 @@ function setClientesView(view) {
   document.getElementById('clientes-view-analisis').style.display = view === 'analisis' ? '' : 'none';
   document.getElementById('clientes-view-directorio').style.display = view === 'directorio' ? '' : 'none';
   if (view === 'directorio') renderDirectorio();
+  else if (view === 'analisis') renderClientes();
 }
 
 // ── Directorio ───────────────────────────────────────────────
