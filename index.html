@@ -1031,9 +1031,9 @@
         <div id="today-sales-panel"></div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">Distribución de Ventas</div>
-        <div class="chart-subtitle">Proporción por vendedor</div>
-        <div class="chart-wrap"><canvas id="chart-resumen-vendor-donut"></canvas></div>
+        <div class="chart-title">⚡ Campañas que vencen hoy</div>
+        <div class="chart-subtitle">Seguimiento del día</div>
+        <div id="resumen-campanias-hoy" style="margin-top:8px"></div>
       </div>
     </div>
   </section>
@@ -1279,6 +1279,13 @@
       <div>
         <div class="section-title">Vendedores</div>
         <div class="section-subtitle">Performance y comparativa del período seleccionado</div>
+      </div>
+    </div>
+    <div class="chart-grid" style="margin-bottom:24px">
+      <div class="chart-card">
+        <div class="chart-title">Distribución de Ventas</div>
+        <div class="chart-subtitle">Proporción por vendedor</div>
+        <div class="chart-wrap"><canvas id="chart-resumen-vendor-donut"></canvas></div>
       </div>
     </div>
     <div class="vendedores-cards" id="vendedores-cards"></div>
@@ -2216,16 +2223,7 @@ function renderResumen() {
     renderTodayPanel();
     if (!data.length) { document.getElementById('kpi-grid').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin datos para los filtros seleccionados</div>'; return; }
     renderSecondaryAdminKpis(data);
-    // Vendor donut
-    const byVendor = aggByVendor(data).slice(0, 8);
-    mkChart('chart-resumen-vendor-donut', {
-      type: 'doughnut',
-      data: {
-        labels: byVendor.map(v => v.key),
-        datasets: [{ data: byVendor.map(v => v.precio), backgroundColor: PALETTE, borderColor: '#161b22', borderWidth: 2 }]
-      },
-      options: { cutout: '60%', plugins: { legend: { position: 'bottom', labels:{ color: tickColor, font:{size:12}, padding:12 } } } }
-    });
+    renderResumenCampaniasHoy();
     return;
   }
 
@@ -2290,20 +2288,7 @@ function renderResumen() {
   // Panel ventas de hoy
   renderTodayPanel();
   renderMonthsPanel();
-
-  // Vendor donut
-  const byVendor = aggByVendor(data).slice(0, 8);
-  mkChart('chart-resumen-vendor-donut', {
-    type: 'doughnut',
-    data: {
-      labels: byVendor.map(v => v.key),
-      datasets: [{ data: byVendor.map(v => v.precio), backgroundColor: PALETTE, borderColor: '#161b22', borderWidth: 2 }]
-    },
-    options: {
-      cutout: '60%',
-      plugins: { legend: { position: 'bottom', labels:{ color: tickColor, font:{size:12}, padding:12 } } }
-    }
-  });
+  renderResumenCampaniasHoy();
 }
 
 // ============================================================
@@ -3506,6 +3491,37 @@ async function submitSale(e) {
   }
 }
 
+function renderResumenCampaniasHoy() {
+  const el = document.getElementById('resumen-campanias-hoy');
+  if (!el) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const hoy = (_campanias || []).filter(c => {
+    const venc = new Date(c.fechaVencimiento + 'T12:00:00');
+    return Math.floor((venc - today) / 86400000) === 0;
+  });
+  if (!hoy.length) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">
+      <span style="font-size:28px">✅</span>
+      <span>Sin campañas venciendo hoy</span>
+    </div>`;
+    return;
+  }
+  el.innerHTML = hoy.map(c => {
+    const idx = c.row;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)" class="resumen-camp-hoy-row">
+      <div style="background:rgba(245,158,11,0.15);color:var(--amber);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;min-width:36px;text-align:center;flex-shrink:0">Hoy</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.artista}</div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.vendedor}${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-sm btn-renovar" onclick="renovarRapido(${idx})" title="Renovar">↻</button>
+        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" title="No renueva">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // ── CAMPAÑAS ───────────────────────────────────────────────
 let _campanias = [];
 let _campView = 'calendario';
@@ -3533,6 +3549,7 @@ async function loadCampanias() {
     const data = await resp.json();
     _campanias = data.campanias || [];
     renderCampaniasTab();
+    renderResumenCampaniasHoy();
     // Poblar datalist de representantes
     fillDatalist('list-representantes', _campanias.map(c => c.representante).filter(Boolean));
     // Poblar filtro de representantes
@@ -4467,6 +4484,20 @@ function renderVendedores() {
     document.getElementById('vendedores-compare').innerHTML = '';
     return;
   }
+
+  // Vendor donut
+  const byVendor = aggByVendor(data).slice(0, 8);
+  mkChart('chart-resumen-vendor-donut', {
+    type: 'doughnut',
+    data: {
+      labels: byVendor.map(v => v.key),
+      datasets: [{ data: byVendor.map(v => v.precio), backgroundColor: PALETTE, borderColor: '#161b22', borderWidth: 2 }]
+    },
+    options: {
+      cutout: '60%',
+      plugins: { legend: { position: 'bottom', labels:{ color: tickColor, font:{size:12}, padding:12 } } }
+    }
+  });
 
   // Obtener vendedores únicos del período
   const vendorNames = [...new Set(data.map(r => r.venta).filter(Boolean))].sort();
