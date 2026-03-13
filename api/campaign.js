@@ -73,11 +73,11 @@ async function ensureSheets(sheets) {
 
   const headerData = [];
   if (toCreate.includes(CLIENTES_SHEET))
-    headerData.push({ range: `${CLIENTES_SHEET}!A1:I1`,
-      values: [['ID','NOMBRE','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','INSTAGRAM','FECHA_PRIMERA_COMPRA']] });
+    headerData.push({ range: `${CLIENTES_SHEET}!A1:J1`,
+      values: [['ID','NOMBRE','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','INSTAGRAM','FECHA_PRIMERA_COMPRA','REPRESENTANTE']] });
   if (toCreate.includes(CAMPANAS_SHEET))
-    headerData.push({ range: `${CAMPANAS_SHEET}!A1:O1`,
-      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO']] });
+    headerData.push({ range: `${CAMPANAS_SHEET}!A1:R1`,
+      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO','DETALLE_GASTOS','PAUTA','REPRESENTANTE']] });
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
@@ -107,22 +107,34 @@ async function lookupClientDB(sheets, artista) {
   }
 }
 
-async function getOrCreateClient(sheets, artista, genero, fechaVenta) {
+async function getOrCreateClient(sheets, artista, genero, fechaVenta, representante) {
   const resp = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `${CLIENTES_SHEET}!A:B`,
   });
   const rows  = resp.data.values || [];
-  const found = rows.slice(1).find(r =>
+  const found = rows.slice(1).findIndex(r =>
     (r[1] || '').toLowerCase().trim() === artista.toLowerCase().trim()
   );
-  if (found) return found[0];
+  if (found !== -1) {
+    const clientId = rows[found + 1][0];
+    // Actualizar representante si se provee uno nuevo
+    if (representante) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CLIENTES_SHEET}!J${found + 2}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[representante]] },
+      });
+    }
+    return clientId;
+  }
 
   const db = await lookupClientDB(sheets, artista);
   const newId = `C${String(rows.length).padStart(3, '0')}`;
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${CLIENTES_SHEET}!A:I`,
+    range: `${CLIENTES_SHEET}!A:J`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[
       newId, artista,
@@ -133,6 +145,7 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta) {
       '',
       '',
       fechaVenta,
+      representante || '',
     ]] },
   });
   return newId;
@@ -223,7 +236,7 @@ module.exports = async (req, res) => {
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CLIENTES_SHEET}!A:I`,
+          range: `${CLIENTES_SHEET}!A:J`,
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
@@ -232,6 +245,7 @@ module.exports = async (req, res) => {
             pais: r[3], telefono: r[4], email: r[5],
             spotify: r[6], instagram: r[7],
             fechaPrimeraCompra: r[8],
+            representante: r[9] || '',
           })),
         });
       }
@@ -239,7 +253,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:Q`,
+        range: `${CAMPANAS_SHEET}!A:R`,
       });
       let campanias = (resp.data.values || []).slice(1)
         .map((r, i) => ({
@@ -253,6 +267,7 @@ module.exports = async (req, res) => {
           genero: r[14] || '',
           detalleGastos: r[15] || '',
           pauta: r[16] || '',
+          representante: r[17] || '',
         }))
         .filter(c => c.estado === 'activa' && c.artista);
 
@@ -264,13 +279,13 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
       const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
-      const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio);
+      const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '');
 
       let masterEventId = '', vendorEventId = '';
       try {
@@ -288,9 +303,9 @@ module.exports = async (req, res) => {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:Q`,
+        range: `${CAMPANAS_SHEET}!A:R`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '']] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '']] },
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento });
@@ -298,18 +313,19 @@ module.exports = async (req, res) => {
 
     // ── PUT: renovar campaña ──────────────────────────────────
     if (req.method === 'PUT') {
-      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, editOnly } = req.body;
+      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, editOnly } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
       // Leer fila completa actual para obtener fechaInicio y vencimiento base
       const campResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A${row}:Q${row}`,
+        range: `${CAMPANAS_SHEET}!A${row}:R${row}`,
       });
-      const oldRow      = campResp.data.values?.[0] || [];
-      const fechaInicio = oldRow[2] || new Date().toISOString().split('T')[0];
-      const baseDate    = oldRow[3] || new Date().toISOString().split('T')[0];
-      const genero      = generoBody || oldRow[14] || '';
+      const oldRow        = campResp.data.values?.[0] || [];
+      const fechaInicio   = oldRow[2] || new Date().toISOString().split('T')[0];
+      const baseDate      = oldRow[3] || new Date().toISOString().split('T')[0];
+      const genero        = generoBody || oldRow[14] || '';
+      const representante = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
 
       const nuevaFechaVenc = editOnly
         ? (fechaVencBody || baseDate)
@@ -337,9 +353,9 @@ module.exports = async (req, res) => {
         // Actualizar fila existente en place, sin crear nueva venta
         await sheets.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A${row}:Q${row}`,
+          range: `${CAMPANAS_SHEET}!A${row}:R${row}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '']] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
         });
       } else {
         // 1. Marcar fila vieja como "renovada"
@@ -353,9 +369,9 @@ module.exports = async (req, res) => {
         // 2. Agregar nueva fila activa con los datos actualizados
         await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:Q`,
+          range: `${CAMPANAS_SHEET}!A:R`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '']] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
         });
       }
 
