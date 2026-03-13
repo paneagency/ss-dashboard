@@ -3122,9 +3122,9 @@ function renderCampaniasTab() {
 
   if (_campView === 'calendario') { renderCampCalendario(data, today); return; }
   if (_campView === 'hoy') {
-    data = data.filter(c => Math.round((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) === 0);
+    data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) === 0);
   } else if (_campView === 'vencidas') {
-    data = data.filter(c => Math.round((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0);
+    data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0);
   } else {
     data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
   }
@@ -3146,7 +3146,7 @@ function renderCampList(data, today) {
   list.innerHTML = data.map(c => {
     const venc    = new Date(c.fechaVencimiento + 'T12:00:00');
     const diffMs  = venc - today;
-    const days    = Math.round(diffMs / 86400000);
+    const days    = Math.floor(diffMs / 86400000);
     const daysLbl = days < 0 ? 'Vencida' : days === 0 ? 'Hoy' : `${days}d`;
 
     let badgeBg, badgeColor, borderColor;
@@ -3235,7 +3235,7 @@ function renderCampCalendario(data, today) {
     const camps   = byDay[d] || [];
 
     const chips = camps.map(c => {
-      const days  = Math.round((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000);
+      const days  = Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000);
       const color = days < 0 ? 'var(--red)' : days <= 3 ? 'var(--amber)' : 'var(--green)';
       const bg    = days < 0 ? 'rgba(248,81,73,0.15)' : days <= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
       return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};cursor:pointer" onclick="showCampCalDetail(event,${c.row})" title="${c.artista} — ${c.vendedor}">${c.artista}</div>`;
@@ -3277,7 +3277,7 @@ function showCampCalDetail(evt, row) {
 
   const today = new Date(); today.setHours(0,0,0,0);
   const venc    = new Date(c.fechaVencimiento + 'T12:00:00');
-  const days    = Math.round((venc - today) / 86400000);
+  const days    = Math.floor((venc - today) / 86400000);
   const daysLbl = days < 0 ? 'Vencida' : days === 0 ? 'Hoy' : `${days}d`;
   const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
