@@ -73,8 +73,8 @@ async function ensureSheets(sheets) {
 
   const headerData = [];
   if (toCreate.includes(CLIENTES_SHEET))
-    headerData.push({ range: `${CLIENTES_SHEET}!A1:J1`,
-      values: [['ID','NOMBRE','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','INSTAGRAM','FECHA_PRIMERA_COMPRA','REPRESENTANTE']] });
+    headerData.push({ range: `${CLIENTES_SHEET}!A1:N1`,
+      values: [['ID','ARTISTA','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','FECHA_PRIMERA_COMPRA','REPRESENTANTE','NOMBRE','APODO','VENDEDOR','METODO_PAGO','ESTADO']] });
   if (toCreate.includes(CAMPANAS_SHEET))
     headerData.push({ range: `${CAMPANAS_SHEET}!A1:R1`,
       values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO','DETALLE_GASTOS','PAUTA','REPRESENTANTE']] });
@@ -107,8 +107,15 @@ async function lookupClientDB(sheets, artista) {
   }
 }
 
-async function updateClientRepresentante(sheets, artista, representante) {
-  if (!representante) return;
+// Columnas de la hoja Clientes (post-INSTAGRAM):
+// A=ID, B=ARTISTA, C=GÉNERO, D=PAIS, E=TELÉFONO, F=EMAIL, G=SPOTIFY,
+// H=FECHA_PRIMERA_COMPRA, I=REPRESENTANTE, J=NOMBRE, K=APODO,
+// L=VENDEDOR, M=METODO_PAGO, N=ESTADO
+const CLIENT_COLS = { representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N' };
+
+async function updateClientFields(sheets, artista, fields) {
+  const entries = Object.entries(fields).filter(([k, v]) => CLIENT_COLS[k] && v !== undefined && v !== null && v !== '');
+  if (!entries.length) return;
   const resp = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `${CLIENTES_SHEET}!A:B`,
@@ -117,16 +124,21 @@ async function updateClientRepresentante(sheets, artista, representante) {
   const idx = rows.slice(1).findIndex(r =>
     (r[1] || '').toLowerCase().trim() === artista.toLowerCase().trim()
   );
-  if (idx === -1) return; // cliente no existe, no hacer nada
-  await sheets.spreadsheets.values.update({
+  if (idx === -1) return;
+  const rowNum = idx + 2;
+  await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${CLIENTES_SHEET}!J${idx + 2}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[representante]] },
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: entries.map(([field, value]) => ({
+        range: `${CLIENTES_SHEET}!${CLIENT_COLS[field]}${rowNum}`,
+        values: [[value]],
+      })),
+    },
   });
 }
 
-async function getOrCreateClient(sheets, artista, genero, fechaVenta, representante) {
+async function getOrCreateClient(sheets, artista, genero, fechaVenta, representante, vendedor, metodo) {
   const resp = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `${CLIENTES_SHEET}!A:B`,
@@ -137,15 +149,10 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
   );
   if (found !== -1) {
     const clientId = rows[found + 1][0];
-    // Actualizar representante si se provee uno nuevo
-    if (representante) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!J${found + 2}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[representante]] },
-      });
-    }
+    // Actualizar campos relevantes del cliente existente
+    await updateClientFields(sheets, artista, {
+      representante, vendedor, metodoPago: metodo, estado: 'Activa',
+    });
     return clientId;
   }
 
@@ -153,7 +160,7 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
   const newId = `C${String(rows.length).padStart(3, '0')}`;
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${CLIENTES_SHEET}!A:J`,
+    range: `${CLIENTES_SHEET}!A:N`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[
       newId, artista,
@@ -161,10 +168,14 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
       db?.pais     || '',
       db?.telefono || '',
       db?.email    || '',
-      '',
-      '',
-      fechaVenta,
-      representante || '',
+      '',            // SPOTIFY
+      fechaVenta,    // FECHA_PRIMERA_COMPRA
+      representante || '',  // REPRESENTANTE
+      '',            // NOMBRE (contacto)
+      '',            // APODO
+      vendedor || '',       // VENDEDOR
+      metodo   || '',       // METODO_PAGO
+      'Activa',             // ESTADO
     ]] },
   });
   return newId;
@@ -256,16 +267,21 @@ module.exports = async (req, res) => {
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CLIENTES_SHEET}!A:J`,
+          range: `${CLIENTES_SHEET}!A:N`,
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
           clients: rows.map(r => ({
-            id: r[0], nombre: r[1], genero: r[2],
+            id: r[0], artista: r[1], genero: r[2],
             pais: r[3], telefono: r[4], email: r[5],
-            spotify: r[6], instagram: r[7],
-            fechaPrimeraCompra: r[8],
-            representante: r[9] || '',
+            spotify: r[6],
+            fechaPrimeraCompra: r[7] || '',
+            representante: r[8] || '',
+            nombre: r[9] || '',
+            apodo: r[10] || '',
+            vendedor: r[11] || '',
+            metodoPago: r[12] || '',
+            estado: r[13] || '',
           })),
         });
       }
@@ -305,7 +321,7 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
       const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
-      const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '');
+      const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '', vendedor, metodo || '');
 
       let masterEventId = '', vendorEventId = '';
       try {
@@ -347,8 +363,10 @@ module.exports = async (req, res) => {
       const genero        = generoBody || oldRow[14] || '';
       const representante = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
 
-      // Sincronizar representante en hoja Clientes
-      await updateClientRepresentante(sheets, artista, representante);
+      // Sincronizar campos en hoja Clientes
+      await updateClientFields(sheets, artista, {
+        representante, vendedor, metodoPago: metodo, estado: 'Activa',
+      });
 
       const nuevaFechaVenc = editOnly
         ? (fechaVencBody || baseDate)
@@ -440,6 +458,21 @@ module.exports = async (req, res) => {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [['finalizada']] },
       });
+
+      // Actualizar ESTADO en Clientes si no quedan campañas activas para este artista
+      if (artista) {
+        const remaining = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:H`,
+        });
+        const stillActive = (remaining.data.values || []).slice(1).some(r =>
+          (r[0] || '').toLowerCase().trim() === artista.toLowerCase().trim() &&
+          (r[7] || '') === 'activa'
+        );
+        if (!stillActive) {
+          await updateClientFields(sheets, artista, { estado: 'Sin pauta' });
+        }
+      }
 
       return res.json({ ok: true, debug: calResult });
     }

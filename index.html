@@ -1590,7 +1590,7 @@ async function init() {
         if (d.clients) {
           window._clientesMap = {};
           d.clients.forEach(c => {
-            if (c.nombre) window._clientesMap[c.nombre.toLowerCase().trim()] = c.representante || '';
+            if (c.artista) window._clientesMap[c.artista.toLowerCase().trim()] = c.representante || '';
           });
         }
       }).catch(() => {});
