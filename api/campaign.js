@@ -356,14 +356,31 @@ module.exports = async (req, res) => {
 
     // ── POST: nuevo cliente ───────────────────────────────────
     if (req.method === 'POST' && req.body.mode === 'client') {
-      const { artista, genero, pais, telefono, email, spotify, fechaPrimeraCompra, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
+      const { artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
       if (!artista) return res.status(400).json({ error: 'artista requerido' });
-      const newId = Date.now().toString();
+
+      // ID correlativo: leer IDs existentes y generar el siguiente C00X
+      const idResp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${CLIENTES_SHEET}!A:A` });
+      const existingIds = (idResp.data.values || []).slice(1).map(r => r[0] || '');
+      const maxNum = existingIds.reduce((max, id) => {
+        const m = (id || '').match(/^C(\d+)$/i);
+        return m ? Math.max(max, parseInt(m[1])) : max;
+      }, 0);
+      const newId = `C${String(maxNum + 1).padStart(3, '0')}`;
+
+      // Buscar primera compra real en hoja 2024; si no existe, usar fecha de hoy
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      const primeraCompra = (await findPrimeraCompra(sheets, artista)) || todayStr;
+
+      // Prefijo ' en teléfono para evitar que Sheets lo interprete como fórmula/número
+      const safeTel = telefono ? (telefono.startsWith('+') ? `'${telefono}` : telefono) : '';
+
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
         range: `${CLIENTES_SHEET}!A:N`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[newId, artista, genero || '', pais || '', telefono || '', email || '', spotify || '', fechaPrimeraCompra || '', representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa']] },
+        requestBody: { values: [[newId, artista, genero || '', pais || '', safeTel, email || '', spotify || '', primeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa']] },
       });
       return res.json({ ok: true });
     }
@@ -413,11 +430,12 @@ module.exports = async (req, res) => {
       const existingRow = existing.data.values?.[0] || [];
       const id = existingRow[0] || Date.now().toString();
       const fechaPrimeraCompra = existingRow[7] || ''; // Preservar siempre la fecha original
+      const safeTel = telefono ? (telefono.startsWith('+') ? `'${telefono}` : telefono) : '';
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${CLIENTES_SHEET}!A${row}:N${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[id, artista, genero || '', pais || '', telefono || '', email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '']] },
+        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '']] },
       });
       return res.json({ ok: true });
     }
