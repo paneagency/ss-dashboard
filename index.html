@@ -1094,44 +1094,54 @@
 
   <!-- TAB: CLIENTES -->
   <section id="tab-clientes" class="tab-panel">
-    <div class="section-header">
-      <div>
-        <div class="section-title">Análisis por Cliente / Artista</div>
-        <div class="section-subtitle">Comportamiento y valor de clientes</div>
-      </div>
-    </div>
-    <div class="kpi-grid" id="client-kpis" style="grid-template-columns: repeat(auto-fill, minmax(170px,1fr))"></div>
-    <div class="chart-grid">
-      <div class="chart-card full">
-        <div class="chart-title">Análisis Pareto — Clientes (80/20)</div>
-        <div class="chart-subtitle">El 80% de los ingresos es generado por estos clientes clave</div>
-        <div class="chart-wrap"><canvas id="chart-client-pareto"></canvas></div>
-        <p class="pareto-label" id="pareto-label"></p>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Top 10 Clientes por Final</div>
-        <div class="chart-subtitle">Ingreso final generado</div>
-        <div class="chart-wrap"><canvas id="chart-client-top"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Nuevos Clientes por Mes</div>
-        <div class="chart-subtitle">Primera compra registrada</div>
-        <div class="chart-wrap"><canvas id="chart-client-new"></canvas></div>
-      </div>
-    </div>
-    <div class="table-card">
-      <div class="table-header-bar"><span class="table-title">Ranking de Clientes</span></div>
-      <div class="table-scroll"><table id="table-clients"></table></div>
+    <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-sm camp-view-btn active" data-clview="analisis" onclick="setClientesView('analisis')">📊 Análisis</button>
+      <button class="btn btn-sm camp-view-btn" data-clview="directorio" onclick="setClientesView('directorio')">📋 Directorio</button>
     </div>
 
-    <!-- Directorio de Clientes -->
-    <div class="table-card" id="directorio-card" style="margin-top:24px">
-      <div class="table-header-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span class="table-title">📋 Directorio de Clientes</span>
-        <input type="text" id="directorio-search" class="form-input" placeholder="🔍 Buscar..." style="max-width:200px;margin-left:auto;padding:6px 10px;font-size:13px" oninput="renderDirectorio()">
-        <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="openClientModal()" style="display:none">+ Nuevo Cliente</button>
+    <!-- Vista: Análisis -->
+    <div id="clientes-view-analisis">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Análisis por Cliente / Artista</div>
+          <div class="section-subtitle">Comportamiento y valor de clientes</div>
+        </div>
       </div>
-      <div class="table-scroll"><table id="table-directorio"></table></div>
+      <div class="kpi-grid" id="client-kpis" style="grid-template-columns: repeat(auto-fill, minmax(170px,1fr))"></div>
+      <div class="chart-grid">
+        <div class="chart-card full">
+          <div class="chart-title">Análisis Pareto — Clientes (80/20)</div>
+          <div class="chart-subtitle">El 80% de los ingresos es generado por estos clientes clave</div>
+          <div class="chart-wrap"><canvas id="chart-client-pareto"></canvas></div>
+          <p class="pareto-label" id="pareto-label"></p>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Top 10 Clientes por Final</div>
+          <div class="chart-subtitle">Ingreso final generado</div>
+          <div class="chart-wrap"><canvas id="chart-client-top"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Nuevos Clientes por Mes</div>
+          <div class="chart-subtitle">Primera compra registrada</div>
+          <div class="chart-wrap"><canvas id="chart-client-new"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header-bar"><span class="table-title">Ranking de Clientes</span></div>
+        <div class="table-scroll"><table id="table-clients"></table></div>
+      </div>
+    </div>
+
+    <!-- Vista: Directorio -->
+    <div id="clientes-view-directorio" style="display:none">
+      <div class="table-card">
+        <div class="table-header-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span class="table-title">📋 Directorio de Clientes</span>
+          <input type="text" id="directorio-search" class="form-input" placeholder="🔍 Buscar..." style="max-width:200px;margin-left:auto;padding:6px 10px;font-size:13px" oninput="renderDirectorio()">
+          <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="openClientModal()" style="display:none">+ Nuevo Cliente</button>
+        </div>
+        <div class="table-scroll"><table id="table-directorio"></table></div>
+      </div>
     </div>
   </section>
 
@@ -1853,7 +1863,7 @@ function renderTab(tab) {
   if (tab === 'resumen') renderResumen();
   else if (tab === 'temporal') renderTemporal();
   else if (tab === 'generos') renderGeneros();
-  else if (tab === 'clientes') { renderClientes(); renderDirectorio(); }
+  else if (tab === 'clientes') renderClientes();
   else if (tab === 'metodos') renderMetodos();
   else if (tab === 'insights') renderInsights();
   else if (tab === 'vendedores') renderVendedores();
@@ -2540,15 +2550,28 @@ function renderGeneros() {
 // SECTION 5: CLIENTES
 // ============================================================
 
+// ── Sub-vistas de Clientes ────────────────────────────────────
+function setClientesView(view) {
+  document.querySelectorAll('[data-clview]').forEach(b => b.classList.toggle('active', b.dataset.clview === view));
+  document.getElementById('clientes-view-analisis').style.display = view === 'analisis' ? '' : 'none';
+  document.getElementById('clientes-view-directorio').style.display = view === 'directorio' ? '' : 'none';
+  if (view === 'directorio') renderDirectorio();
+}
+
 // ── Directorio ───────────────────────────────────────────────
 function renderDirectorio() {
   const role = window._currentUser?.role;
   const canEdit = ['admin', 'secondary_admin'].includes(role);
+  const isVendedor = ['vendedor', 'secondary_admin'].includes(role);
+  const vendorName = isVendedor ? (window._currentUser?.vendorName || window._currentUser?.name || '').toLowerCase() : null;
+
   const btn = document.getElementById('btn-nuevo-cliente');
   if (btn) btn.style.display = canEdit ? '' : 'none';
 
   const search = (document.getElementById('directorio-search')?.value || '').trim().toLowerCase();
   const data = (window._clientesArr || []).filter(c => {
+    // Vendedor solo ve sus propios clientes
+    if (vendorName && role === 'vendedor' && (c.vendedor || '').toLowerCase() !== vendorName) return false;
     if (!search) return true;
     return (c.artista || '').toLowerCase().includes(search) ||
            (c.nombre || '').toLowerCase().includes(search) ||
