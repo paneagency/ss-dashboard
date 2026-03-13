@@ -469,6 +469,17 @@
       background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.4);
       color: var(--indigo);
     }
+    /* Detalle cliente */
+    .detalle-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px }
+    .detalle-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px }
+    .detalle-field { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px }
+    .detalle-field-label { font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px }
+    .detalle-field-value { font-size:14px;font-weight:500;word-break:break-word }
+    .detalle-field-value a { color:var(--indigo);text-decoration:none }
+    .detalle-field-value a:hover { text-decoration:underline }
+    .detalle-field.full { grid-column:1/-1 }
+    #table-directorio tbody tr { cursor:pointer; }
+    #table-directorio tbody tr:hover td { background:rgba(99,102,241,0.04); }
     /* Celdas del calendario */
     .camp-cal-day {
       min-height: 80px; background: var(--surface); border: 1px solid var(--border);
@@ -1134,15 +1145,58 @@
 
     <!-- Vista: Directorio -->
     <div id="clientes-view-directorio">
-      <div class="table-card">
-        <div class="table-header-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span class="table-title">📋 Directorio de Clientes</span>
-          <input type="text" id="directorio-search" class="form-input" placeholder="🔍 Buscar..." style="max-width:200px;margin-left:auto;padding:6px 10px;font-size:13px" oninput="renderDirectorio()">
+      <!-- Barra de búsqueda -->
+      <div style="text-align:center;padding:12px 0 20px">
+        <div style="position:relative;display:inline-block;width:100%;max-width:520px">
+          <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:18px;opacity:0.45;pointer-events:none">🔍</span>
+          <input type="text" id="directorio-search" class="form-input"
+            placeholder="Buscar artista, contacto, país..."
+            style="width:100%;padding:14px 16px 14px 46px;font-size:16px;border-radius:12px;border:1.5px solid var(--border)"
+            oninput="renderDirectorio()">
+        </div>
+        <div style="margin-top:12px">
           <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="openClientModal()" style="display:none">+ Nuevo Cliente</button>
         </div>
+      </div>
+      <!-- Tabla -->
+      <div class="table-card">
         <div class="table-scroll"><table id="table-directorio"></table></div>
       </div>
     </div>
+
+  <!-- MODAL: DETALLE CLIENTE -->
+  <div id="modal-detalle-cliente" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeClientDetail()">
+    <div class="modal-box" style="max-width:560px;padding:0;overflow:hidden">
+      <!-- Header con color -->
+      <div id="detalle-header" style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:28px 28px 20px;position:relative">
+        <button class="modal-close" onclick="closeClientDetail()" style="position:absolute;top:16px;right:16px">✕</button>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div id="detalle-avatar" style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--indigo),var(--violet));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0"></div>
+          <div>
+            <div id="detalle-artista" style="font-size:20px;font-weight:700;line-height:1.2"></div>
+            <div id="detalle-nombre" style="font-size:13px;color:var(--muted);margin-top:3px"></div>
+            <div style="margin-top:6px" id="detalle-estado-wrap"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Cuerpo -->
+      <div style="padding:20px 28px 0">
+        <!-- Sección: Información -->
+        <div class="detalle-section-title">Información</div>
+        <div class="detalle-grid" id="detalle-info"></div>
+        <!-- Sección: Contacto -->
+        <div class="detalle-section-title" style="margin-top:16px">Contacto</div>
+        <div class="detalle-grid" id="detalle-contacto"></div>
+        <!-- Sección: Comercial -->
+        <div class="detalle-section-title" style="margin-top:16px">Comercial</div>
+        <div class="detalle-grid" id="detalle-comercial"></div>
+      </div>
+      <!-- Footer acciones -->
+      <div id="detalle-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:20px 28px 24px">
+        <button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>
+      </div>
+    </div>
+  </div>
   </section>
 
   <!-- MODAL: CLIENTE -->
@@ -2594,21 +2648,85 @@ function renderDirectorio() {
       : '—';
 
     const row = [
-      { html: `<strong>${esc(c.artista || '')}</strong>`, cls: '' },
-      esc(c.nombre || '—'),
-      esc(c.pais || '—'),
-      esc(c.representante || '—'),
-      esc(c.vendedor || '—'),
-      esc(c.metodoPago || '—'),
-      { html: estadoBadge, cls: '' },
+      { html: `<strong>${esc(c.artista || '')}</strong>`, cls: '', onclick: `openClientDetail(${c.row})` },
+      { html: esc(c.nombre || '—'), onclick: `openClientDetail(${c.row})` },
+      { html: esc(c.pais || '—'), onclick: `openClientDetail(${c.row})` },
+      { html: esc(c.representante || '—'), onclick: `openClientDetail(${c.row})` },
+      { html: esc(c.vendedor || '—'), onclick: `openClientDetail(${c.row})` },
+      { html: esc(c.metodoPago || '—'), onclick: `openClientDetail(${c.row})` },
+      { html: estadoBadge, cls: '', onclick: `openClientDetail(${c.row})` },
     ];
     if (canEdit) {
-      row.push({ html: `<button class="btn btn-ghost btn-sm" title="Editar" onclick="openClientModal(${c.row})">✏️</button> <button class="btn btn-ghost btn-sm" title="Eliminar" style="color:var(--red)" onclick="deleteClient(${c.row},'${esc(c.artista || '')}')">🗑️</button>`, cls: '' });
+      row.push({ html: `<button class="btn btn-ghost btn-sm" title="Editar" onclick="event.stopPropagation();openClientModal(${c.row})">✏️</button> <button class="btn btn-ghost btn-sm" title="Eliminar" style="color:var(--red)" onclick="event.stopPropagation();deleteClient(${c.row},'${esc(c.artista || '')}')">🗑️</button>`, cls: '' });
     }
     return row;
   });
 
   makeSortableTable('table-directorio', headers, rows);
+
+  // Hacer filas clickeables via onclick en TR
+  const tbody = document.querySelector('#table-directorio tbody');
+  if (tbody) {
+    tbody.querySelectorAll('tr').forEach((tr, i) => {
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', e => {
+        if (e.target.closest('button')) return;
+        const row = data[i]?.row;
+        if (row) openClientDetail(row);
+      });
+    });
+  }
+}
+
+function openClientDetail(row) {
+  const c = window._clientesRow?.[row];
+  if (!c) return;
+  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const role = window._currentUser?.role;
+  const canEdit = ['admin', 'secondary_admin'].includes(role);
+
+  // Avatar: inicial del artista
+  document.getElementById('detalle-avatar').textContent = (c.artista || '?')[0].toUpperCase();
+  document.getElementById('detalle-artista').textContent = c.artista || '—';
+  document.getElementById('detalle-nombre').textContent = c.nombre ? `${c.nombre}${c.apodo ? ' · ' + c.apodo : ''}` : (c.apodo || '');
+
+  // Estado badge
+  const estadoColor = c.estado === 'Activa' ? 'background:rgba(16,185,129,0.15);color:var(--green)' : 'background:rgba(245,158,11,0.15);color:var(--amber)';
+  document.getElementById('detalle-estado-wrap').innerHTML = c.estado
+    ? `<span class="td-badge" style="${estadoColor};font-size:12px">${esc(c.estado)}</span>` : '';
+
+  // Información
+  const field = (label, value, full) =>
+    value ? `<div class="detalle-field${full?' full':''}"><div class="detalle-field-label">${label}</div><div class="detalle-field-value">${value}</div></div>` : '';
+
+  document.getElementById('detalle-info').innerHTML =
+    field('Género', esc(c.genero)) +
+    field('País', esc(c.pais)) +
+    field('Primera compra', c.fechaPrimeraCompra || '') +
+    field('Representante', esc(c.representante));
+
+  document.getElementById('detalle-contacto').innerHTML =
+    field('Teléfono', c.telefono ? `<a href="tel:${esc(c.telefono)}">${esc(c.telefono)}</a>` : '') +
+    field('Email', c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '') +
+    (c.spotify ? `<div class="detalle-field full"><div class="detalle-field-label">Spotify</div><div class="detalle-field-value" style="font-size:12px;word-break:break-all">${esc(c.spotify)}</div></div>` : '');
+
+  document.getElementById('detalle-comercial').innerHTML =
+    field('Vendedor', esc(c.vendedor)) +
+    field('Método de pago', esc(c.metodoPago));
+
+  // Footer con acciones si puede editar
+  const footer = document.getElementById('detalle-footer');
+  footer.innerHTML = canEdit
+    ? `<button class="btn btn-ghost" style="color:var(--red)" onclick="closeClientDetail();deleteClient(${row},'${esc(c.artista || '')}')">🗑️ Eliminar</button>
+       <button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>
+       <button class="btn btn-primary" onclick="closeClientDetail();openClientModal(${row})">✏️ Editar</button>`
+    : `<button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>`;
+
+  document.getElementById('modal-detalle-cliente').style.display = 'flex';
+}
+
+function closeClientDetail() {
+  document.getElementById('modal-detalle-cliente').style.display = 'none';
 }
 
 function openClientModal(row) {
