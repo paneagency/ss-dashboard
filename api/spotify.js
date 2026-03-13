@@ -49,14 +49,28 @@ export default async function handler(req, res) {
       });
       if (!r.ok) return res.status(404).json({ error: 'Track no encontrado' });
       const track = await r.json();
+
+      // Obtener foto de perfil del artista (no la portada del álbum)
+      let artistImage = null;
+      const mainArtistId = track.artists[0]?.id;
+      if (mainArtistId) {
+        const ra = await fetch(`https://api.spotify.com/v1/artists/${mainArtistId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (ra.ok) {
+          const artistData = await ra.json();
+          artistImage = artistData.images[0]?.url || null;
+        }
+      }
+
       return res.json({
         type: 'track',
         artist: track.artists[0]?.name || '',
-        artistSpotifyId: track.artists[0]?.id || null,
+        artistSpotifyId: mainArtistId || null,
         allArtists: track.artists.map(a => a.name).join(', '),
         track: track.name,
         album: track.album.name,
-        image: track.album.images[0]?.url || null,
+        image: artistImage,
       });
     }
 
