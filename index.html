@@ -3147,7 +3147,8 @@ function renderCampList(data, today) {
     const venc    = new Date(c.fechaVencimiento + 'T12:00:00');
     const diffMs  = venc - today;
     const days    = Math.floor(diffMs / 86400000);
-    const daysLbl = days < 0 ? 'Vencida' : days === 0 ? 'Hoy' : `${days}d`;
+    const daysLbl    = days < 0 ? `${Math.abs(days)}d` : days === 0 ? 'Hoy' : `${days}d`;
+    const daysSubLbl = days < 0 ? 'vencida' : days === 0 ? '' : 'restantes';
 
     let badgeBg, badgeColor, borderColor;
     if (days < 0)      { badgeBg = 'rgba(248,81,73,0.15)';   badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
@@ -3166,7 +3167,7 @@ function renderCampList(data, today) {
     <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
         ${daysLbl}
-        <span class="badge-days-label">${days >= 0 ? 'restantes' : ''}</span>
+        <span class="badge-days-label">${daysSubLbl}</span>
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
