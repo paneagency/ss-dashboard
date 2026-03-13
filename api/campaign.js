@@ -193,7 +193,13 @@ async function deleteCalEvents(cal, vendedor, masterEventId, vendorEventId) {
 
 function addDays(dateStr, days) {
   const d = new Date(dateStr + 'T12:00:00');
-  d.setDate(d.getDate() + parseInt(days));
+  const n = parseInt(days);
+  const monthMap = { 30: 1, 60: 2, 90: 3 };
+  if (monthMap[n]) {
+    d.setMonth(d.getMonth() + monthMap[n]);
+  } else {
+    d.setDate(d.getDate() + n);
+  }
   return d.toISOString().split('T')[0];
 }
 

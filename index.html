@@ -3022,9 +3022,7 @@ async function submitSale(e) {
 
     // Leer estos valores ANTES de closeModal() porque resetea el form
     const vencimientoVal = document.getElementById('f-vencimiento').value;
-    const duracion = (vencimientoVal && fechaRaw)
-      ? Math.round((new Date(vencimientoVal) - new Date(fechaRaw)) / 86400000)
-      : (parseInt(document.getElementById('f-duracion').value) || 30);
+    const duracion = parseInt(document.getElementById('f-duracion').value) || 30;
     const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(row => ({
       amount:   parseFloat(row.querySelector('.gasto-amount').value) || 0,
       provider: row.querySelector('.gasto-provider').value.trim(),
