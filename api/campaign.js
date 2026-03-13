@@ -73,8 +73,8 @@ async function ensureSheets(sheets) {
 
   const headerData = [];
   if (toCreate.includes(CLIENTES_SHEET))
-    headerData.push({ range: `${CLIENTES_SHEET}!A1:N1`,
-      values: [['ID','ARTISTA','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','FECHA_PRIMERA_COMPRA','REPRESENTANTE','NOMBRE','APODO','VENDEDOR','METODO_PAGO','ESTADO']] });
+    headerData.push({ range: `${CLIENTES_SHEET}!A1:O1`,
+      values: [['ID','ARTISTA','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','FECHA_PRIMERA_COMPRA','REPRESENTANTE','NOMBRE','APODO','VENDEDOR','METODO_PAGO','ESTADO','IMAGEN']] });
   if (toCreate.includes(CAMPANAS_SHEET))
     headerData.push({ range: `${CAMPANAS_SHEET}!A1:R1`,
       values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO','DETALLE_GASTOS','PAUTA','REPRESENTANTE']] });
@@ -111,7 +111,7 @@ async function lookupClientDB(sheets, artista) {
 // A=ID, B=ARTISTA, C=GÉNERO, D=PAIS, E=TELÉFONO, F=EMAIL, G=SPOTIFY,
 // H=FECHA_PRIMERA_COMPRA, I=REPRESENTANTE, J=NOMBRE, K=APODO,
 // L=VENDEDOR, M=METODO_PAGO, N=ESTADO
-const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N' };
+const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N', imagen:'O' };
 
 async function updateClientFields(sheets, artista, fields) {
   const entries = Object.entries(fields).filter(([k, v]) => CLIENT_COLS[k] && v !== undefined && v !== null && v !== '');
@@ -308,7 +308,7 @@ module.exports = async (req, res) => {
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CLIENTES_SHEET}!A:N`,
+          range: `${CLIENTES_SHEET}!A:O`,
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
@@ -324,6 +324,7 @@ module.exports = async (req, res) => {
             vendedor: r[11] || '',
             metodoPago: r[12] || '',
             estado: r[13] || '',
+            imagen: r[14] || '',
           })),
         });
       }
@@ -357,7 +358,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nuevo cliente ───────────────────────────────────
     if (req.method === 'POST' && req.body.mode === 'client') {
-      const { artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
+      const { artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen } = req.body;
       if (!artista) return res.status(400).json({ error: 'artista requerido' });
 
       // ID correlativo: leer IDs existentes y generar el siguiente C00X
@@ -379,16 +380,16 @@ module.exports = async (req, res) => {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A:N`,
+        range: `${CLIENTES_SHEET}!A:O`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[newId, artista, genero || '', pais || '', safeTel, email || '', spotify || '', primeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa']] },
+        requestBody: { values: [[newId, artista, genero || '', pais || '', safeTel, email || '', spotify || '', primeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa', imagen || '']] },
       });
       return res.json({ ok: true });
     }
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
@@ -397,7 +398,10 @@ module.exports = async (req, res) => {
       const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '', vendedor, metodo || '');
 
       if (spotifyArtistId) {
-        await updateClientFields(sheets, artista, { spotify: `https://open.spotify.com/artist/${spotifyArtistId}` });
+        await updateClientFields(sheets, artista, {
+          spotify: `https://open.spotify.com/artist/${spotifyArtistId}`,
+          ...(spotifyImageUrl ? { imagen: spotifyImageUrl } : {}),
+        });
       }
 
       let masterEventId = '', vendorEventId = '';
@@ -426,11 +430,11 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar cliente ───────────────────────────────────
     if (req.method === 'PUT' && req.body.mode === 'client') {
-      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
+      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
       const existing = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:N${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:O${row}`,
       });
       const existingRow = existing.data.values?.[0] || [];
       const id = existingRow[0] || Date.now().toString();
@@ -438,9 +442,9 @@ module.exports = async (req, res) => {
       const safeTel = telefono ? (telefono.startsWith('+') ? `'${telefono}` : telefono) : '';
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:N${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:O${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '']] },
+        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '']] },
       });
       return res.json({ ok: true });
     }

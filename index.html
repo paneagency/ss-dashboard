@@ -2649,19 +2649,12 @@ function openClientDetail(row) {
   avatarEl.textContent = isNew ? '+' : (c.artista || '?')[0].toUpperCase();
   avatarEl.style.backgroundImage = '';
 
-  // Cargar foto de Spotify si el cliente tiene perfil
-  if (!isNew && c.spotify) {
-    fetch(`/api/spotify?url=${encodeURIComponent(c.spotify)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.image) {
-          avatarEl.textContent = '';
-          avatarEl.style.backgroundImage = `url(${data.image})`;
-          avatarEl.style.backgroundSize = 'cover';
-          avatarEl.style.backgroundPosition = 'center';
-        }
-      })
-      .catch(() => {});
+  // Mostrar foto de perfil de Spotify si está guardada
+  if (!isNew && c.imagen) {
+    avatarEl.textContent = '';
+    avatarEl.style.backgroundImage = `url(${c.imagen})`;
+    avatarEl.style.backgroundSize = 'cover';
+    avatarEl.style.backgroundPosition = 'center';
   }
 
   const setVal = (id, val) => { const el = document.getElementById(id); el.value = val || ''; el.readOnly = readonly; };
@@ -3334,8 +3327,9 @@ function autofillFromSpotify() {
       if (!res.ok) return;
       const data = await res.json();
 
-      // Guardar ID de artista Spotify para enviarlo al guardar la venta
-      window._spotifyArtistId = data.artistSpotifyId || null;
+      // Guardar ID e imagen de artista Spotify para enviarlo al guardar la venta
+      window._spotifyArtistId  = data.artistSpotifyId || null;
+      window._spotifyImageUrl  = data.image || null;
 
       // Auto-llenar artista si está vacío
       const fArtista = document.getElementById('f-artista');
@@ -3458,6 +3452,7 @@ function closeModal(force) {
   document.getElementById('f-margen').value = '';
   document.getElementById('spotify-preview').style.display = 'none';
   window._spotifyArtistId = null;
+  window._spotifyImageUrl  = null;
 }
 
 function fillDatalist(id, values) {
@@ -3544,6 +3539,7 @@ async function submitSale(e) {
     const duracion         = parseInt(document.getElementById('f-duracion').value) || 30;
     const representanteVal = document.getElementById('f-representante').value.trim();
     const spotifyArtistId  = window._spotifyArtistId || null;
+    const spotifyImageUrl  = window._spotifyImageUrl  || null;
     const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(row => ({
       amount:   parseFloat(row.querySelector('.gasto-amount').value) || 0,
       provider: row.querySelector('.gasto-provider').value.trim(),
@@ -3554,7 +3550,7 @@ async function submitSale(e) {
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta, link, gastosRows, representante: representanteVal, spotifyArtistId }),
+      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta, link, gastosRows, representante: representanteVal, spotifyArtistId, spotifyImageUrl }),
     }).catch(err => console.warn('Campaign registration failed (non-fatal):', err));
 
     const fecha = new Date(+fy, +fm - 1, +fd);
