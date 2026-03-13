@@ -3507,17 +3507,29 @@ function renderResumenCampaniasHoy() {
     return;
   }
   el.innerHTML = hoy.map(c => {
-    const idx = c.row;
-    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)" class="resumen-camp-hoy-row">
-      <div style="background:rgba(245,158,11,0.15);color:var(--amber);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;min-width:36px;text-align:center;flex-shrink:0">Hoy</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.artista}</div>
-        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.vendedor}${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
+    const idx       = c.row;
+    const hasPauta  = !!c.pauta;
+    const hasGastos = !!c.detalleGastos;
+    const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    return `
+    <div class="campania-card" id="camp-card-${idx}" style="border-color:rgba(245,158,11,0.4);${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
+      <div class="campania-badge" style="background:rgba(245,158,11,0.15);color:var(--amber)">
+        Hoy<span class="badge-days-label"></span>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0">
-        <button class="btn btn-sm btn-renovar" onclick="renovarRapido(${idx})" title="Renovar">↻</button>
-        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" title="No renueva">✕</button>
+      <div class="campania-info">
+        <div class="campania-artista">${c.artista}</div>
+        <div class="campania-meta">${c.vendedor} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
       </div>
+      <div class="campania-actions" onclick="event.stopPropagation()">
+        ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
+        ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
+        <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
+        <button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>
+        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
+      </div>
+      ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
+      ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}
     </div>`;
   }).join('');
 }
