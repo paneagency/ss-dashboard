@@ -3151,8 +3151,7 @@ function renderCampList(data, today) {
 
     let badgeBg, badgeColor, borderColor;
     if (days < 0)      { badgeBg = 'rgba(248,81,73,0.15)';   badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
-    else if (days <= 3){ badgeBg = 'rgba(245,158,11,0.15)';  badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
-    else if (days <= 7){ badgeBg = 'rgba(245,158,11,0.08)';  badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.2)'; }
+    else if (days === 0){ badgeBg = 'rgba(245,158,11,0.15)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
     else               { badgeBg = 'rgba(16,185,129,0.12)';  badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.25)'; }
 
     const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -3236,8 +3235,8 @@ function renderCampCalendario(data, today) {
 
     const chips = camps.map(c => {
       const days  = Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000);
-      const color = days < 0 ? 'var(--red)' : days <= 3 ? 'var(--amber)' : 'var(--green)';
-      const bg    = days < 0 ? 'rgba(248,81,73,0.15)' : days <= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
+      const color = days < 0 ? 'var(--red)' : days === 0 ? 'var(--amber)' : 'var(--green)';
+      const bg    = days < 0 ? 'rgba(248,81,73,0.15)' : days === 0 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
       return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};cursor:pointer" onclick="showCampCalDetail(event,${c.row})" title="${c.artista} — ${c.vendedor}">${c.artista}</div>`;
     }).join('');
 
@@ -3283,8 +3282,7 @@ function showCampCalDetail(evt, row) {
 
   let badgeBg, badgeColor, borderColor;
   if (days < 0)       { badgeBg = 'rgba(248,81,73,0.15)';  badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
-  else if (days <= 3) { badgeBg = 'rgba(245,158,11,0.15)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
-  else if (days <= 7) { badgeBg = 'rgba(245,158,11,0.08)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.2)'; }
+  else if (days === 0){ badgeBg = 'rgba(245,158,11,0.15)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
   else                { badgeBg = 'rgba(16,185,129,0.12)'; badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.25)'; }
 
   const hasPauta  = !!c.pauta;
