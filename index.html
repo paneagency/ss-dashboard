@@ -3525,6 +3525,7 @@ async function submitSale(e) {
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
     const duracion         = parseInt(document.getElementById('f-duracion').value) || 30;
     const representanteVal = document.getElementById('f-representante').value.trim();
+    const spotifyArtistId  = window._spotifyArtistId || null;
     const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(row => ({
       amount:   parseFloat(row.querySelector('.gasto-amount').value) || 0,
       provider: row.querySelector('.gasto-provider').value.trim(),
@@ -3535,7 +3536,7 @@ async function submitSale(e) {
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta, link, gastosRows, representante: representanteVal, spotifyArtistId: window._spotifyArtistId || null }),
+      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta, link, gastosRows, representante: representanteVal, spotifyArtistId }),
     }).catch(err => console.warn('Campaign registration failed (non-fatal):', err));
 
     const fecha = new Date(+fy, +fm - 1, +fd);
