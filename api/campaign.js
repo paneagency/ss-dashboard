@@ -153,7 +153,7 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
 
 // ── Helpers: Calendar ──────────────────────────────────────────
 
-function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows) {
+function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante) {
   const parts = [];
   if (pauta) parts.push(pauta);
   if (link)  parts.push(link);
@@ -162,8 +162,9 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
     parts.push('-');
     gastosRows.forEach(r => parts.push(`(${r.amount})${r.provider ? ' ' + r.provider : ''}`));
   }
+  const repTag = representante ? `[${representante}]` : '';
   return {
-    summary:     `(${vendedor}) - ${artista}`,
+    summary:     `(${vendedor})${repTag} - ${artista}`,
     description: parts.join('\n'),
     start: { date: fechaVencimiento },
     end:   { date: fechaVencimiento },
@@ -171,8 +172,8 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
   };
 }
 
-async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows) {
-  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows);
+async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows, representante) {
+  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante);
   const vendorCalId = VENDOR_CALS[vendedor];
   const [masterRes, vendorRes] = await Promise.all([
     cal.events.insert({ calendarId: MASTER_CAL,    requestBody: event }),
@@ -289,7 +290,7 @@ module.exports = async (req, res) => {
 
       let masterEventId = '', vendorEventId = '';
       try {
-        const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || []);
+        const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '');
         masterEventId = ids.masterEventId;
         vendorEventId = ids.vendorEventId;
       } catch(calErr) {
@@ -335,7 +336,7 @@ module.exports = async (req, res) => {
 
       let newMasterId = '', newVendorId = '';
       try {
-        const ids = await createCalEvents(cal, artista, vendedor, nuevaFechaVenc, duracion, precio || 0, metodo || '', pauta || '', gastosRows || []);
+        const ids = await createCalEvents(cal, artista, vendedor, nuevaFechaVenc, duracion, precio || 0, metodo || '', pauta || '', '', gastosRows || [], representante);
         newMasterId = ids.masterEventId;
         newVendorId = ids.vendorEventId;
       } catch(calErr) {
