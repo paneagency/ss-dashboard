@@ -226,7 +226,8 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
 function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante) {
   const parts = [];
   if (pauta) parts.push(pauta);
-  if (link)  parts.push(link);
+  // Solo agregar el link si no está ya incluido en la pauta
+  if (link && !(pauta || '').includes(link)) parts.push(link);
   if (!parts.length) parts.push(`Vendedor: ${vendedor}\nDuración: ${duracion} días\nPrecio: $${precio}\nMétodo: ${metodo}`);
   if (gastosRows?.length) {
     parts.push('-');
