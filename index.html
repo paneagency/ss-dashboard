@@ -1585,6 +1585,15 @@ async function init() {
           fillDatalist('list-providers', window._providers);
         }
       }).catch(() => {});
+      // Cargar clientes para autofill de representante
+      fetch('/api/campaign?mode=clients').then(r => r.json()).then(d => {
+        if (d.clients) {
+          window._clientesMap = {};
+          d.clients.forEach(c => {
+            if (c.nombre) window._clientesMap[c.nombre.toLowerCase().trim()] = c.representante || '';
+          });
+        }
+      }).catch(() => {});
       return;
     } catch(e) {
       lastError = e;
@@ -2926,11 +2935,15 @@ function autofillFromArtist() {
     recalcular();
   }
 
-  // Autofill representante desde la última campaña activa del artista
-  if (window._campanias?.length) {
+  // Autofill representante desde hoja Clientes (fuente de verdad)
+  const repFromClientes = window._clientesMap?.[val];
+  if (repFromClientes) {
+    document.getElementById('f-representante').value = repFromClientes;
+  } else if (window._campanias?.length) {
+    // Fallback: última campaña activa del artista
     const campMatch = window._campanias
       .filter(c => c.artista?.toLowerCase() === val && c.representante)
-      .slice(-1)[0]; // última
+      .slice(-1)[0];
     if (campMatch?.representante) {
       document.getElementById('f-representante').value = campMatch.representante;
     }
