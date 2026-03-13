@@ -2683,6 +2683,33 @@ function openClientDetail(row) {
   setVal('dd-email', c.email);
   setVal('dd-spotify', c.spotify);
 
+  // Imagen actual (para preservarla o sobreescribirla si viene nueva de Spotify)
+  window._ddSpotifyImage = c.imagen || null;
+
+  // Auto-fetch imagen al escribir/pegar un link de Spotify en el campo
+  if (canEdit) {
+    let _ddSpotifyDebounce = null;
+    document.getElementById('dd-spotify').oninput = function() {
+      const url = this.value.trim();
+      if (!url.includes('spotify.com/')) return;
+      clearTimeout(_ddSpotifyDebounce);
+      _ddSpotifyDebounce = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/spotify?url=${encodeURIComponent(url)}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.image) {
+            window._ddSpotifyImage = data.image;
+            avatarEl.textContent = '';
+            avatarEl.style.backgroundImage = `url(${data.image})`;
+            avatarEl.style.backgroundSize = 'cover';
+            avatarEl.style.backgroundPosition = 'center';
+          }
+        } catch(e) {}
+      }, 600);
+    };
+  }
+
   // Vendedor select
   const selV = document.getElementById('dd-vendedor');
   selV.innerHTML = '<option value="">—</option>';
@@ -2736,6 +2763,7 @@ async function saveClientDetail() {
     telefono: document.getElementById('dd-telefono').value.trim(),
     email: document.getElementById('dd-email').value.trim(),
     spotify: document.getElementById('dd-spotify').value.trim(),
+    imagen: window._ddSpotifyImage || '',
     representante: document.getElementById('dd-representante').value.trim(),
     vendedor: document.getElementById('dd-vendedor').value,
     metodoPago: document.getElementById('dd-metodo').value,
@@ -2757,6 +2785,7 @@ async function saveClientDetail() {
 
 function closeClientDetail() {
   document.getElementById('modal-detalle-cliente').style.display = 'none';
+  window._ddSpotifyImage = null;
 }
 
 // openClientModal → alias para nuevo cliente usando el modal estético
