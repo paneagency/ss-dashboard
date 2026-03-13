@@ -3344,9 +3344,10 @@ function toggleCampExpand(idx, tipo) {
 }
 
 function copiarPauta(idx) {
-  const el = document.getElementById(`camp-expand-pauta-${idx}`);
-  if (!el) return;
-  navigator.clipboard.writeText(el.textContent.trim())
+  const c = _campanias.find(c => c.row === idx);
+  const text = c?.pauta || document.getElementById(`camp-expand-pauta-${idx}`)?.textContent || '';
+  if (!text.trim()) return;
+  navigator.clipboard.writeText(text.trim())
     .then(() => showToast('Pauta copiada', 'success'))
     .catch(() => showToast('No se pudo copiar', 'error'));
 }
