@@ -1696,6 +1696,8 @@ async function init() {
           fillDatalist('list-providers', window._providers);
         }
       }).catch(() => {});
+      // Cargar campañas en background para tener datos en Resumen desde el inicio
+      loadCampanias().catch(() => {});
       // Cargar clientes para autofill y directorio
       fetch('/api/campaign?mode=clients').then(r => r.json()).then(d => {
         if (d.clients) {
@@ -3494,6 +3496,10 @@ async function submitSale(e) {
 function renderResumenCampaniasHoy() {
   const el = document.getElementById('resumen-campanias-hoy');
   if (!el) return;
+  if (!_campaniasLoaded) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">Cargando campañas...</div>`;
+    return;
+  }
   const today = new Date(); today.setHours(0,0,0,0);
   const hoy = (_campanias || []).filter(c => {
     const venc = new Date(c.fechaVencimiento + 'T12:00:00');
@@ -3536,6 +3542,7 @@ function renderResumenCampaniasHoy() {
 
 // ── CAMPAÑAS ───────────────────────────────────────────────
 let _campanias = [];
+let _campaniasLoaded = false;
 let _campView = 'calendario';
 let _campCalMonth = new Date();
 
@@ -3560,6 +3567,7 @@ async function loadCampanias() {
     const resp = await fetch(`/api/campaign?vendedor=${encodeURIComponent(param)}`);
     const data = await resp.json();
     _campanias = data.campanias || [];
+    _campaniasLoaded = true;
     renderCampaniasTab();
     renderResumenCampaniasHoy();
     // Poblar datalist de representantes
