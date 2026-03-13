@@ -2931,7 +2931,18 @@ function openModal() {
   if (window.innerWidth > 768) document.getElementById('f-artista').focus();
 }
 
-function closeModal() {
+function modalHasData() {
+  const fields = ['f-artista','f-genero','f-link','f-pauta','f-venta','f-metodo','f-precio'];
+  if (fields.some(id => (document.getElementById(id)?.value || '').trim() !== '')) return true;
+  // Chequear filas de gasto
+  const gastoInputs = document.querySelectorAll('#gasto-rows .gasto-amount');
+  return [...gastoInputs].some(el => (el.value || '').trim() !== '' && el.value !== '0');
+}
+
+function closeModal(force) {
+  if (!force && modalHasData()) {
+    if (!confirm('¿Cerrar sin guardar? Se perderán los datos cargados.')) return;
+  }
   document.getElementById('modal-overlay').classList.remove('open');
   document.getElementById('sale-form').reset();
   document.getElementById('gasto-rows').innerHTML = '';
@@ -3029,7 +3040,7 @@ async function submitSale(e) {
     })).filter(r => r.amount > 0);
 
     showToast('Venta Registrada', 'success');
-    closeModal();
+    closeModal(true);
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
