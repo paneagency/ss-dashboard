@@ -3316,6 +3316,9 @@ function autofillFromSpotify() {
       if (!res.ok) return;
       const data = await res.json();
 
+      // Guardar ID de artista Spotify para enviarlo al guardar la venta
+      window._spotifyArtistId = data.artistSpotifyId || null;
+
       // Auto-llenar artista si está vacío
       const fArtista = document.getElementById('f-artista');
       if (!fArtista.value.trim() && data.artist) {
@@ -3436,6 +3439,7 @@ function closeModal(force) {
   document.getElementById('f-final').value = '';
   document.getElementById('f-margen').value = '';
   document.getElementById('spotify-preview').style.display = 'none';
+  window._spotifyArtistId = null;
 }
 
 function fillDatalist(id, values) {
@@ -3531,7 +3535,7 @@ async function submitSale(e) {
     fetch('/api/campaign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta, link, gastosRows, representante: representanteVal }),
+      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta, link, gastosRows, representante: representanteVal, spotifyArtistId: window._spotifyArtistId || null }),
     }).catch(err => console.warn('Campaign registration failed (non-fatal):', err));
 
     const fecha = new Date(+fy, +fm - 1, +fd);

@@ -52,6 +52,7 @@ export default async function handler(req, res) {
       return res.json({
         type: 'track',
         artist: track.artists[0]?.name || '',
+        artistSpotifyId: track.artists[0]?.id || null,
         allArtists: track.artists.map(a => a.name).join(', '),
         track: track.name,
         album: track.album.name,

@@ -111,7 +111,7 @@ async function lookupClientDB(sheets, artista) {
 // A=ID, B=ARTISTA, C=GÉNERO, D=PAIS, E=TELÉFONO, F=EMAIL, G=SPOTIFY,
 // H=FECHA_PRIMERA_COMPRA, I=REPRESENTANTE, J=NOMBRE, K=APODO,
 // L=VENDEDOR, M=METODO_PAGO, N=ESTADO
-const CLIENT_COLS = { representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N' };
+const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N' };
 
 async function updateClientFields(sheets, artista, fields) {
   const entries = Object.entries(fields).filter(([k, v]) => CLIENT_COLS[k] && v !== undefined && v !== null && v !== '');
@@ -388,13 +388,17 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
       const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
       const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '', vendedor, metodo || '');
+
+      if (spotifyArtistId) {
+        await updateClientFields(sheets, artista, { spotify: `https://open.spotify.com/artist/${spotifyArtistId}` });
+      }
 
       let masterEventId = '', vendorEventId = '';
       try {
