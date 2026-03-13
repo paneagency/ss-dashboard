@@ -408,7 +408,7 @@
     body.role-secondary .tab-btn[data-tab="metodos"]  { order: 4; }
     body.role-secondary .tab-btn[data-tab="temporal"] { order: 5; }
     body.role-secondary .tab-btn[data-tab="insights"] { order: 6; }
-    body.role-secondary #vendor-today-section { display: block !important; }
+    body.role-secondary #vendor-today-row { display: flex !important; flex-wrap: wrap; }
 
     /* Clientes potenciales (vendedor insights) */
     .dormant-section { margin-top: 28px; }
@@ -949,11 +949,19 @@
     <div class="vendor-sub" id="vendor-sub"></div>
   </div>
   <div class="vendor-kpis" id="vendor-kpis"></div>
-  <!-- Ventas del día: solo secondary_admin -->
-  <div id="vendor-today-section" style="display:none;margin-bottom:28px">
-    <div class="vendor-sales-title">Ventas del día</div>
-    <div class="table-card" style="padding:16px 20px">
-      <div id="vendor-today-panel"></div>
+  <!-- Ventas del día + Campañas hoy: solo secondary_admin -->
+  <div id="vendor-today-row" style="display:none;gap:20px;margin-bottom:28px;align-items:flex-start">
+    <div id="vendor-today-section" style="flex:2;min-width:0">
+      <div class="vendor-sales-title">Ventas del día</div>
+      <div class="table-card" style="padding:16px 20px">
+        <div id="vendor-today-panel"></div>
+      </div>
+    </div>
+    <div id="vendor-campanias-hoy-section" style="flex:1;min-width:280px">
+      <div class="vendor-sales-title">⚡ Campañas que vencen hoy</div>
+      <div class="table-card" style="padding:16px 20px">
+        <div id="vendor-campanias-hoy"></div>
+      </div>
     </div>
   </div>
   <div class="vendor-sales-title">Mis ventas</div>
@@ -3494,7 +3502,9 @@ async function submitSale(e) {
 }
 
 function renderResumenCampaniasHoy() {
-  const el = document.getElementById('resumen-campanias-hoy');
+  const isSecondary = window._currentUser?.role === 'secondary_admin';
+  const elId = isSecondary ? 'vendor-campanias-hoy' : 'resumen-campanias-hoy';
+  const el = document.getElementById(elId);
   if (!el) return;
   if (!_campaniasLoaded) {
     el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">Cargando campañas...</div>`;
@@ -4363,9 +4373,9 @@ function renderVendorView(user) {
       <div class="kpi-value" style="color:var(--muted)">…</div>
     </div>`;
 
-  // Ventas del día (solo secondary_admin)
+  // Ventas del día + Campañas hoy (solo secondary_admin)
   const isSecondaryAdmin = user.role === 'secondary_admin';
-  if (isSecondaryAdmin) renderTodayPanel();
+  if (isSecondaryAdmin) { renderTodayPanel(); renderResumenCampaniasHoy(); }
 
   // Tabla de sus ventas (más recientes primero)
   const rows = [...myData].sort((a,b) => b.fecha - a.fecha);
