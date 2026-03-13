@@ -2639,12 +2639,30 @@ function openClientDetail(row) {
   // Avatar dinámico al tipear artista
   const avatarEl = document.getElementById('detalle-avatar');
   const artistaEl = document.getElementById('dd-artista');
-  const updateAvatar = () => {
+  const setAvatarLetter = () => {
     const v = artistaEl.value.trim();
+    avatarEl.innerHTML = '';
+    avatarEl.style.backgroundImage = '';
     avatarEl.textContent = v ? v[0].toUpperCase() : '+';
   };
-  artistaEl.oninput = updateAvatar;
+  artistaEl.oninput = setAvatarLetter;
   avatarEl.textContent = isNew ? '+' : (c.artista || '?')[0].toUpperCase();
+  avatarEl.style.backgroundImage = '';
+
+  // Cargar foto de Spotify si el cliente tiene perfil
+  if (!isNew && c.spotify) {
+    fetch(`/api/spotify?url=${encodeURIComponent(c.spotify)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.image) {
+          avatarEl.textContent = '';
+          avatarEl.style.backgroundImage = `url(${data.image})`;
+          avatarEl.style.backgroundSize = 'cover';
+          avatarEl.style.backgroundPosition = 'center';
+        }
+      })
+      .catch(() => {});
+  }
 
   const setVal = (id, val) => { const el = document.getElementById(id); el.value = val || ''; el.readOnly = readonly; };
   setVal('dd-artista', isNew ? '' : c.artista);
