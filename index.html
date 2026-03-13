@@ -3323,6 +3323,18 @@ function autofillFromSpotify() {
         autofillFromArtist();
       }
 
+      // Preponer nombre de canción + link al inicio de la pauta (solo si hay track)
+      if (data.track) {
+        const fPauta = document.getElementById('f-pauta');
+        const prefix = `${data.track}\n${url}\n\n`;
+        // Solo agregar si la pauta no empieza ya con este track
+        if (!fPauta.value.startsWith(data.track)) {
+          // Quitar el link del medio de la pauta si el usuario lo había pegado ahí
+          const pautaSinLink = fPauta.value.replace(url, '').replace(/\n{3,}/g, '\n\n').trim();
+          fPauta.value = pautaSinLink ? prefix + pautaSinLink : prefix.trim();
+        }
+      }
+
       // Mostrar preview
       const img = document.getElementById('spotify-preview-img');
       const trackEl = document.getElementById('spotify-preview-track');
