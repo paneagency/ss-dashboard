@@ -271,7 +271,8 @@ module.exports = async (req, res) => {
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
-          clients: rows.map(r => ({
+          clients: rows.map((r, i) => ({
+            row: i + 2,
             id: r[0], artista: r[1], genero: r[2],
             pais: r[3], telefono: r[4], email: r[5],
             spotify: r[6],
@@ -313,6 +314,20 @@ module.exports = async (req, res) => {
       return res.json({ campanias });
     }
 
+    // ── POST: nuevo cliente ───────────────────────────────────
+    if (req.method === 'POST' && req.body.mode === 'client') {
+      const { artista, genero, pais, telefono, email, spotify, fechaPrimeraCompra, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
+      if (!artista) return res.status(400).json({ error: 'artista requerido' });
+      const newId = Date.now().toString();
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CLIENTES_SHEET}!A:N`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[newId, artista, genero || '', pais || '', telefono || '', email || '', spotify || '', fechaPrimeraCompra || '', representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa']] },
+      });
+      return res.json({ ok: true });
+    }
+
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
       const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante } = req.body;
@@ -345,6 +360,24 @@ module.exports = async (req, res) => {
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento });
+    }
+
+    // ── PUT: editar cliente ───────────────────────────────────
+    if (req.method === 'PUT' && req.body.mode === 'client') {
+      const { row, artista, genero, pais, telefono, email, spotify, fechaPrimeraCompra, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
+      if (!row) return res.status(400).json({ error: 'row requerido' });
+      const existing = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CLIENTES_SHEET}!A${row}:N${row}`,
+      });
+      const id = existing.data.values?.[0]?.[0] || Date.now().toString();
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CLIENTES_SHEET}!A${row}:N${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[id, artista, genero || '', pais || '', telefono || '', email || '', spotify || '', fechaPrimeraCompra || '', representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '']] },
+      });
+      return res.json({ ok: true });
     }
 
     // ── PUT: renovar campaña ──────────────────────────────────
@@ -417,6 +450,21 @@ module.exports = async (req, res) => {
       }
 
       return res.json({ ok: true, nuevaFechaVenc });
+    }
+
+    // ── DELETE: borrar cliente ────────────────────────────────
+    if (req.method === 'DELETE' && req.body?.mode === 'client') {
+      const row = parseInt(req.body.row);
+      if (!row) return res.status(400).json({ error: 'row requerido' });
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+      const sheetObj = meta.data.sheets.find(s => s.properties.title === CLIENTES_SHEET);
+      if (!sheetObj) return res.status(404).json({ error: 'Hoja Clientes no encontrada' });
+      const sheetId = sheetObj.properties.sheetId;
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: { requests: [{ deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: row - 1, endIndex: row } } }] },
+      });
+      return res.json({ ok: true });
     }
 
     // ── DELETE: no renueva / borrar campaña por artista ──────
