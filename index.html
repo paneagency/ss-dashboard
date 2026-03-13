@@ -1228,86 +1228,6 @@
   </div>
   </section>
 
-  <!-- MODAL: CLIENTE -->
-  <div id="modal-cliente" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeClientModal()">
-    <div class="modal-box" style="max-width:620px">
-      <div class="modal-header">
-        <div class="modal-title" id="modal-cliente-title">Nuevo Cliente</div>
-        <button class="modal-close" onclick="closeClientModal()">✕</button>
-      </div>
-      <div class="modal-body" style="overflow-y:auto;max-height:70vh">
-        <input type="hidden" id="fc-row">
-        <div class="form-grid">
-          <div class="form-group full">
-            <label class="form-label">Artista / Cliente <span>*</span></label>
-            <input class="form-input" id="fc-artista" placeholder="Nombre del artista" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Nombre contacto</label>
-            <input class="form-input" id="fc-nombre" placeholder="Nombre real">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Apodo</label>
-            <input class="form-input" id="fc-apodo" placeholder="Apodo o alias">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Género</label>
-            <input class="form-input" id="fc-genero" list="list-generos" placeholder="Ej: Pop, Urbano">
-          </div>
-          <div class="form-group">
-            <label class="form-label">País</label>
-            <input class="form-input" id="fc-pais" placeholder="Ej: Argentina">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Teléfono</label>
-            <input class="form-input" id="fc-telefono" placeholder="+54 9 11...">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Email</label>
-            <input class="form-input" id="fc-email" type="email" placeholder="correo@ejemplo.com">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Spotify</label>
-            <input class="form-input" id="fc-spotify" placeholder="Link o URI de Spotify">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Fecha primera compra</label>
-            <input class="form-input" id="fc-fecha" type="date">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Representante</label>
-            <input class="form-input" id="fc-representante" list="list-representantes" placeholder="Nombre del representante">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Vendedor</label>
-            <select class="form-input" id="fc-vendedor">
-              <option value="">— Sin asignar —</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Método de pago</label>
-            <select class="form-input" id="fc-metodo">
-              <option value="">— Sin asignar —</option>
-              <option>PayPal</option><option>Wise</option>
-              <option>Mercado Pago</option><option>Transferencia Ars</option>
-              <option>Sin Comision</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Estado</label>
-            <select class="form-input" id="fc-estado">
-              <option value="Activa">Activa</option>
-              <option value="Sin pauta">Sin pauta</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeClientModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveClient()">Guardar</button>
-      </div>
-    </div>
-  </div>
 
   <!-- TAB: MÉTODOS -->
   <section id="tab-metodos" class="tab-panel">
@@ -2708,19 +2628,28 @@ function renderDirectorio() {
 }
 
 function openClientDetail(row) {
-  const c = window._clientesRow?.[row];
-  if (!c) return;
+  const isNew = !row;
+  const c = isNew ? {} : (window._clientesRow?.[row] || {});
+  if (!isNew && !window._clientesRow?.[row]) return;
   const esc = s => (s || '').replace(/"/g,'&quot;');
   const role = window._currentUser?.role;
-  const canEdit = ['admin', 'secondary_admin'].includes(role);
+  const canEdit = isNew || ['admin', 'secondary_admin'].includes(role);
   const readonly = !canEdit;
 
-  // Avatar e inputs del header
-  document.getElementById('detalle-avatar').textContent = (c.artista || '?')[0].toUpperCase();
+  // Avatar dinámico al tipear artista
+  const avatarEl = document.getElementById('detalle-avatar');
+  const artistaEl = document.getElementById('dd-artista');
+  const updateAvatar = () => {
+    const v = artistaEl.value.trim();
+    avatarEl.textContent = v ? v[0].toUpperCase() : '+';
+  };
+  artistaEl.oninput = updateAvatar;
+  avatarEl.textContent = isNew ? '+' : (c.artista || '?')[0].toUpperCase();
+
   const setVal = (id, val) => { const el = document.getElementById(id); el.value = val || ''; el.readOnly = readonly; };
-  setVal('dd-artista', c.artista);
+  setVal('dd-artista', isNew ? '' : c.artista);
   setVal('dd-nombre', c.nombre);
-  setVal('dd-row', row);
+  setVal('dd-row', isNew ? '' : row);
 
   // Estado badge (dinámico al cambiar select)
   const updateEstadoBadge = (estado) => {
@@ -2761,7 +2690,10 @@ function openClientDetail(row) {
 
   // Footer
   const footer = document.getElementById('detalle-footer');
-  if (canEdit) {
+  if (isNew) {
+    footer.innerHTML = `<button class="btn btn-ghost" onclick="closeClientDetail()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveClientDetail()">Crear cliente</button>`;
+  } else if (canEdit) {
     footer.innerHTML = `<button class="btn btn-ghost" style="color:var(--red);margin-right:auto" onclick="closeClientDetail();deleteClient(${row},'${esc(c.artista||'')}')">🗑️ Eliminar</button>
       <button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>
       <button class="btn btn-primary" onclick="saveClientDetail()">Guardar</button>`;
@@ -2775,9 +2707,12 @@ function openClientDetail(row) {
 async function saveClientDetail() {
   const artista = document.getElementById('dd-artista').value.trim();
   if (!artista) { showToast('El nombre del artista es requerido', true); return; }
-  const row = parseInt(document.getElementById('dd-row').value);
+  const rowVal = document.getElementById('dd-row').value;
+  const row = rowVal ? parseInt(rowVal) : null;
+  const isNew = !row;
   const payload = {
-    mode: 'client', row,
+    mode: 'client',
+    ...(row ? { row } : {}),
     artista,
     nombre: document.getElementById('dd-nombre').value.trim(),
     apodo: document.getElementById('dd-apodo').value.trim(),
@@ -2792,10 +2727,14 @@ async function saveClientDetail() {
     estado: document.getElementById('dd-estado').value,
   };
   try {
-    const r = await fetch('/api/campaign', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    const r = await fetch('/api/campaign', {
+      method: isNew ? 'POST' : 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || 'Error al guardar');
-    showToast('Cliente actualizado');
+    showToast(isNew ? 'Cliente creado' : 'Cliente actualizado');
     closeClientDetail();
     await refreshDirectorio();
   } catch(e) { showToast(e.message, true); }
@@ -2805,48 +2744,13 @@ function closeClientDetail() {
   document.getElementById('modal-detalle-cliente').style.display = 'none';
 }
 
-function openClientModal(row) {
-  const modal = document.getElementById('modal-cliente');
-  const isEdit = !!row;
-  document.getElementById('modal-cliente-title').textContent = isEdit ? 'Editar Cliente' : 'Nuevo Cliente';
-  document.getElementById('fc-row').value = row || '';
-
-  // Poblar vendedores
-  const sel = document.getElementById('fc-vendedor');
-  sel.innerHTML = '<option value="">— Sin asignar —</option>';
-  (window._vendors || []).forEach(v => {
-    sel.innerHTML += `<option value="${v.name || v}">${v.name || v}</option>`;
-  });
-
-  if (isEdit) {
-    const c = window._clientesRow?.[row] || {};
-    document.getElementById('fc-artista').value = c.artista || '';
-    document.getElementById('fc-nombre').value = c.nombre || '';
-    document.getElementById('fc-apodo').value = c.apodo || '';
-    document.getElementById('fc-genero').value = c.genero || '';
-    document.getElementById('fc-pais').value = c.pais || '';
-    document.getElementById('fc-telefono').value = c.telefono || '';
-    document.getElementById('fc-email').value = c.email || '';
-    document.getElementById('fc-spotify').value = c.spotify || '';
-    document.getElementById('fc-fecha').value = c.fechaPrimeraCompra || '';
-    document.getElementById('fc-representante').value = c.representante || '';
-    document.getElementById('fc-vendedor').value = c.vendedor || '';
-    document.getElementById('fc-metodo').value = c.metodoPago || '';
-    document.getElementById('fc-estado').value = c.estado || 'Activa';
-  } else {
-    ['fc-artista','fc-nombre','fc-apodo','fc-genero','fc-pais','fc-telefono','fc-email','fc-spotify','fc-fecha','fc-representante'].forEach(id => {
-      document.getElementById(id).value = '';
-    });
-    document.getElementById('fc-vendedor').value = '';
-    document.getElementById('fc-metodo').value = '';
-    document.getElementById('fc-estado').value = 'Activa';
-  }
-
-  modal.style.display = 'flex';
+// openClientModal → alias para nuevo cliente usando el modal estético
+function openClientModal() {
+  openClientDetail(null);
 }
 
 function closeClientModal() {
-  document.getElementById('modal-cliente').style.display = 'none';
+  closeClientDetail();
 }
 
 async function saveClient() {
