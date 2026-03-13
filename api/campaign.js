@@ -107,6 +107,25 @@ async function lookupClientDB(sheets, artista) {
   }
 }
 
+async function updateClientRepresentante(sheets, artista, representante) {
+  if (!representante) return;
+  const resp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${CLIENTES_SHEET}!A:B`,
+  });
+  const rows = resp.data.values || [];
+  const idx = rows.slice(1).findIndex(r =>
+    (r[1] || '').toLowerCase().trim() === artista.toLowerCase().trim()
+  );
+  if (idx === -1) return; // cliente no existe, no hacer nada
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${CLIENTES_SHEET}!J${idx + 2}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[representante]] },
+  });
+}
+
 async function getOrCreateClient(sheets, artista, genero, fechaVenta, representante) {
   const resp = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
@@ -327,6 +346,9 @@ module.exports = async (req, res) => {
       const baseDate      = oldRow[3] || new Date().toISOString().split('T')[0];
       const genero        = generoBody || oldRow[14] || '';
       const representante = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
+
+      // Sincronizar representante en hoja Clientes
+      await updateClientRepresentante(sheets, artista, representante);
 
       const nuevaFechaVenc = editOnly
         ? (fechaVencBody || baseDate)
