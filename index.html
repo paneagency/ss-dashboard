@@ -3347,7 +3347,7 @@ function autofillFromSpotify() {
         img.style.display = 'none';
       }
       trackEl.textContent = data.track || data.artist;
-      artistEl.textContent = data.track ? data.artist : '';
+      artistEl.textContent = data.track ? (data.allArtists || data.artist) : '';
       preview.style.display = 'flex';
     } catch (e) {
       // silencioso

@@ -51,7 +51,8 @@ export default async function handler(req, res) {
       const track = await r.json();
       return res.json({
         type: 'track',
-        artist: track.artists.map(a => a.name).join(', '),
+        artist: track.artists[0]?.name || '',
+        allArtists: track.artists.map(a => a.name).join(', '),
         track: track.name,
         album: track.album.name,
         image: track.album.images[0]?.url || null,
