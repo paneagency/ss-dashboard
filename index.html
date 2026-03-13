@@ -3508,6 +3508,7 @@ function renderResumenCampaniasHoy() {
   if (!el) return;
   if (!_campaniasLoaded) {
     el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">Cargando campañas...</div>`;
+    if (!_campaniasLoading) loadCampanias().catch(() => {});
     return;
   }
   const today = new Date(); today.setHours(0,0,0,0);
@@ -3553,6 +3554,7 @@ function renderResumenCampaniasHoy() {
 // ── CAMPAÑAS ───────────────────────────────────────────────
 let _campanias = [];
 let _campaniasLoaded = false;
+let _campaniasLoading = false;
 let _campView = 'calendario';
 let _campCalMonth = new Date();
 
@@ -3570,6 +3572,7 @@ async function loadCampanias() {
   const isAdmin = role === 'admin' || role === 'secondary_admin';
   const param   = isAdmin ? 'all' : (vendor || 'all');
 
+  _campaniasLoading = true;
   const list = document.getElementById('campanias-list');
   if (list) list.innerHTML = '<div style="color:var(--muted);padding:24px">Cargando campañas...</div>';
 
@@ -3578,6 +3581,7 @@ async function loadCampanias() {
     const data = await resp.json();
     _campanias = data.campanias || [];
     _campaniasLoaded = true;
+    _campaniasLoading = false;
     renderCampaniasTab();
     renderResumenCampaniasHoy();
     // Poblar datalist de representantes
@@ -3599,6 +3603,7 @@ async function loadCampanias() {
       }
     }
   } catch(e) {
+    _campaniasLoading = false;
     const list = document.getElementById('campanias-list');
     if (list) list.innerHTML = `<div style="color:var(--red);padding:24px">Error: ${e.message}</div>`;
   }
