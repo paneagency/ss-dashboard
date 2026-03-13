@@ -3359,6 +3359,7 @@ function showCampCalDetail(evt, row) {
       <div>
         <div style="font-weight:600;font-size:15px">${c.artista}</div>
         <div style="font-size:12px;color:var(--muted)">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
+        ${c.representante ? `<div style="font-size:11px;margin-top:3px"><span style="color:var(--muted)">Rep:</span> <span style="color:var(--text);font-weight:500">${c.representante}</span></div>` : ''}
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${hasPauta||hasGastos?'10px':'0'}">
