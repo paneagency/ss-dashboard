@@ -264,12 +264,12 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, precio, metodo, gasto, pauta, link, gastosRows } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
-      const fechaVencimiento = addDays(fechaInicio, duracion);
+      const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
       const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio);
 
       let masterEventId = '', vendorEventId = '';
