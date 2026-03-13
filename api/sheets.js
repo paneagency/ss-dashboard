@@ -59,7 +59,10 @@ module.exports = async (req, res) => {
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:B' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Proveedores!A:A' }).catch(() => ({ data: { values: [] } })),
       ]);
-      const vendors = (vendResp.data.values || []).slice(1)
+      const vendRows = vendResp.data.values || [];
+      // Si la primera fila parece encabezado (ej: "VENDEDOR", "nombre"), la saltamos
+      const vendStart = /^(nombre|vendedor|name|vendor)/i.test(vendRows[0]?.[0] || '') ? 1 : 0;
+      const vendors = vendRows.slice(vendStart)
         .filter(r => r[0]?.trim())
         .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0 }));
       const providers = (provResp.data.values || []).slice(1)

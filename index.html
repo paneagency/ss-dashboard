@@ -2746,8 +2746,9 @@ function openClientDetail(row) {
   selV.innerHTML = '<option value="">—</option>';
   (window._vendors || []).forEach(v => {
     const name = v.name || v;
-    selV.innerHTML += `<option value="${name}"${name===c.vendedor?' selected':''}>${name}</option>`;
+    selV.innerHTML += `<option value="${name}">${name}</option>`;
   });
+  selV.value = c.vendedor || '';
   selV.disabled = readonly;
 
   // Método y estado selects
