@@ -1585,13 +1585,15 @@ async function init() {
           fillDatalist('list-providers', window._providers);
         }
       }).catch(() => {});
-      // Cargar clientes para autofill de representante
+      // Cargar clientes para autofill
       fetch('/api/campaign?mode=clients').then(r => r.json()).then(d => {
         if (d.clients) {
           window._clientesMap = {};
           d.clients.forEach(c => {
-            if (c.artista) window._clientesMap[c.artista.toLowerCase().trim()] = c.representante || '';
+            if (c.artista) window._clientesMap[c.artista.toLowerCase().trim()] = c;
           });
+          // Poblar datalist de artistas desde hoja Clientes
+          fillDatalist('list-artistas', d.clients.map(c => c.artista));
         }
       }).catch(() => {});
       return;
@@ -2911,41 +2913,42 @@ function autofillGastosFromPauta(text) {
 
 function autofillFromArtist() {
   const val = document.getElementById('f-artista').value.trim().toLowerCase();
-  if (!val || !allData?.length) return;
+  if (!val) return;
 
-  const matches = allData.filter(r => r.artista?.toLowerCase() === val);
-  if (!matches.length) return;
-
-  // Última transacción por fecha
-  const latest = matches.sort((a, b) => b.fecha - a.fecha)[0];
-
-  if (latest.genero && latest.genero !== 'Sin género') {
-    document.getElementById('f-genero').value = latest.genero;
-  }
-
-  // No tocar vendedor si el rol es vendedor (ya está bloqueado como readonly)
   const role = window._currentUser?.role;
-  if (role !== 'vendedor' && latest.venta) {
-    document.getElementById('f-venta').value = latest.venta;
-  }
+  const cliente = window._clientesMap?.[val];
 
-  if (latest.metodo) {
-    document.getElementById('f-metodo').value = latest.metodo;
-    autoComision();
-    recalcular();
-  }
-
-  // Autofill representante desde hoja Clientes (fuente de verdad)
-  const repFromClientes = window._clientesMap?.[val];
-  if (repFromClientes) {
-    document.getElementById('f-representante').value = repFromClientes;
-  } else if (window._campanias?.length) {
-    // Fallback: última campaña activa del artista
-    const campMatch = window._campanias
-      .filter(c => c.artista?.toLowerCase() === val && c.representante)
-      .slice(-1)[0];
-    if (campMatch?.representante) {
-      document.getElementById('f-representante').value = campMatch.representante;
+  if (cliente) {
+    // Fuente primaria: hoja Clientes
+    if (cliente.genero && cliente.genero !== 'Sin género') {
+      document.getElementById('f-genero').value = cliente.genero;
+    }
+    if (role !== 'vendedor' && cliente.vendedor) {
+      document.getElementById('f-venta').value = cliente.vendedor;
+    }
+    if (cliente.metodoPago) {
+      document.getElementById('f-metodo').value = cliente.metodoPago;
+      autoComision();
+      recalcular();
+    }
+    if (cliente.representante) {
+      document.getElementById('f-representante').value = cliente.representante;
+    }
+  } else if (allData?.length) {
+    // Fallback: última transacción en allData
+    const matches = allData.filter(r => r.artista?.toLowerCase() === val);
+    if (!matches.length) return;
+    const latest = matches.sort((a, b) => b.fecha - a.fecha)[0];
+    if (latest.genero && latest.genero !== 'Sin género') {
+      document.getElementById('f-genero').value = latest.genero;
+    }
+    if (role !== 'vendedor' && latest.venta) {
+      document.getElementById('f-venta').value = latest.venta;
+    }
+    if (latest.metodo) {
+      document.getElementById('f-metodo').value = latest.metodo;
+      autoComision();
+      recalcular();
     }
   }
 }
