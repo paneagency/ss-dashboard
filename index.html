@@ -1191,7 +1191,6 @@
         <div class="detalle-grid" style="margin-bottom:16px">
           <div class="detalle-field"><div class="detalle-field-label">Género</div><input id="dd-genero" class="dd-input" list="list-generos" placeholder="—"></div>
           <div class="detalle-field"><div class="detalle-field-label">País</div><input id="dd-pais" class="dd-input" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">Primera compra</div><input id="dd-fecha" class="dd-input" type="date"></div>
           <div class="detalle-field"><div class="detalle-field-label">Representante</div><input id="dd-representante" class="dd-input" list="list-representantes" placeholder="—"></div>
           <div class="detalle-field"><div class="detalle-field-label">Apodo</div><input id="dd-apodo" class="dd-input" placeholder="—"></div>
         </div>
@@ -2734,7 +2733,6 @@ function openClientDetail(row) {
   // Campos del formulario
   setVal('dd-genero', c.genero);
   setVal('dd-pais', c.pais);
-  setVal('dd-fecha', c.fechaPrimeraCompra);
   setVal('dd-representante', c.representante);
   setVal('dd-apodo', c.apodo);
   setVal('dd-telefono', c.telefono);
@@ -2788,7 +2786,6 @@ async function saveClientDetail() {
     telefono: document.getElementById('dd-telefono').value.trim(),
     email: document.getElementById('dd-email').value.trim(),
     spotify: document.getElementById('dd-spotify').value.trim(),
-    fechaPrimeraCompra: document.getElementById('dd-fecha').value,
     representante: document.getElementById('dd-representante').value.trim(),
     vendedor: document.getElementById('dd-vendedor').value,
     metodoPago: document.getElementById('dd-metodo').value,

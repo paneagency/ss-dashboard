@@ -138,6 +138,43 @@ async function updateClientFields(sheets, artista, fields) {
   });
 }
 
+function parseDateStr(s) {
+  const str = (s || '').trim();
+  let m;
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  return null;
+}
+
+async function findPrimeraCompra(sheets, artista) {
+  try {
+    const resp = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: '2024!A:J',
+    });
+    const rows = (resp.data.values || []).slice(1);
+    const norm = artista.toLowerCase().trim();
+    let earliest = null;
+    rows.forEach(r => {
+      if ((r[0] || '').toLowerCase().trim() !== norm) return;
+      const d = parseDateStr(r[9] || '');
+      if (d && (!earliest || d < earliest)) earliest = d;
+    });
+    if (!earliest) return null;
+    const y = earliest.getFullYear();
+    const m = String(earliest.getMonth() + 1).padStart(2, '0');
+    const d = String(earliest.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  } catch (e) {
+    console.warn('findPrimeraCompra error:', e.message);
+    return null;
+  }
+}
+
 async function getOrCreateClient(sheets, artista, genero, fechaVenta, representante, vendedor, metodo) {
   const resp = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
@@ -156,7 +193,10 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
     return clientId;
   }
 
-  const db = await lookupClientDB(sheets, artista);
+  const [db, primeraCompra] = await Promise.all([
+    lookupClientDB(sheets, artista),
+    findPrimeraCompra(sheets, artista),
+  ]);
   const newId = `C${String(rows.length).padStart(3, '0')}`;
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
@@ -168,8 +208,8 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
       db?.pais     || '',
       db?.telefono || '',
       db?.email    || '',
-      '',            // SPOTIFY
-      fechaVenta,    // FECHA_PRIMERA_COMPRA
+      '',                           // SPOTIFY
+      primeraCompra || fechaVenta,  // FECHA_PRIMERA_COMPRA
       representante || '',  // REPRESENTANTE
       '',            // NOMBRE (contacto)
       '',            // APODO
@@ -364,18 +404,20 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar cliente ───────────────────────────────────
     if (req.method === 'PUT' && req.body.mode === 'client') {
-      const { row, artista, genero, pais, telefono, email, spotify, fechaPrimeraCompra, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
+      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
       const existing = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: `${CLIENTES_SHEET}!A${row}:N${row}`,
       });
-      const id = existing.data.values?.[0]?.[0] || Date.now().toString();
+      const existingRow = existing.data.values?.[0] || [];
+      const id = existingRow[0] || Date.now().toString();
+      const fechaPrimeraCompra = existingRow[7] || ''; // Preservar siempre la fecha original
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${CLIENTES_SHEET}!A${row}:N${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[id, artista, genero || '', pais || '', telefono || '', email || '', spotify || '', fechaPrimeraCompra || '', representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '']] },
+        requestBody: { values: [[id, artista, genero || '', pais || '', telefono || '', email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '']] },
       });
       return res.json({ ok: true });
     }
