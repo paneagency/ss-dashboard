@@ -2597,7 +2597,11 @@ function renderDirectorio() {
       : '—';
 
     const row = [
-      { html: `<strong>${esc(c.artista || '')}</strong>`, cls: '', onclick: `openClientDetail(${c.row})` },
+      { html: `<span style="display:flex;align-items:center;gap:9px">${
+          c.imagen
+            ? `<img src="${esc(c.imagen)}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+            : `<span style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--indigo),var(--violet));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${esc((c.artista||'?')[0].toUpperCase())}</span>`
+        }<strong>${esc(c.artista || '')}</strong></span>`, cls: '', onclick: `openClientDetail(${c.row})` },
       { html: esc(c.nombre || '—'), onclick: `openClientDetail(${c.row})` },
       { html: esc(c.pais || '—'), onclick: `openClientDetail(${c.row})` },
       { html: esc(c.representante || '—'), onclick: `openClientDetail(${c.row})` },
