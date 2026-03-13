@@ -478,6 +478,10 @@
     .detalle-field-value a { color:var(--indigo);text-decoration:none }
     .detalle-field-value a:hover { text-decoration:underline }
     .detalle-field.full { grid-column:1/-1 }
+    .dd-input { background:transparent;border:none;outline:none;width:100%;font-size:14px;font-weight:500;color:inherit;padding:2px 0;transition:color .15s }
+    .dd-input:focus { color:var(--indigo) }
+    .dd-input[readonly] { cursor:default;pointer-events:none }
+    select.dd-input { -webkit-appearance:none;appearance:none }
     #table-directorio tbody tr { cursor:pointer; }
     #table-directorio tbody tr:hover td { background:rgba(99,102,241,0.04); }
     /* Celdas del calendario */
@@ -1167,32 +1171,58 @@
   <!-- MODAL: DETALLE CLIENTE -->
   <div id="modal-detalle-cliente" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeClientDetail()">
     <div class="modal-box" style="max-width:560px;padding:0;overflow:hidden">
-      <!-- Header con color -->
-      <div id="detalle-header" style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:28px 28px 20px;position:relative">
-        <button class="modal-close" onclick="closeClientDetail()" style="position:absolute;top:16px;right:16px">✕</button>
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:24px 28px 20px;position:relative">
+        <button class="modal-close" onclick="closeClientDetail()" style="position:absolute;top:14px;right:14px">✕</button>
         <div style="display:flex;align-items:center;gap:16px">
-          <div id="detalle-avatar" style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--indigo),var(--violet));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;flex-shrink:0"></div>
-          <div>
-            <div id="detalle-artista" style="font-size:20px;font-weight:700;line-height:1.2"></div>
-            <div id="detalle-nombre" style="font-size:13px;color:var(--muted);margin-top:3px"></div>
+          <div id="detalle-avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--indigo),var(--violet));display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
+            <input id="dd-artista" class="dd-input" style="font-size:19px;font-weight:700;width:100%;background:transparent;border:none;outline:none;color:inherit" placeholder="Nombre del artista">
+            <input id="dd-nombre" class="dd-input" style="font-size:13px;color:var(--muted);margin-top:2px;width:100%;background:transparent;border:none;outline:none" placeholder="Nombre de contacto · Apodo">
             <div style="margin-top:6px" id="detalle-estado-wrap"></div>
           </div>
         </div>
       </div>
-      <!-- Cuerpo -->
-      <div style="padding:20px 28px 0">
-        <!-- Sección: Información -->
+      <!-- Cuerpo scrolleable -->
+      <div style="overflow-y:auto;max-height:60vh;padding:20px 28px 4px">
+        <input type="hidden" id="dd-row">
+
         <div class="detalle-section-title">Información</div>
-        <div class="detalle-grid" id="detalle-info"></div>
-        <!-- Sección: Contacto -->
-        <div class="detalle-section-title" style="margin-top:16px">Contacto</div>
-        <div class="detalle-grid" id="detalle-contacto"></div>
-        <!-- Sección: Comercial -->
-        <div class="detalle-section-title" style="margin-top:16px">Comercial</div>
-        <div class="detalle-grid" id="detalle-comercial"></div>
+        <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field"><div class="detalle-field-label">Género</div><input id="dd-genero" class="dd-input" list="list-generos" placeholder="—"></div>
+          <div class="detalle-field"><div class="detalle-field-label">País</div><input id="dd-pais" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Primera compra</div><input id="dd-fecha" class="dd-input" type="date"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Representante</div><input id="dd-representante" class="dd-input" list="list-representantes" placeholder="—"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Apodo</div><input id="dd-apodo" class="dd-input" placeholder="—"></div>
+        </div>
+
+        <div class="detalle-section-title">Contacto</div>
+        <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field"><div class="detalle-field-label">Teléfono</div><input id="dd-telefono" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="dd-email" class="dd-input" type="email" placeholder="—"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Spotify</div><input id="dd-spotify" class="dd-input" placeholder="—"></div>
+        </div>
+
+        <div class="detalle-section-title">Comercial</div>
+        <div class="detalle-grid" style="margin-bottom:8px">
+          <div class="detalle-field"><div class="detalle-field-label">Vendedor</div>
+            <select id="dd-vendedor" class="dd-input" style="cursor:pointer"><option value="">—</option></select>
+          </div>
+          <div class="detalle-field"><div class="detalle-field-label">Método de pago</div>
+            <select id="dd-metodo" class="dd-input" style="cursor:pointer">
+              <option value="">—</option><option>PayPal</option><option>Wise</option>
+              <option>Mercado Pago</option><option>Transferencia Ars</option><option>Sin Comision</option>
+            </select>
+          </div>
+          <div class="detalle-field"><div class="detalle-field-label">Estado</div>
+            <select id="dd-estado" class="dd-input" style="cursor:pointer">
+              <option value="Activa">Activa</option><option value="Sin pauta">Sin pauta</option>
+            </select>
+          </div>
+        </div>
       </div>
-      <!-- Footer acciones -->
-      <div id="detalle-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:20px 28px 24px">
+      <!-- Footer -->
+      <div id="detalle-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:16px 28px 20px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>
       </div>
     </div>
@@ -2657,7 +2687,7 @@ function renderDirectorio() {
       { html: estadoBadge, cls: '', onclick: `openClientDetail(${c.row})` },
     ];
     if (canEdit) {
-      row.push({ html: `<button class="btn btn-ghost btn-sm" title="Editar" onclick="event.stopPropagation();openClientModal(${c.row})">✏️</button> <button class="btn btn-ghost btn-sm" title="Eliminar" style="color:var(--red)" onclick="event.stopPropagation();deleteClient(${c.row},'${esc(c.artista || '')}')">🗑️</button>`, cls: '' });
+      row.push({ html: `<button class="btn btn-ghost btn-sm" title="Eliminar" style="color:var(--red)" onclick="event.stopPropagation();deleteClient(${c.row},'${esc(c.artista || '')}')">🗑️</button>`, cls: '' });
     }
     return row;
   });
@@ -2681,48 +2711,93 @@ function renderDirectorio() {
 function openClientDetail(row) {
   const c = window._clientesRow?.[row];
   if (!c) return;
-  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const esc = s => (s || '').replace(/"/g,'&quot;');
   const role = window._currentUser?.role;
   const canEdit = ['admin', 'secondary_admin'].includes(role);
+  const readonly = !canEdit;
 
-  // Avatar: inicial del artista
+  // Avatar e inputs del header
   document.getElementById('detalle-avatar').textContent = (c.artista || '?')[0].toUpperCase();
-  document.getElementById('detalle-artista').textContent = c.artista || '—';
-  document.getElementById('detalle-nombre').textContent = c.nombre ? `${c.nombre}${c.apodo ? ' · ' + c.apodo : ''}` : (c.apodo || '');
+  const setVal = (id, val) => { const el = document.getElementById(id); el.value = val || ''; el.readOnly = readonly; };
+  setVal('dd-artista', c.artista);
+  setVal('dd-nombre', c.nombre);
+  setVal('dd-row', row);
 
-  // Estado badge
-  const estadoColor = c.estado === 'Activa' ? 'background:rgba(16,185,129,0.15);color:var(--green)' : 'background:rgba(245,158,11,0.15);color:var(--amber)';
-  document.getElementById('detalle-estado-wrap').innerHTML = c.estado
-    ? `<span class="td-badge" style="${estadoColor};font-size:12px">${esc(c.estado)}</span>` : '';
+  // Estado badge (dinámico al cambiar select)
+  const updateEstadoBadge = (estado) => {
+    const color = estado === 'Activa' ? 'background:rgba(16,185,129,0.15);color:var(--green)' : 'background:rgba(245,158,11,0.15);color:var(--amber)';
+    document.getElementById('detalle-estado-wrap').innerHTML = estado
+      ? `<span class="td-badge" style="${color};font-size:12px">${estado}</span>` : '';
+  };
+  updateEstadoBadge(c.estado);
 
-  // Información
-  const field = (label, value, full) =>
-    value ? `<div class="detalle-field${full?' full':''}"><div class="detalle-field-label">${label}</div><div class="detalle-field-value">${value}</div></div>` : '';
+  // Campos del formulario
+  setVal('dd-genero', c.genero);
+  setVal('dd-pais', c.pais);
+  setVal('dd-fecha', c.fechaPrimeraCompra);
+  setVal('dd-representante', c.representante);
+  setVal('dd-apodo', c.apodo);
+  setVal('dd-telefono', c.telefono);
+  setVal('dd-email', c.email);
+  setVal('dd-spotify', c.spotify);
 
-  document.getElementById('detalle-info').innerHTML =
-    field('Género', esc(c.genero)) +
-    field('País', esc(c.pais)) +
-    field('Primera compra', c.fechaPrimeraCompra || '') +
-    field('Representante', esc(c.representante));
+  // Vendedor select
+  const selV = document.getElementById('dd-vendedor');
+  selV.innerHTML = '<option value="">—</option>';
+  (window._vendors || []).forEach(v => {
+    const name = v.name || v;
+    selV.innerHTML += `<option value="${name}"${name===c.vendedor?' selected':''}>${name}</option>`;
+  });
+  selV.disabled = readonly;
 
-  document.getElementById('detalle-contacto').innerHTML =
-    field('Teléfono', c.telefono ? `<a href="tel:${esc(c.telefono)}">${esc(c.telefono)}</a>` : '') +
-    field('Email', c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '') +
-    (c.spotify ? `<div class="detalle-field full"><div class="detalle-field-label">Spotify</div><div class="detalle-field-value" style="font-size:12px;word-break:break-all">${esc(c.spotify)}</div></div>` : '');
+  // Método y estado selects
+  document.getElementById('dd-metodo').value = c.metodoPago || '';
+  document.getElementById('dd-metodo').disabled = readonly;
+  document.getElementById('dd-estado').value = c.estado || 'Activa';
+  document.getElementById('dd-estado').disabled = readonly;
+  document.getElementById('dd-estado').onchange = () => updateEstadoBadge(document.getElementById('dd-estado').value);
 
-  document.getElementById('detalle-comercial').innerHTML =
-    field('Vendedor', esc(c.vendedor)) +
-    field('Método de pago', esc(c.metodoPago));
-
-  // Footer con acciones si puede editar
+  // Footer
   const footer = document.getElementById('detalle-footer');
-  footer.innerHTML = canEdit
-    ? `<button class="btn btn-ghost" style="color:var(--red)" onclick="closeClientDetail();deleteClient(${row},'${esc(c.artista || '')}')">🗑️ Eliminar</button>
-       <button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>
-       <button class="btn btn-primary" onclick="closeClientDetail();openClientModal(${row})">✏️ Editar</button>`
-    : `<button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>`;
+  if (canEdit) {
+    footer.innerHTML = `<button class="btn btn-ghost" style="color:var(--red);margin-right:auto" onclick="closeClientDetail();deleteClient(${row},'${esc(c.artista||'')}')">🗑️ Eliminar</button>
+      <button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>
+      <button class="btn btn-primary" onclick="saveClientDetail()">Guardar</button>`;
+  } else {
+    footer.innerHTML = `<button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>`;
+  }
 
   document.getElementById('modal-detalle-cliente').style.display = 'flex';
+}
+
+async function saveClientDetail() {
+  const artista = document.getElementById('dd-artista').value.trim();
+  if (!artista) { showToast('El nombre del artista es requerido', true); return; }
+  const row = parseInt(document.getElementById('dd-row').value);
+  const payload = {
+    mode: 'client', row,
+    artista,
+    nombre: document.getElementById('dd-nombre').value.trim(),
+    apodo: document.getElementById('dd-apodo').value.trim(),
+    genero: document.getElementById('dd-genero').value.trim(),
+    pais: document.getElementById('dd-pais').value.trim(),
+    telefono: document.getElementById('dd-telefono').value.trim(),
+    email: document.getElementById('dd-email').value.trim(),
+    spotify: document.getElementById('dd-spotify').value.trim(),
+    fechaPrimeraCompra: document.getElementById('dd-fecha').value,
+    representante: document.getElementById('dd-representante').value.trim(),
+    vendedor: document.getElementById('dd-vendedor').value,
+    metodoPago: document.getElementById('dd-metodo').value,
+    estado: document.getElementById('dd-estado').value,
+  };
+  try {
+    const r = await fetch('/api/campaign', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Error al guardar');
+    showToast('Cliente actualizado');
+    closeClientDetail();
+    await refreshDirectorio();
+  } catch(e) { showToast(e.message, true); }
 }
 
 function closeClientDetail() {
