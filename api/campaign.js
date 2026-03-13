@@ -194,12 +194,12 @@ async function deleteCalEvents(cal, vendedor, masterEventId, vendorEventId) {
 function addDays(dateStr, days) {
   const d = new Date(dateStr + 'T12:00:00');
   const n = parseInt(days);
-  // 28-31 → +1 mes, 58-62 → +2 meses, 88-92 → +3 meses
-  // (cubre campañas antiguas donde duracion se calculó como días calendario de un mes)
-  if (n >= 28 && n <= 31)      { d.setMonth(d.getMonth() + 1); }
-  else if (n >= 58 && n <= 62) { d.setMonth(d.getMonth() + 2); }
-  else if (n >= 88 && n <= 92) { d.setMonth(d.getMonth() + 3); }
-  else { d.setDate(d.getDate() + n); }
+  // 7 y 14 días: suma días exactos. Todo lo demás (mensual): mismo día N meses después.
+  if (n <= 21) {
+    d.setDate(d.getDate() + n);
+  } else {
+    d.setMonth(d.getMonth() + Math.round(n / 30));
+  }
   return d.toISOString().split('T')[0];
 }
 
