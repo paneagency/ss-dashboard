@@ -2593,7 +2593,7 @@ function renderDirectorio() {
       : '—';
 
     const row = [
-      { html: `<strong>${esc(c.artista || '')}</strong>${c.apodo ? `<br><span style="font-size:11px;color:var(--muted)">${esc(c.apodo)}</span>` : ''}`, cls: '' },
+      { html: `<strong>${esc(c.artista || '')}</strong>`, cls: '' },
       esc(c.nombre || '—'),
       esc(c.pais || '—'),
       esc(c.representante || '—'),
