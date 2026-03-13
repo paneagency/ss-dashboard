@@ -804,7 +804,14 @@
 
           <div class="form-group">
             <label class="form-label">Link de canción</label>
-            <input class="form-input" id="f-link" type="url" placeholder="https://open.spotify.com/...">
+            <input class="form-input" id="f-link" type="url" placeholder="https://open.spotify.com/..." oninput="autofillFromSpotify()">
+            <div id="spotify-preview" style="display:none;margin-top:6px;padding:8px 10px;background:#1db954;color:#fff;border-radius:8px;display:none;align-items:center;gap:10px;font-size:13px">
+              <img id="spotify-preview-img" src="" style="width:40px;height:40px;border-radius:4px;object-fit:cover;flex-shrink:0">
+              <div>
+                <div id="spotify-preview-track" style="font-weight:600;line-height:1.3"></div>
+                <div id="spotify-preview-artist" style="opacity:0.85;font-size:12px"></div>
+              </div>
+            </div>
           </div>
 
           <div class="form-group">
@@ -3291,6 +3298,51 @@ function autofillGastosFromPauta(text) {
   gastoLines.forEach(m => addGastoRow(parseFloat(m[1]), m[2].trim()));
 }
 
+let _spotifyDebounce = null;
+function autofillFromSpotify() {
+  const url = document.getElementById('f-link').value.trim();
+  const preview = document.getElementById('spotify-preview');
+
+  // Ocultar preview si no es una URL de Spotify
+  if (!url.includes('spotify.com/')) {
+    preview.style.display = 'none';
+    return;
+  }
+
+  clearTimeout(_spotifyDebounce);
+  _spotifyDebounce = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/spotify?url=${encodeURIComponent(url)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Auto-llenar artista si está vacío
+      const fArtista = document.getElementById('f-artista');
+      if (!fArtista.value.trim() && data.artist) {
+        fArtista.value = data.artist;
+        autofillFromArtist();
+      }
+
+      // Mostrar preview
+      const img = document.getElementById('spotify-preview-img');
+      const trackEl = document.getElementById('spotify-preview-track');
+      const artistEl = document.getElementById('spotify-preview-artist');
+
+      if (data.image) {
+        img.src = data.image;
+        img.style.display = 'block';
+      } else {
+        img.style.display = 'none';
+      }
+      trackEl.textContent = data.track || data.artist;
+      artistEl.textContent = data.track ? data.artist : '';
+      preview.style.display = 'flex';
+    } catch (e) {
+      // silencioso
+    }
+  }, 600);
+}
+
 function autofillFromArtist() {
   const val = document.getElementById('f-artista').value.trim().toLowerCase();
   if (!val) return;
@@ -3371,6 +3423,7 @@ function closeModal(force) {
   document.getElementById('f-neto').value = '';
   document.getElementById('f-final').value = '';
   document.getElementById('f-margen').value = '';
+  document.getElementById('spotify-preview').style.display = 'none';
 }
 
 function fillDatalist(id, values) {
