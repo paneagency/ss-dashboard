@@ -2751,9 +2751,12 @@ function openClientDetail(row) {
   selV.value = c.vendedor || '';
   selV.disabled = readonly;
 
-  // Método y estado selects
-  document.getElementById('dd-metodo').value = c.metodoPago || '';
-  document.getElementById('dd-metodo').disabled = readonly;
+  // Método y estado selects (búsqueda case-insensitive para evitar mismatch ej: "Paypal" vs "PayPal")
+  const metodoEl = document.getElementById('dd-metodo');
+  const metodoRaw = (c.metodoPago || '').toLowerCase();
+  const metodoMatch = Array.from(metodoEl.options).find(o => o.value.toLowerCase() === metodoRaw);
+  metodoEl.value = metodoMatch ? metodoMatch.value : (c.metodoPago || '');
+  metodoEl.disabled = readonly;
   document.getElementById('dd-estado').value = c.estado || 'Activa';
   document.getElementById('dd-estado').disabled = readonly;
   document.getElementById('dd-estado').onchange = () => updateEstadoBadge(document.getElementById('dd-estado').value);
