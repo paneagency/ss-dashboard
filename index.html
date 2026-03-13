@@ -1704,8 +1704,6 @@ async function init() {
           fillDatalist('list-providers', window._providers);
         }
       }).catch(() => {});
-      // Cargar campañas en background para tener datos en Resumen desde el inicio
-      loadCampanias().catch(() => {});
       // Cargar clientes para autofill y directorio
       fetch('/api/campaign?mode=clients').then(r => r.json()).then(d => {
         if (d.clients) {
@@ -3567,6 +3565,7 @@ function setCampView(v) {
 }
 
 async function loadCampanias() {
+  if (_campaniasLoading) return;
   const role    = window._currentUser?.role;
   const vendor  = window._currentUser?.vendorName;
   const isAdmin = role === 'admin' || role === 'secondary_admin';
