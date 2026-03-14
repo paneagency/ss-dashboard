@@ -3458,6 +3458,7 @@ function autofillFromSpotify() {}
 
 // ── SMART PAUTA DETECTION ───────────────────────────────────
 let _processedTrackUrls = new Map(); // url → {track, artist, artistId, image}
+let _prefixedUrls = new Map(); // url → isMulti state when prefix was last inserted/confirmed
 let _smartPautaTimer = null;
 const _TRACK_RE = /https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/([A-Za-z0-9]+)(?:\?[^\s]*)?/g;
 
@@ -3511,8 +3512,10 @@ function smartPautaDetect() {
       const lastNewline = before.lastIndexOf('\n');
       const prevLine = before.substring(lastNewline + 1).trim();
       const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
-      // Saltar si ya está el prefijo correcto
-      if (prevLine === expectedPrefix) continue;
+      // Saltar si ya fue prefijado con el mismo estado isMulti — no re-insertar al seguir escribiendo
+      if (_prefixedUrls.has(url) && _prefixedUrls.get(url) === isMulti) continue;
+      // Saltar si ya está el prefijo correcto (pre-existente en el texto)
+      if (prevLine === expectedPrefix) { _prefixedUrls.set(url, isMulti); continue; }
       // Reemplazar prefijo incorrecto (cambio de modo single↔multi)
       const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
       if (prevLine === altPrefix) {
@@ -3521,6 +3524,7 @@ function smartPautaDetect() {
       } else {
         newText = newText.substring(0, urlIdx) + expectedPrefix + '\n' + newText.substring(urlIdx);
       }
+      _prefixedUrls.set(url, isMulti);
       modified = true;
     }
     if (modified) {
@@ -3733,6 +3737,7 @@ function openModal() {
   // Resetear modo multi-artista si estaba activo
   if (_isMultiArtista) toggleMultiArtista();
   _processedTrackUrls = new Map();
+  _prefixedUrls = new Map();
   clearTimeout(_smartPautaTimer);
 
   document.getElementById('modal-overlay').classList.add('open');
@@ -3763,6 +3768,7 @@ function closeModal(force) {
   window._spotifyArtistId = null;
   window._spotifyImageUrl  = null;
   _processedTrackUrls = new Map();
+  _prefixedUrls = new Map();
   clearTimeout(_smartPautaTimer);
 }
 
