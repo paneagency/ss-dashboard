@@ -1338,7 +1338,7 @@
       <input type="text" id="camp-search" class="filter-control"
         placeholder="Buscar artista..."
         style="width:100%;padding:8px 36px 8px 36px;box-sizing:border-box"
-        oninput="this.nextElementSibling.style.display=this.value?'flex':'none';renderCampaniasTab()">
+        oninput="this.nextElementSibling.style.display=this.value?'flex':'none';if(!this.value)_campCalMonth=new Date();renderCampaniasTab()">
       <button onclick="document.getElementById('camp-search').value='';this.style.display='none';_campCalMonth=new Date();renderCampaniasTab()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;width:22px;height:22px;align-items:center;justify-content:center;border-radius:50%;transition:all 0.15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">✕</button>
     </div>
     <div id="campanias-list"></div>
