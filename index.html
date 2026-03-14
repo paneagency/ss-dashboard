@@ -3486,13 +3486,13 @@ function smartPautaDetect() {
 
     // Colectar artistas únicos (solo de URLs procesadas)
     const currentText = fPauta.value;
-    const artistsMap = new Map(); // key → {artist, artistId, image, url}
+    const artistsMap = new Map(); // key → {artist, artistSpotifyId, image, url}
     for (const url of urls) {
       const data = _processedTrackUrls.get(url);
       if (!data?.artist) continue;
-      const key = data.artistId || data.artist;
+      const key = data.artistSpotifyId || data.artist;
       if (!artistsMap.has(key)) {
-        artistsMap.set(key, { artist: data.artist, artistId: data.artistId, image: data.image, url });
+        artistsMap.set(key, { artist: data.artist, artistSpotifyId: data.artistSpotifyId, image: data.image, url });
       }
     }
 
@@ -3534,7 +3534,7 @@ function smartPautaDetect() {
       const a = uniqueArtists[0];
       if (_isMultiArtista) toggleMultiArtista(); // volver a modo single
       document.getElementById('f-artista').value = a.artist || '';
-      window._spotifyArtistId = a.artistId || null;
+      window._spotifyArtistId = a.artistSpotifyId || null;
       window._spotifyImageUrl = a.image || null;
       if (a.image) {
         const av = document.getElementById('modal-artist-avatar');
@@ -3870,7 +3870,7 @@ async function submitSale(e) {
     const artistasBase = esGrupal ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }];
     const artistasList = artistasBase.map(a => ({
       ...a,
-      spotifyArtistId: esGrupal ? (_processedTrackUrls.get(a.link)?.artistId || null) : spotifyArtistId,
+      spotifyArtistId: esGrupal ? (_processedTrackUrls.get(a.link)?.artistSpotifyId || null) : spotifyArtistId,
       spotifyImageUrl: esGrupal ? (_processedTrackUrls.get(a.link)?.image  || null) : spotifyImageUrl,
     }));
 
@@ -3973,7 +3973,7 @@ async function submitSinPago(e) {
     const artistasBase = esGrupal ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }];
     const artistasList = artistasBase.map(a => ({
       ...a,
-      spotifyArtistId: esGrupal ? (_processedTrackUrls.get(a.link)?.artistId || null) : spotifyArtistId,
+      spotifyArtistId: esGrupal ? (_processedTrackUrls.get(a.link)?.artistSpotifyId || null) : spotifyArtistId,
       spotifyImageUrl: esGrupal ? (_processedTrackUrls.get(a.link)?.image  || null) : spotifyImageUrl,
     }));
 
