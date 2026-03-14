@@ -815,13 +815,7 @@
             <datalist id="list-artistas"></datalist>
           </div>
 
-          <!-- Artistas múltiples (pauta grupal, hidden by default) -->
-          <div id="artistas-grupal-section" class="form-group full" style="display:none">
-            <label class="form-label">Artistas incluidos en la pauta</label>
-            <div id="artista-rows"></div>
-            <button type="button" onclick="addArtistaRow()" class="btn btn-ghost btn-sm" style="font-size:12px;margin-top:2px">+ Agregar artista</button>
-            <span class="form-hint" style="margin-top:6px;display:block">Se crea una campaña individual por artista compartiendo el mismo evento de Google Calendar.</span>
-          </div>
+          <div id="artista-rows" style="display:none"></div>
 
           <div class="form-group">
             <label class="form-label">Género</label>
@@ -3493,35 +3487,12 @@ function smartPautaDetect() {
       } catch(e) { /* silencioso */ }
     }));
 
-    // Insertar nombre de canción encima de cada URL (si no está ya)
-    let newText = fPauta.value;
-    let modified = false;
-    for (const url of urls) {
-      const data = _processedTrackUrls.get(url);
-      if (!data?.track) continue;
-      const urlIdx = newText.indexOf(url);
-      if (urlIdx === -1) continue;
-      // Revisar si la línea anterior ya tiene el nombre del track
-      const before = newText.substring(0, urlIdx);
-      const lastNewline = before.lastIndexOf('\n');
-      const prevLine = before.substring(lastNewline + 1).trim();
-      if (prevLine === data.track) continue; // ya insertado
-      // Insertar
-      newText = newText.substring(0, urlIdx) + data.track + '\n' + newText.substring(urlIdx);
-      modified = true;
-    }
-    if (modified) {
-      fPauta.value = newText;
-      autofillPrecioFromPauta();
-    }
-
-    // Colectar artistas únicos (solo de URLs que siguen en el texto)
+    // Colectar artistas únicos (solo de URLs procesadas)
     const currentText = fPauta.value;
-    const artistsMap = new Map(); // artistId → {artist, artistId, image, url}
+    const artistsMap = new Map(); // key → {artist, artistId, image, url}
     for (const url of urls) {
-      if (!currentText.includes(url)) continue;
       const data = _processedTrackUrls.get(url);
-      if (!data?.artistId && !data?.artist) continue;
+      if (!data?.artist) continue;
       const key = data.artistId || data.artist;
       if (!artistsMap.has(key)) {
         artistsMap.set(key, { artist: data.artist, artistId: data.artistId, image: data.image, url });
@@ -3529,31 +3500,69 @@ function smartPautaDetect() {
     }
 
     const uniqueArtists = [...artistsMap.values()];
+    const isMulti = uniqueArtists.length > 1;
+
+    // Insertar prefijo encima de cada URL según modo
+    let newText = fPauta.value;
+    let modified = false;
+    for (const url of urls) {
+      const data = _processedTrackUrls.get(url);
+      if (!data?.track) continue;
+      const urlIdx = newText.indexOf(url);
+      if (urlIdx === -1) continue;
+      const before = newText.substring(0, urlIdx);
+      const lastNewline = before.lastIndexOf('\n');
+      const prevLine = before.substring(lastNewline + 1).trim();
+      const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
+      // Saltar si ya está el prefijo correcto
+      if (prevLine === expectedPrefix) continue;
+      // Reemplazar prefijo incorrecto (cambio de modo single↔multi)
+      const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
+      if (prevLine === altPrefix) {
+        const prevLineStart = before.lastIndexOf('\n') + 1;
+        newText = newText.substring(0, prevLineStart) + expectedPrefix + '\n' + newText.substring(urlIdx);
+      } else {
+        newText = newText.substring(0, urlIdx) + expectedPrefix + '\n' + newText.substring(urlIdx);
+      }
+      modified = true;
+    }
+    if (modified) {
+      fPauta.value = newText;
+      autofillPrecioFromPauta();
+    }
+
     if (!uniqueArtists.length) return;
 
-    if (uniqueArtists.length === 1) {
+    if (!isMulti) {
       const a = uniqueArtists[0];
       if (_isMultiArtista) toggleMultiArtista(); // volver a modo single
       document.getElementById('f-artista').value = a.artist || '';
       window._spotifyArtistId = a.artistId || null;
       window._spotifyImageUrl = a.image || null;
-      // Actualizar avatar del modal
       if (a.image) {
         const av = document.getElementById('modal-artist-avatar');
         if (av) { av.style.backgroundImage = `url(${a.image})`; av.textContent = ''; }
       }
       autofillFromArtist();
     } else {
-      // Múltiples artistas → modo grupal
+      // Múltiples artistas → activar modo grupal (oculta campo artista)
       if (!_isMultiArtista) toggleMultiArtista();
-      // Repoblar artista-rows con los artistas detectados
-      document.getElementById('artista-rows').innerHTML = '';
-      for (const a of uniqueArtists) {
-        addArtistaRow(a.artist || '', a.url);
-      }
-      _updateArtistaRemoveButtons();
     }
   }, 800);
+}
+
+// Extrae artistas y links desde la pauta cuando es modo grupal
+// Formato esperado: "(Artista) Nombre track\nhttps://open.spotify.com/track/..."
+function parseArtistasFromPauta(pauta) {
+  const re = /\(([^)]+)\)[^\n]+\n(https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/[A-Za-z0-9]+(?:\?[^\s]*)?)/g;
+  const seen = new Set();
+  const result = [];
+  for (const m of pauta.matchAll(re)) {
+    const nombre = m[1].trim();
+    const link   = m[2].trim();
+    if (!seen.has(nombre)) { seen.add(nombre); result.push({ nombre, link }); }
+  }
+  return result;
 }
 
 // ── ARTISTA ROWS (pauta grupal) ─────────────────────────────
@@ -3564,21 +3573,16 @@ function toggleMultiArtista() {
   _isMultiArtista = !_isMultiArtista;
   const btn         = document.getElementById('btn-multi-artista');
   const singleGroup = document.getElementById('single-artista-group');
-  const multiSect   = document.getElementById('artistas-grupal-section');
   const fArtista    = document.getElementById('f-artista');
 
   if (_isMultiArtista) {
     btn.style.cssText = 'background:rgba(99,102,241,0.12);color:var(--indigo);border-color:rgba(99,102,241,0.35);font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:600';
     singleGroup.style.display = 'none';
-    multiSect.style.display   = '';
     fArtista.required = false;
-    if (!document.querySelector('.artista-row')) addArtistaRow();
   } else {
     btn.style.cssText = 'font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:500';
     singleGroup.style.display = '';
-    multiSect.style.display   = 'none';
     fArtista.required = true;
-    document.getElementById('artista-rows').innerHTML = '';
   }
 }
 
@@ -3733,7 +3737,6 @@ function openModal() {
 function modalHasData() {
   const fields = ['f-artista','f-genero','f-pauta','f-venta','f-representante','f-metodo','f-precio'];
   if (fields.some(id => (document.getElementById(id)?.value || '').trim() !== '')) return true;
-  if ([...document.querySelectorAll('#artista-rows .artista-row-nombre')].some(el => el.value.trim())) return true;
   const gastoInputs = document.querySelectorAll('#gasto-rows .gasto-amount');
   return [...gastoInputs].some(el => (el.value || '').trim() !== '' && el.value !== '0');
 }
@@ -3824,9 +3827,9 @@ async function submitSale(e) {
     const _pautaLinkMatch = pauta.match(/https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/[A-Za-z0-9]+(?:\?[^\s]*)?/);
     const link     = _pautaLinkMatch ? _pautaLinkMatch[0] : '';
 
-    // Artista: modo single vs multi
+    // Artista: modo single vs multi (para multi usa primer artista de la pauta)
     const artista = _isMultiArtista
-      ? (document.querySelector('#artista-rows .artista-row-nombre')?.value.trim() || '')
+      ? (parseArtistasFromPauta(pauta)[0]?.nombre || '')
       : document.getElementById('f-artista').value.trim();
 
     if (!artista) { showToast('Ingresá el artista', 'error'); return; }
@@ -3857,10 +3860,7 @@ async function submitSale(e) {
 
     // Artistas para campañas (multi o single)
     const artistasList = _isMultiArtista
-      ? [...document.querySelectorAll('#artista-rows .artista-row')].map(r => ({
-          nombre: r.querySelector('.artista-row-nombre').value.trim(),
-          link:   r.querySelector('.artista-row-link').value.trim(),
-        })).filter(a => a.nombre)
+      ? (parseArtistasFromPauta(pauta).length ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }])
       : [{ nombre: artista, link }];
 
     showToast('Venta Registrada', 'success');
@@ -3946,7 +3946,7 @@ async function submitSinPago(e) {
     const spotifyImageUrl  = window._spotifyImageUrl  || null;
 
     const artista = _isMultiArtista
-      ? (document.querySelector('#artista-rows .artista-row-nombre')?.value.trim() || '')
+      ? (parseArtistasFromPauta(pauta)[0]?.nombre || '')
       : document.getElementById('f-artista').value.trim();
 
     if (!artista) { showToast('Ingresá el artista', 'error'); return; }
@@ -3958,10 +3958,7 @@ async function submitSinPago(e) {
     })).filter(r => r.amount > 0);
 
     const artistasList = _isMultiArtista
-      ? [...document.querySelectorAll('#artista-rows .artista-row')].map(r => ({
-          nombre: r.querySelector('.artista-row-nombre').value.trim(),
-          link:   r.querySelector('.artista-row-link').value.trim(),
-        })).filter(a => a.nombre)
+      ? (parseArtistasFromPauta(pauta).length ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }])
       : [{ nombre: artista, link }];
 
     let sharedMasterId = '', sharedVendorId = '';
