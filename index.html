@@ -829,16 +829,9 @@
             <datalist id="list-generos"></datalist>
           </div>
 
-          <!-- Canciones (modo artista único) -->
-          <div class="form-group" id="songs-section">
-            <label class="form-label">Canciones</label>
-            <div id="song-rows"></div>
-            <button type="button" onclick="addSongRow()" class="btn btn-ghost btn-sm" style="font-size:12px;margin-top:2px">+ Agregar canción</button>
-          </div>
-
           <div class="form-group full">
             <label class="form-label">Pauta / Promoción</label>
-            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Ej: Playlist Submission 30 días, 3 pitches incluidos..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta()"></textarea>
+            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
           </div>
 
           <div class="form-group">
@@ -3469,10 +3462,98 @@ function autofillSong(input) {
   }, 600));
 }
 
-// Compat: alias para código legacy que llame autofillFromSpotify
-function autofillFromSpotify() {
-  const first = document.querySelector('#song-rows .song-link');
-  if (first) autofillSong(first);
+// Compat alias (no-op ahora que no hay campo de link separado)
+function autofillFromSpotify() {}
+
+// ── SMART PAUTA DETECTION ───────────────────────────────────
+let _processedTrackUrls = new Map(); // url → {track, artist, artistId, image}
+let _smartPautaTimer = null;
+const _TRACK_RE = /https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/([A-Za-z0-9]+)(?:\?[^\s]*)?/g;
+
+function smartPautaDetect() {
+  clearTimeout(_smartPautaTimer);
+  _smartPautaTimer = setTimeout(async () => {
+    const fPauta = document.getElementById('f-pauta');
+    if (!fPauta) return;
+    const text = fPauta.value;
+
+    // Encontrar todos los track URLs únicos
+    const matches = [...text.matchAll(_TRACK_RE)].map(m => m[0]);
+    const urls = [...new Set(matches)];
+    if (!urls.length) return;
+
+    // Fetch datos de URLs nuevas
+    const newUrls = urls.filter(u => !_processedTrackUrls.has(u));
+    await Promise.all(newUrls.map(async url => {
+      try {
+        const res = await fetch(`/api/spotify?url=${encodeURIComponent(url)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        _processedTrackUrls.set(url, data);
+      } catch(e) { /* silencioso */ }
+    }));
+
+    // Insertar nombre de canción encima de cada URL (si no está ya)
+    let newText = fPauta.value;
+    let modified = false;
+    for (const url of urls) {
+      const data = _processedTrackUrls.get(url);
+      if (!data?.track) continue;
+      const urlIdx = newText.indexOf(url);
+      if (urlIdx === -1) continue;
+      // Revisar si la línea anterior ya tiene el nombre del track
+      const before = newText.substring(0, urlIdx);
+      const lastNewline = before.lastIndexOf('\n');
+      const prevLine = before.substring(lastNewline + 1).trim();
+      if (prevLine === data.track) continue; // ya insertado
+      // Insertar
+      newText = newText.substring(0, urlIdx) + data.track + '\n' + newText.substring(urlIdx);
+      modified = true;
+    }
+    if (modified) {
+      fPauta.value = newText;
+      autofillPrecioFromPauta();
+    }
+
+    // Colectar artistas únicos (solo de URLs que siguen en el texto)
+    const currentText = fPauta.value;
+    const artistsMap = new Map(); // artistId → {artist, artistId, image, url}
+    for (const url of urls) {
+      if (!currentText.includes(url)) continue;
+      const data = _processedTrackUrls.get(url);
+      if (!data?.artistId && !data?.artist) continue;
+      const key = data.artistId || data.artist;
+      if (!artistsMap.has(key)) {
+        artistsMap.set(key, { artist: data.artist, artistId: data.artistId, image: data.image, url });
+      }
+    }
+
+    const uniqueArtists = [...artistsMap.values()];
+    if (!uniqueArtists.length) return;
+
+    if (uniqueArtists.length === 1) {
+      const a = uniqueArtists[0];
+      if (_isMultiArtista) toggleMultiArtista(); // volver a modo single
+      document.getElementById('f-artista').value = a.artist || '';
+      window._spotifyArtistId = a.artistId || null;
+      window._spotifyImageUrl = a.image || null;
+      // Actualizar avatar del modal
+      if (a.image) {
+        const av = document.getElementById('modal-artist-avatar');
+        if (av) { av.style.backgroundImage = `url(${a.image})`; av.textContent = ''; }
+      }
+      autofillFromArtist();
+    } else {
+      // Múltiples artistas → modo grupal
+      if (!_isMultiArtista) toggleMultiArtista();
+      // Repoblar artista-rows con los artistas detectados
+      document.getElementById('artista-rows').innerHTML = '';
+      for (const a of uniqueArtists) {
+        addArtistaRow(a.artist || '', a.url);
+      }
+      _updateArtistaRemoveButtons();
+    }
+  }, 800);
 }
 
 // ── ARTISTA ROWS (pauta grupal) ─────────────────────────────
@@ -3484,21 +3565,18 @@ function toggleMultiArtista() {
   const btn         = document.getElementById('btn-multi-artista');
   const singleGroup = document.getElementById('single-artista-group');
   const multiSect   = document.getElementById('artistas-grupal-section');
-  const songsSect   = document.getElementById('songs-section');
   const fArtista    = document.getElementById('f-artista');
 
   if (_isMultiArtista) {
     btn.style.cssText = 'background:rgba(99,102,241,0.12);color:var(--indigo);border-color:rgba(99,102,241,0.35);font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:600';
     singleGroup.style.display = 'none';
     multiSect.style.display   = '';
-    songsSect.style.display   = 'none';
     fArtista.required = false;
     if (!document.querySelector('.artista-row')) addArtistaRow();
   } else {
     btn.style.cssText = 'font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:500';
     singleGroup.style.display = '';
     multiSect.style.display   = 'none';
-    songsSect.style.display   = '';
     fArtista.required = true;
     document.getElementById('artista-rows').innerHTML = '';
   }
@@ -3638,14 +3716,14 @@ function openModal() {
     ventaInput.readOnly = true;
   }
 
-  // Iniciar con una fila de gasto vacía y una de canción
+  // Iniciar con una fila de gasto vacía
   document.getElementById('gasto-rows').innerHTML = '';
-  document.getElementById('song-rows').innerHTML = '';
   addGastoRow();
-  addSongRow();
 
   // Resetear modo multi-artista si estaba activo
   if (_isMultiArtista) toggleMultiArtista();
+  _processedTrackUrls = new Map();
+  clearTimeout(_smartPautaTimer);
 
   document.getElementById('modal-overlay').classList.add('open');
   // focus solo en desktop (en mobile dispara teclado virtual y causa reflow)
@@ -3655,7 +3733,6 @@ function openModal() {
 function modalHasData() {
   const fields = ['f-artista','f-genero','f-pauta','f-venta','f-representante','f-metodo','f-precio'];
   if (fields.some(id => (document.getElementById(id)?.value || '').trim() !== '')) return true;
-  if ([...document.querySelectorAll('#song-rows .song-link')].some(el => el.value.trim())) return true;
   if ([...document.querySelectorAll('#artista-rows .artista-row-nombre')].some(el => el.value.trim())) return true;
   const gastoInputs = document.querySelectorAll('#gasto-rows .gasto-amount');
   return [...gastoInputs].some(el => (el.value || '').trim() !== '' && el.value !== '0');
@@ -3668,7 +3745,6 @@ function closeModal(force) {
   document.getElementById('modal-overlay').classList.remove('open');
   document.getElementById('sale-form').reset();
   document.getElementById('gasto-rows').innerHTML = '';
-  document.getElementById('song-rows').innerHTML = '';
   document.getElementById('artista-rows').innerHTML = '';
   document.getElementById('f-gasto').value = '0';
   document.getElementById('f-neto').value = '';
@@ -3677,6 +3753,8 @@ function closeModal(force) {
   if (_isMultiArtista) toggleMultiArtista();
   window._spotifyArtistId = null;
   window._spotifyImageUrl  = null;
+  _processedTrackUrls = new Map();
+  clearTimeout(_smartPautaTimer);
 }
 
 function fillDatalist(id, values) {
@@ -3743,7 +3821,8 @@ async function submitSale(e) {
     const fechaRaw = document.getElementById('f-fecha').value;   // YYYY-MM-DD
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
     const pauta    = document.getElementById('f-pauta').value.trim();
-    const link     = document.querySelector('#song-rows .song-link')?.value.trim() || '';
+    const _pautaLinkMatch = pauta.match(/https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/[A-Za-z0-9]+(?:\?[^\s]*)?/);
+    const link     = _pautaLinkMatch ? _pautaLinkMatch[0] : '';
 
     // Artista: modo single vs multi
     const artista = _isMultiArtista
@@ -3858,7 +3937,8 @@ async function submitSinPago(e) {
     const fechaRaw = document.getElementById('f-fecha').value;
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
     const pauta    = document.getElementById('f-pauta').value.trim();
-    const link     = document.querySelector('#song-rows .song-link')?.value.trim() || '';
+    const _pautaLinkMatch = pauta.match(/https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/[A-Za-z0-9]+(?:\?[^\s]*)?/);
+    const link     = _pautaLinkMatch ? _pautaLinkMatch[0] : '';
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
     const duracion         = parseInt(document.getElementById('f-duracion').value) || 30;
     const representanteVal = document.getElementById('f-representante').value.trim();
