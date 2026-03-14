@@ -1327,11 +1327,19 @@
         <button class="btn btn-ghost btn-sm" onclick="loadCampanias()">↻ Actualizar</button>
       </div>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn btn-sm camp-view-btn active" data-view="calendario" onclick="setCampView('calendario')">📅 Calendario</button>
       <button class="btn btn-sm camp-view-btn" data-view="hoy" onclick="setCampView('hoy')">⚡ Hoy</button>
       <button class="btn btn-sm camp-view-btn" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
       <button class="btn btn-sm camp-view-btn" data-view="vencidas" onclick="setCampView('vencidas')">⚠️ Vencidas</button>
+    </div>
+    <div style="position:relative;margin-bottom:16px">
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;opacity:0.4;pointer-events:none">🔍</span>
+      <input type="text" id="camp-search" class="filter-control"
+        placeholder="Buscar artista..."
+        style="width:100%;padding:8px 36px 8px 36px;box-sizing:border-box"
+        oninput="this.nextElementSibling.style.display=this.value?'flex':'none';renderCampaniasTab()">
+      <button onclick="document.getElementById('camp-search').value='';this.style.display='none';renderCampaniasTab()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;width:22px;height:22px;align-items:center;justify-content:center;border-radius:50%;transition:all 0.15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">✕</button>
     </div>
     <div id="campanias-list"></div>
   </section>
@@ -3739,10 +3747,12 @@ function renderCampaniasTab() {
 
   const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
   const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
+  const searchQ      = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
   const today = new Date(); today.setHours(0,0,0,0);
   let data = _campanias;
   if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor);
   if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
+  if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
 
   if (_campView === 'calendario') { renderCampCalendario(data, today); return; }
   if (_campView === 'hoy') {
