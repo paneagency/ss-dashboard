@@ -1725,6 +1725,10 @@ async function init() {
           });
           fillDatalist('list-artistas', d.clients.map(c => c.artista));
           renderDirectorio();
+          // Re-render panel de ventas del día para que aparezcan las imágenes
+          if (document.getElementById('today-sales-panel') || document.getElementById('vendor-today-panel')) {
+            renderTodayPanel();
+          }
         }
       }).catch(() => {});
       return;
