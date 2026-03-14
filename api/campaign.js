@@ -389,7 +389,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
@@ -408,13 +408,17 @@ module.exports = async (req, res) => {
         });
       }
 
-      let masterEventId = '', vendorEventId = '';
-      try {
-        const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '', calColorId);
-        masterEventId = ids.masterEventId;
-        vendorEventId = ids.vendorEventId;
-      } catch(calErr) {
-        console.error('Calendar error (non-fatal):', calErr.message);
+      // skipCalendar: true → reusar eventIds existentes (para artistas adicionales de pauta grupal)
+      let masterEventId = req.body.masterEventId || '';
+      let vendorEventId = req.body.vendorEventId || '';
+      if (!skipCalendar) {
+        try {
+          const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '', calColorId);
+          masterEventId = ids.masterEventId;
+          vendorEventId = ids.vendorEventId;
+        } catch(calErr) {
+          console.error('Calendar error (non-fatal):', calErr.message);
+        }
       }
 
       const detalleGastos = (gastosRows || [])
@@ -429,7 +433,7 @@ module.exports = async (req, res) => {
         requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '']] },
       });
 
-      return res.json({ ok: true, clientId, fechaVencimiento });
+      return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId });
     }
 
     // ── PUT: editar cliente ───────────────────────────────────

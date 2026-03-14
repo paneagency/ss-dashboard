@@ -342,6 +342,21 @@
     .gasto-row .gasto-provider { flex: 1; }
     .gasto-row .btn-remove-gasto { flex-shrink: 0; padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
     .gasto-row .btn-remove-gasto:hover { color: var(--danger, #e55); border-color: var(--danger, #e55); }
+    /* Song rows */
+    .song-row { margin-bottom: 8px; }
+    .song-row-ctrl { display: flex; gap: 6px; align-items: center; }
+    .song-row .song-link { flex: 1; }
+    .song-row .btn-remove-song { flex-shrink: 0; padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .song-row .btn-remove-song:hover { color: var(--danger, #e55); border-color: var(--danger, #e55); }
+    .song-chip { display: none; align-items: center; gap: 8px; padding: 5px 8px; background: #1db954; color: #fff; border-radius: 6px; font-size: 12px; margin-top: 4px; }
+    .song-chip img { width: 28px; height: 28px; border-radius: 3px; flex-shrink: 0; object-fit: cover; }
+    /* Artista rows (pauta grupal) */
+    .artista-row { display: flex; gap: 6px; align-items: flex-start; margin-bottom: 8px; }
+    .artista-row-fields { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .artista-row .btn-remove-artista { flex-shrink: 0; padding: 4px 8px; font-size: 14px; line-height: 1; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; margin-top: 6px; }
+    .artista-row .btn-remove-artista:hover { color: var(--danger, #e55); border-color: var(--danger, #e55); }
+    .artista-chip { display: none; align-items: center; gap: 8px; padding: 4px 8px; background: rgba(99,102,241,0.12); color: var(--indigo); border-radius: 6px; font-size: 11px; }
+    .artista-chip img { width: 22px; height: 22px; border-radius: 3px; flex-shrink: 0; object-fit: cover; }
     .form-section { font-size: 11px; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); grid-column: 1/-1; }
     .auth-bar {
       display: flex; align-items: center; gap: 12px; padding: 12px 16px;
@@ -788,12 +803,24 @@
       <form id="sale-form" onsubmit="submitSale(event)">
         <div class="form-grid">
 
-          <div class="form-section">Datos del cliente</div>
+          <div class="form-section" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Datos del cliente</span>
+            <button type="button" id="btn-multi-artista" onclick="toggleMultiArtista()" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:500">👥 Pauta grupal</button>
+          </div>
 
-          <div class="form-group full">
+          <!-- Artista único (modo default) -->
+          <div id="single-artista-group" class="form-group full">
             <label class="form-label">Artista / Cliente<span>*</span></label>
-            <input class="form-input" id="f-artista" list="list-artistas" placeholder="Nombre del artista" required oninput="autofillFromArtist()">
+            <input class="form-input" id="f-artista" list="list-artistas" placeholder="Nombre del artista" oninput="autofillFromArtist()">
             <datalist id="list-artistas"></datalist>
+          </div>
+
+          <!-- Artistas múltiples (pauta grupal, hidden by default) -->
+          <div id="artistas-grupal-section" class="form-group full" style="display:none">
+            <label class="form-label">Artistas incluidos en la pauta</label>
+            <div id="artista-rows"></div>
+            <button type="button" onclick="addArtistaRow()" class="btn btn-ghost btn-sm" style="font-size:12px;margin-top:2px">+ Agregar artista</button>
+            <span class="form-hint" style="margin-top:6px;display:block">Se crea una campaña individual por artista compartiendo el mismo evento de Google Calendar.</span>
           </div>
 
           <div class="form-group">
@@ -802,19 +829,14 @@
             <datalist id="list-generos"></datalist>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Link de canción</label>
-            <input class="form-input" id="f-link" type="url" placeholder="https://open.spotify.com/..." oninput="autofillFromSpotify()">
-            <div id="spotify-preview" style="display:none;margin-top:6px;padding:8px 10px;background:#1db954;color:#fff;border-radius:8px;display:none;align-items:center;gap:10px;font-size:13px">
-              <img id="spotify-preview-img" src="" style="width:40px;height:40px;border-radius:4px;object-fit:cover;flex-shrink:0">
-              <div>
-                <div id="spotify-preview-track" style="font-weight:600;line-height:1.3"></div>
-                <div id="spotify-preview-artist" style="opacity:0.85;font-size:12px"></div>
-              </div>
-            </div>
+          <!-- Canciones (modo artista único) -->
+          <div class="form-group" id="songs-section">
+            <label class="form-label">Canciones</label>
+            <div id="song-rows"></div>
+            <button type="button" onclick="addSongRow()" class="btn btn-ghost btn-sm" style="font-size:12px;margin-top:2px">+ Agregar canción</button>
           </div>
 
-          <div class="form-group">
+          <div class="form-group full">
             <label class="form-label">Pauta / Promoción</label>
             <textarea class="form-input" id="f-pauta" rows="4" placeholder="Ej: Playlist Submission 30 días, 3 pitches incluidos..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta()"></textarea>
           </div>
@@ -3358,65 +3380,210 @@ function autofillGastosFromPauta(text) {
   gastoLines.forEach(m => addGastoRow(parseFloat(m[1]), m[2].trim()));
 }
 
-let _spotifyDebounce = null;
-function autofillFromSpotify() {
-  const url = document.getElementById('f-link').value.trim();
-  const preview = document.getElementById('spotify-preview');
+// ── SONG ROWS ──────────────────────────────────────────────
+let _songDebounces = new WeakMap();
 
-  // Ocultar preview si no es una URL de Spotify
-  if (!url.includes('spotify.com/')) {
-    preview.style.display = 'none';
-    return;
+function addSongRow(url, songData) {
+  const container = document.getElementById('song-rows');
+  const isPrimary = container.children.length === 0;
+  const row = document.createElement('div');
+  row.className = 'song-row';
+  row.innerHTML = `
+    <div class="song-row-ctrl">
+      <input type="url" class="form-input song-link" placeholder="https://open.spotify.com/track/..." value="${url || ''}" oninput="autofillSong(this)">
+      <button type="button" class="btn-remove-song" onclick="removeSongRow(this)" style="${isPrimary ? 'visibility:hidden' : ''}" title="Quitar canción">✕</button>
+    </div>
+    <div class="song-chip">
+      <img src="" style="display:none">
+      <div>
+        <div class="song-chip-track" style="font-weight:600;line-height:1.3"></div>
+        <div class="song-chip-artist" style="opacity:0.85;font-size:11px"></div>
+      </div>
+    </div>`;
+  container.appendChild(row);
+  if (songData) _applySongData(row, songData, isPrimary);
+  _updateSongRemoveButtons();
+}
+
+function removeSongRow(btn) {
+  btn.closest('.song-row').remove();
+  _updateSongRemoveButtons();
+}
+
+function _updateSongRemoveButtons() {
+  const rows = document.querySelectorAll('#song-rows .song-row');
+  rows.forEach((r, i) => {
+    const btn = r.querySelector('.btn-remove-song');
+    if (btn) btn.style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+  });
+}
+
+function _applySongData(row, data, isPrimary) {
+  const chip = row.querySelector('.song-chip');
+  const img  = row.querySelector('.song-chip img');
+  const trackEl  = row.querySelector('.song-chip-track');
+  const artistEl = row.querySelector('.song-chip-artist');
+  trackEl.textContent  = data.track || data.artist || '';
+  artistEl.textContent = data.track ? (data.allArtists || data.artist || '') : '';
+  if (data.image) { img.src = data.image; img.style.display = 'block'; }
+  chip.style.display = 'flex';
+  if (isPrimary) {
+    // Artista Spotify e imagen → para guardar en Clientes
+    window._spotifyArtistId = data.artistSpotifyId || null;
+    window._spotifyImageUrl = data.image || null;
+    // Auto-llenar nombre de artista si está vacío
+    const fArtista = document.getElementById('f-artista');
+    if (!fArtista.value.trim() && data.artist) {
+      fArtista.value = data.artist;
+      autofillFromArtist();
+    }
   }
+  // Agregar track + URL a la pauta si no está ya
+  const url = row.querySelector('.song-link').value.trim();
+  if (data.track && url) {
+    const fPauta = document.getElementById('f-pauta');
+    const prefix = `${data.track}\n${url}\n\n`;
+    if (!fPauta.value.includes(data.track)) {
+      const pautaSinLink = fPauta.value.replace(url, '').replace(/\n{3,}/g, '\n\n').trim();
+      fPauta.value = pautaSinLink ? prefix + pautaSinLink : prefix.trim();
+      autofillPrecioFromPauta();
+    }
+  }
+}
 
-  clearTimeout(_spotifyDebounce);
-  _spotifyDebounce = setTimeout(async () => {
+function autofillSong(input) {
+  const url = input.value.trim();
+  const row = input.closest('.song-row');
+  const chip = row.querySelector('.song-chip');
+  if (!url.includes('spotify.com/')) { chip.style.display = 'none'; return; }
+
+  clearTimeout(_songDebounces.get(input));
+  _songDebounces.set(input, setTimeout(async () => {
     try {
       const res = await fetch(`/api/spotify?url=${encodeURIComponent(url)}`);
       if (!res.ok) return;
       const data = await res.json();
+      const isPrimary = input.closest('.song-row') === document.querySelector('#song-rows .song-row');
+      _applySongData(row, data, isPrimary);
+    } catch (e) { /* silencioso */ }
+  }, 600));
+}
 
-      // Guardar ID e imagen de artista Spotify para enviarlo al guardar la venta
-      window._spotifyArtistId  = data.artistSpotifyId || null;
-      window._spotifyImageUrl  = data.image || null;
+// Compat: alias para código legacy que llame autofillFromSpotify
+function autofillFromSpotify() {
+  const first = document.querySelector('#song-rows .song-link');
+  if (first) autofillSong(first);
+}
 
-      // Auto-llenar artista si está vacío
-      const fArtista = document.getElementById('f-artista');
-      if (!fArtista.value.trim() && data.artist) {
-        fArtista.value = data.artist;
-        autofillFromArtist();
+// ── ARTISTA ROWS (pauta grupal) ─────────────────────────────
+let _isMultiArtista = false;
+let _artistaDebounces = new WeakMap();
+
+function toggleMultiArtista() {
+  _isMultiArtista = !_isMultiArtista;
+  const btn         = document.getElementById('btn-multi-artista');
+  const singleGroup = document.getElementById('single-artista-group');
+  const multiSect   = document.getElementById('artistas-grupal-section');
+  const songsSect   = document.getElementById('songs-section');
+  const fArtista    = document.getElementById('f-artista');
+
+  if (_isMultiArtista) {
+    btn.style.cssText = 'background:rgba(99,102,241,0.12);color:var(--indigo);border-color:rgba(99,102,241,0.35);font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:600';
+    singleGroup.style.display = 'none';
+    multiSect.style.display   = '';
+    songsSect.style.display   = 'none';
+    fArtista.required = false;
+    if (!document.querySelector('.artista-row')) addArtistaRow();
+  } else {
+    btn.style.cssText = 'font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:500';
+    singleGroup.style.display = '';
+    multiSect.style.display   = 'none';
+    songsSect.style.display   = '';
+    fArtista.required = true;
+    document.getElementById('artista-rows').innerHTML = '';
+  }
+}
+
+function addArtistaRow(nombre, link) {
+  const container = document.getElementById('artista-rows');
+  const isFirst = container.children.length === 0;
+  const row = document.createElement('div');
+  row.className = 'artista-row';
+  row.innerHTML = `
+    <div class="artista-row-fields">
+      <input type="text" class="form-input artista-row-nombre" list="list-artistas" placeholder="Nombre del artista" value="${nombre || ''}" oninput="autofillArtistaRow(this)">
+      <input type="url" class="form-input artista-row-link" placeholder="Link canción Spotify (opcional)" value="${link || ''}" style="font-size:12px" oninput="autofillArtistaRowSong(this)">
+      <div class="artista-chip">
+        <img src="" style="display:none">
+        <span class="artista-chip-text"></span>
+      </div>
+    </div>
+    <button type="button" class="btn-remove-artista" onclick="removeArtistaRow(this)" style="${isFirst ? 'visibility:hidden' : ''}" title="Quitar artista">✕</button>`;
+  container.appendChild(row);
+  _updateArtistaRemoveButtons();
+}
+
+function removeArtistaRow(btn) {
+  btn.closest('.artista-row').remove();
+  _updateArtistaRemoveButtons();
+}
+
+function _updateArtistaRemoveButtons() {
+  const rows = document.querySelectorAll('#artista-rows .artista-row');
+  rows.forEach(r => {
+    const btn = r.querySelector('.btn-remove-artista');
+    if (btn) btn.style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+  });
+}
+
+function autofillArtistaRow(input) {
+  // Autofill género/vendedor/método desde _clientesMap cuando se escribe un artista conocido
+  const val = input.value.trim().toLowerCase();
+  if (!val) return;
+  const cliente = window._clientesMap?.[val];
+  if (cliente) {
+    if (cliente.genero) document.getElementById('f-genero').value = cliente.genero;
+  }
+}
+
+function autofillArtistaRowSong(input) {
+  const url = input.value.trim();
+  const row = input.closest('.artista-row');
+  const chip = row.querySelector('.artista-chip');
+  if (!url.includes('spotify.com/')) { chip.style.display = 'none'; return; }
+
+  clearTimeout(_artistaDebounces.get(input));
+  _artistaDebounces.set(input, setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/spotify?url=${encodeURIComponent(url)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      // Auto-llenar nombre del artista si está vacío en esa fila
+      const nombreInput = row.querySelector('.artista-row-nombre');
+      if (!nombreInput.value.trim() && data.artist) nombreInput.value = data.artist;
+      // Guardar imagen/id del artista si es la primera fila
+      const isFirst = row === document.querySelector('#artista-rows .artista-row');
+      if (isFirst) {
+        window._spotifyArtistId = data.artistSpotifyId || null;
+        window._spotifyImageUrl = data.image || null;
       }
-
-      // Preponer nombre de canción + link al inicio de la pauta (solo si hay track)
+      // Mostrar chip
+      const img  = chip.querySelector('img');
+      const text = chip.querySelector('.artista-chip-text');
+      text.textContent = (data.track || '') + (data.artist ? ` · ${data.artist}` : '');
+      if (data.image) { img.src = data.image; img.style.display = 'inline-block'; }
+      chip.style.display = 'flex';
+      // Agregar a pauta
       if (data.track) {
         const fPauta = document.getElementById('f-pauta');
         const prefix = `${data.track}\n${url}\n\n`;
-        // Solo agregar si la pauta no empieza ya con este track
-        if (!fPauta.value.startsWith(data.track)) {
-          // Quitar el link del medio de la pauta si el usuario lo había pegado ahí
-          const pautaSinLink = fPauta.value.replace(url, '').replace(/\n{3,}/g, '\n\n').trim();
-          fPauta.value = pautaSinLink ? prefix + pautaSinLink : prefix.trim();
+        if (!fPauta.value.includes(data.track)) {
+          fPauta.value = (fPauta.value.trim() ? fPauta.value.trim() + '\n\n' : '') + prefix.trim();
+          autofillPrecioFromPauta();
         }
       }
-
-      // Mostrar preview
-      const img = document.getElementById('spotify-preview-img');
-      const trackEl = document.getElementById('spotify-preview-track');
-      const artistEl = document.getElementById('spotify-preview-artist');
-
-      if (data.image) {
-        img.src = data.image;
-        img.style.display = 'block';
-      } else {
-        img.style.display = 'none';
-      }
-      trackEl.textContent = data.track || data.artist;
-      artistEl.textContent = data.track ? (data.allArtists || data.artist) : '';
-      preview.style.display = 'flex';
-    } catch (e) {
-      // silencioso
-    }
-  }, 600);
+    } catch (e) { /* silencioso */ }
+  }, 600));
 }
 
 function autofillFromArtist() {
@@ -3471,9 +3638,14 @@ function openModal() {
     ventaInput.readOnly = true;
   }
 
-  // Iniciar con una fila de gasto vacía
+  // Iniciar con una fila de gasto vacía y una de canción
   document.getElementById('gasto-rows').innerHTML = '';
+  document.getElementById('song-rows').innerHTML = '';
   addGastoRow();
+  addSongRow();
+
+  // Resetear modo multi-artista si estaba activo
+  if (_isMultiArtista) toggleMultiArtista();
 
   document.getElementById('modal-overlay').classList.add('open');
   // focus solo en desktop (en mobile dispara teclado virtual y causa reflow)
@@ -3481,9 +3653,10 @@ function openModal() {
 }
 
 function modalHasData() {
-  const fields = ['f-artista','f-genero','f-link','f-pauta','f-venta','f-representante','f-metodo','f-precio'];
+  const fields = ['f-artista','f-genero','f-pauta','f-venta','f-representante','f-metodo','f-precio'];
   if (fields.some(id => (document.getElementById(id)?.value || '').trim() !== '')) return true;
-  // Chequear filas de gasto
+  if ([...document.querySelectorAll('#song-rows .song-link')].some(el => el.value.trim())) return true;
+  if ([...document.querySelectorAll('#artista-rows .artista-row-nombre')].some(el => el.value.trim())) return true;
   const gastoInputs = document.querySelectorAll('#gasto-rows .gasto-amount');
   return [...gastoInputs].some(el => (el.value || '').trim() !== '' && el.value !== '0');
 }
@@ -3495,11 +3668,13 @@ function closeModal(force) {
   document.getElementById('modal-overlay').classList.remove('open');
   document.getElementById('sale-form').reset();
   document.getElementById('gasto-rows').innerHTML = '';
+  document.getElementById('song-rows').innerHTML = '';
+  document.getElementById('artista-rows').innerHTML = '';
   document.getElementById('f-gasto').value = '0';
   document.getElementById('f-neto').value = '';
   document.getElementById('f-final').value = '';
   document.getElementById('f-margen').value = '';
-  document.getElementById('spotify-preview').style.display = 'none';
+  if (_isMultiArtista) toggleMultiArtista();
   window._spotifyArtistId = null;
   window._spotifyImageUrl  = null;
 }
@@ -3557,7 +3732,6 @@ async function submitSale(e) {
   btn.textContent = 'Guardando...';
 
   try {
-    const artista  = document.getElementById('f-artista').value.trim();
     const venta    = document.getElementById('f-venta').value.trim();
     const metodo   = document.getElementById('f-metodo').value.trim();
     const comision = document.getElementById('f-comision').value.trim();
@@ -3569,7 +3743,15 @@ async function submitSale(e) {
     const fechaRaw = document.getElementById('f-fecha').value;   // YYYY-MM-DD
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
     const pauta    = document.getElementById('f-pauta').value.trim();
-    const link     = document.getElementById('f-link').value.trim();
+    const link     = document.querySelector('#song-rows .song-link')?.value.trim() || '';
+
+    // Artista: modo single vs multi
+    const artista = _isMultiArtista
+      ? (document.querySelector('#artista-rows .artista-row-nombre')?.value.trim() || '')
+      : document.getElementById('f-artista').value.trim();
+
+    if (!artista) { showToast('Ingresá el artista', 'error'); return; }
+    if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
 
     const [fy, fm, fd] = fechaRaw.split('-');
     const fechaFmt = `${fd}/${fm}/${fy}`;
@@ -3589,18 +3771,48 @@ async function submitSale(e) {
     const representanteVal = document.getElementById('f-representante').value.trim();
     const spotifyArtistId  = window._spotifyArtistId || null;
     const spotifyImageUrl  = window._spotifyImageUrl  || null;
-    const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(row => ({
-      amount:   parseFloat(row.querySelector('.gasto-amount').value) || 0,
-      provider: row.querySelector('.gasto-provider').value.trim(),
+    const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(r => ({
+      amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
+      provider: r.querySelector('.gasto-provider').value.trim(),
     })).filter(r => r.amount > 0);
+
+    // Artistas para campañas (multi o single)
+    const artistasList = _isMultiArtista
+      ? [...document.querySelectorAll('#artista-rows .artista-row')].map(r => ({
+          nombre: r.querySelector('.artista-row-nombre').value.trim(),
+          link:   r.querySelector('.artista-row-link').value.trim(),
+        })).filter(a => a.nombre)
+      : [{ nombre: artista, link }];
 
     showToast('Venta Registrada', 'success');
     closeModal(true);
-    fetch('/api/campaign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion, fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta, link, gastosRows, representante: representanteVal, spotifyArtistId, spotifyImageUrl }),
-    }).catch(err => console.warn('Campaign registration failed (non-fatal):', err));
+
+    // Crear campañas (primera crea evento calendar, resto lo comparten)
+    (async () => {
+      try {
+        let sharedMasterId = '', sharedVendorId = '';
+        for (let i = 0; i < artistasList.length; i++) {
+          const a = artistasList[i];
+          const campBody = {
+            artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
+            fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
+            link: a.link || '', gastosRows, representante: representanteVal,
+            spotifyArtistId: i === 0 ? spotifyArtistId : null,
+            spotifyImageUrl: i === 0 ? spotifyImageUrl : null,
+            ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
+          };
+          const cr = await fetch('/api/campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campBody) });
+          if (i === 0) {
+            const cd = await cr.json();
+            sharedMasterId = cd.masterEventId || '';
+            sharedVendorId = cd.vendorEventId || '';
+          }
+        }
+        if (artistasList.length > 1) {
+          _campaniasLoaded = false; _campaniasLoading = false; loadCampanias().catch(() => {});
+        }
+      } catch (err) { console.warn('Campaign registration failed (non-fatal):', err); }
+    })();
 
     const fecha = new Date(+fy, +fm - 1, +fd);
     const newRow = {
@@ -3639,7 +3851,6 @@ async function submitSinPago(e) {
   btn.textContent = 'Guardando...';
 
   try {
-    const artista  = document.getElementById('f-artista').value.trim();
     const venta    = document.getElementById('f-venta').value.trim();
     const metodo   = document.getElementById('f-metodo').value.trim();
     const precio   = document.getElementById('f-precio').value.trim();
@@ -3647,39 +3858,56 @@ async function submitSinPago(e) {
     const fechaRaw = document.getElementById('f-fecha').value;
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
     const pauta    = document.getElementById('f-pauta').value.trim();
-    const link     = document.getElementById('f-link').value.trim();
+    const link     = document.querySelector('#song-rows .song-link')?.value.trim() || '';
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
     const duracion         = parseInt(document.getElementById('f-duracion').value) || 30;
     const representanteVal = document.getElementById('f-representante').value.trim();
     const spotifyArtistId  = window._spotifyArtistId || null;
     const spotifyImageUrl  = window._spotifyImageUrl  || null;
 
+    const artista = _isMultiArtista
+      ? (document.querySelector('#artista-rows .artista-row-nombre')?.value.trim() || '')
+      : document.getElementById('f-artista').value.trim();
+
     if (!artista) { showToast('Ingresá el artista', 'error'); return; }
     if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
 
-    const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(row => ({
-      amount:   parseFloat(row.querySelector('.gasto-amount').value) || 0,
-      provider: row.querySelector('.gasto-provider').value.trim(),
+    const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(r => ({
+      amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
+      provider: r.querySelector('.gasto-provider').value.trim(),
     })).filter(r => r.amount > 0);
 
-    const resp = await fetch('/api/campaign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
-        fechaVencimiento: vencimientoVal || null, precio, metodo, gasto,
-        pauta, link, gastosRows, representante: representanteVal,
-        spotifyArtistId, spotifyImageUrl, sinPago: true,
-      }),
-    });
-    const result = await resp.json();
-    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
+    const artistasList = _isMultiArtista
+      ? [...document.querySelectorAll('#artista-rows .artista-row')].map(r => ({
+          nombre: r.querySelector('.artista-row-nombre').value.trim(),
+          link:   r.querySelector('.artista-row-link').value.trim(),
+        })).filter(a => a.nombre)
+      : [{ nombre: artista, link }];
 
-    showToast('Campaña registrada (sin pago)', 'success');
+    let sharedMasterId = '', sharedVendorId = '';
+    for (let i = 0; i < artistasList.length; i++) {
+      const a = artistasList[i];
+      const campBody = {
+        artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
+        fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
+        link: a.link || '', gastosRows, representante: representanteVal,
+        spotifyArtistId: i === 0 ? spotifyArtistId : null,
+        spotifyImageUrl: i === 0 ? spotifyImageUrl : null,
+        sinPago: true,
+        ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
+      };
+      const cr = await fetch('/api/campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campBody) });
+      const cd = await cr.json();
+      if (!cr.ok) throw new Error(cd.error || `HTTP ${cr.status}`);
+      if (i === 0) { sharedMasterId = cd.masterEventId || ''; sharedVendorId = cd.vendorEventId || ''; }
+    }
+
+    const msg = artistasList.length > 1
+      ? `${artistasList.length} campañas registradas (sin pago)`
+      : 'Campaña registrada (sin pago)';
+    showToast(msg, 'success');
     closeModal(true);
-    // Recargar campañas para que aparezca la nueva
-    _campaniasLoaded = false;
-    _campaniasLoading = false;
+    _campaniasLoaded = false; _campaniasLoading = false;
     loadCampanias().catch(() => {});
 
   } catch(err) {
