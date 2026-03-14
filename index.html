@@ -3866,10 +3866,13 @@ async function submitSale(e) {
       provider: r.querySelector('.gasto-provider').value.trim(),
     })).filter(r => r.amount > 0);
 
-    // Artistas para campañas (multi o single)
-    const artistasList = esGrupal
-      ? parseArtistasFromPauta(pauta)
-      : [{ nombre: artista, link }];
+    // Artistas para campañas (multi o single) — capturar datos Spotify ANTES de closeModal
+    const artistasBase = esGrupal ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }];
+    const artistasList = artistasBase.map(a => ({
+      ...a,
+      spotifyArtistId: esGrupal ? (_processedTrackUrls.get(a.link)?.artistId || null) : spotifyArtistId,
+      spotifyImageUrl: esGrupal ? (_processedTrackUrls.get(a.link)?.image  || null) : spotifyImageUrl,
+    }));
 
     showToast('Venta Registrada', 'success');
     closeModal(true);
@@ -3884,8 +3887,8 @@ async function submitSale(e) {
             artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
             fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
             link: a.link || '', gastosRows, representante: representanteVal,
-            spotifyArtistId: i === 0 ? spotifyArtistId : null,
-            spotifyImageUrl: i === 0 ? spotifyImageUrl : null,
+            spotifyArtistId: a.spotifyArtistId,
+            spotifyImageUrl: a.spotifyImageUrl,
             ...(i === 0 && esGrupal ? { grupal: true } : {}),
             ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
           };
@@ -3967,9 +3970,12 @@ async function submitSinPago(e) {
     })).filter(r => r.amount > 0);
 
     const esGrupal = _isMultiArtista && parseArtistasFromPauta(pauta).length > 1;
-    const artistasList = esGrupal
-      ? parseArtistasFromPauta(pauta)
-      : [{ nombre: artista, link }];
+    const artistasBase = esGrupal ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }];
+    const artistasList = artistasBase.map(a => ({
+      ...a,
+      spotifyArtistId: esGrupal ? (_processedTrackUrls.get(a.link)?.artistId || null) : spotifyArtistId,
+      spotifyImageUrl: esGrupal ? (_processedTrackUrls.get(a.link)?.image  || null) : spotifyImageUrl,
+    }));
 
     let sharedMasterId = '', sharedVendorId = '';
     for (let i = 0; i < artistasList.length; i++) {
@@ -3978,8 +3984,8 @@ async function submitSinPago(e) {
         artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
         fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
         link: a.link || '', gastosRows, representante: representanteVal,
-        spotifyArtistId: i === 0 ? spotifyArtistId : null,
-        spotifyImageUrl: i === 0 ? spotifyImageUrl : null,
+        spotifyArtistId: a.spotifyArtistId,
+        spotifyImageUrl: a.spotifyImageUrl,
         sinPago: true,
         ...(i === 0 && esGrupal ? { grupal: true } : {}),
         ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
