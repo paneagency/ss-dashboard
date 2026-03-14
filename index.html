@@ -3548,6 +3548,24 @@ function smartPautaDetect() {
   }, 800);
 }
 
+// Agrupa campañas que comparten masterEventId → una entrada "Varios" por grupo
+function agruparPorEvento(camps) {
+  const seen = new Set();
+  const result = [];
+  for (const c of camps) {
+    if (!c.masterEventId) { result.push(c); continue; }
+    if (seen.has(c.masterEventId)) continue;
+    seen.add(c.masterEventId);
+    const group = camps.filter(x => x.masterEventId === c.masterEventId);
+    if (group.length > 1) {
+      result.push({ ...c, artista: 'Varios', _grupalArtistas: group.map(x => x.artista) });
+    } else {
+      result.push(c);
+    }
+  }
+  return result;
+}
+
 // Extrae artistas y links desde la pauta cuando es modo grupal
 // Formato esperado: "(Artista) Nombre track\nhttps://open.spotify.com/track/..."
 function parseArtistasFromPauta(pauta) {
@@ -3825,7 +3843,9 @@ async function submitSale(e) {
 
     const [fy, fm, fd] = fechaRaw.split('-');
     const fechaFmt = `${fd}/${fm}/${fy}`;
-    const row = [artista, venta, metodo, comision, precio, gasto, neto, margen, final, fechaFmt, genero];
+    const esGrupal = _isMultiArtista && parseArtistasFromPauta(pauta).length > 1;
+    const sheetArtista = esGrupal ? 'Varios' : artista;
+    const row = [sheetArtista, venta, metodo, comision, precio, gasto, neto, margen, final, fechaFmt, genero];
 
     const resp = await fetch('/api/sheets', {
       method: 'POST',
@@ -3847,8 +3867,8 @@ async function submitSale(e) {
     })).filter(r => r.amount > 0);
 
     // Artistas para campañas (multi o single)
-    const artistasList = _isMultiArtista
-      ? (parseArtistasFromPauta(pauta).length ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }])
+    const artistasList = esGrupal
+      ? parseArtistasFromPauta(pauta)
       : [{ nombre: artista, link }];
 
     showToast('Venta Registrada', 'success');
@@ -3866,6 +3886,7 @@ async function submitSale(e) {
             link: a.link || '', gastosRows, representante: representanteVal,
             spotifyArtistId: i === 0 ? spotifyArtistId : null,
             spotifyImageUrl: i === 0 ? spotifyImageUrl : null,
+            ...(i === 0 && esGrupal ? { grupal: true } : {}),
             ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
           };
           const cr = await fetch('/api/campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campBody) });
@@ -3883,7 +3904,7 @@ async function submitSale(e) {
 
     const fecha = new Date(+fy, +fm - 1, +fd);
     const newRow = {
-      artista:  artista || 'Sin artista',
+      artista:  sheetArtista || 'Sin artista',
       venta:    venta   || 'Sin vendedor',
       metodo:   metodo  || 'Sin método',
       genero:   genero  || 'Sin género',
@@ -3945,8 +3966,9 @@ async function submitSinPago(e) {
       provider: r.querySelector('.gasto-provider').value.trim(),
     })).filter(r => r.amount > 0);
 
-    const artistasList = _isMultiArtista
-      ? (parseArtistasFromPauta(pauta).length ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }])
+    const esGrupal = _isMultiArtista && parseArtistasFromPauta(pauta).length > 1;
+    const artistasList = esGrupal
+      ? parseArtistasFromPauta(pauta)
       : [{ nombre: artista, link }];
 
     let sharedMasterId = '', sharedVendorId = '';
@@ -3959,6 +3981,7 @@ async function submitSinPago(e) {
         spotifyArtistId: i === 0 ? spotifyArtistId : null,
         spotifyImageUrl: i === 0 ? spotifyImageUrl : null,
         sinPago: true,
+        ...(i === 0 && esGrupal ? { grupal: true } : {}),
         ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
       };
       const cr = await fetch('/api/campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campBody) });
@@ -4050,10 +4073,10 @@ function renderResumenCampaniasHoy() {
     return;
   }
   const today = new Date(); today.setHours(0,0,0,0);
-  const hoy = (_campanias || []).filter(c => {
+  const hoy = agruparPorEvento((_campanias || []).filter(c => {
     const venc = new Date(c.fechaVencimiento + 'T12:00:00');
     return Math.floor((venc - today) / 86400000) === 0;
-  });
+  }));
   if (!hoy.length) {
     el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">
       <span style="font-size:28px">✅</span>
@@ -4192,6 +4215,8 @@ function renderCampList(data, today) {
   const list = document.getElementById('campanias-list');
   if (!list) return;
 
+  data = agruparPorEvento(data);
+
   if (!data.length) {
     let emptyMsg = '📅 No hay campañas activas';
     if (_campView === 'hoy')      emptyMsg = '⚡ No hay campañas venciendo hoy';
@@ -4258,6 +4283,9 @@ function renderCampCalendario(data, today) {
   if (!list) return;
   const year  = _campCalMonth.getFullYear();
   const month = _campCalMonth.getMonth();
+
+  // Agrupar campañas grupal por masterEventId → una entrada "Varios"
+  data = agruparPorEvento(data);
 
   // Agrupar campañas por día de vencimiento en este mes
   const byDay = {};
@@ -4364,6 +4392,7 @@ function showCampCalDetail(evt, row) {
       <div style="background:${badgeBg};color:${badgeColor};border-radius:8px;padding:6px 10px;font-weight:700;font-size:14px;flex-shrink:0">${sinPago ? '💳<div style="font-size:9px;font-weight:400">sin pago</div>' : daysLbl + (days >= 0 ? '<div style="font-size:9px;font-weight:400">restantes</div>' : '')}</div>
       <div>
         <div style="font-weight:600;font-size:15px">${c.artista}</div>
+        ${c._grupalArtistas ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${c._grupalArtistas.join(' · ')}</div>` : ''}
         <div style="font-size:12px;color:var(--muted)">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
         ${c.representante ? `<div style="font-size:11px;margin-top:3px"><span style="color:var(--muted)">Rep:</span> <span style="color:var(--text);font-weight:500">${c.representante}</span></div>` : ''}
       </div>

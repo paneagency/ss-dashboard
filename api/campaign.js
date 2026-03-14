@@ -223,7 +223,7 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
 
 // ── Helpers: Calendar ──────────────────────────────────────────
 
-function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId) {
+function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal) {
   const parts = [];
   if (pauta) parts.push(pauta);
   // Solo agregar el link si no está ya incluido en la pauta
@@ -234,8 +234,9 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
     gastosRows.forEach(r => parts.push(`(${r.amount})${r.provider ? ' ' + r.provider : ''}`));
   }
   const repTag = representante ? `[${representante}]` : '';
+  const displayArtist = grupal ? 'Varios' : artista;
   return {
-    summary:     `(${vendedor})${repTag} - ${artista}`,
+    summary:     `(${vendedor})${repTag} - ${displayArtist}`,
     description: parts.join('\n'),
     start: { date: fechaVencimiento },
     end:   { date: fechaVencimiento },
@@ -243,8 +244,8 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
   };
 }
 
-async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId) {
-  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId);
+async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal) {
+  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal);
   const vendorCalId = VENDOR_CALS[vendedor];
   const [masterRes, vendorRes] = await Promise.all([
     cal.events.insert({ calendarId: MASTER_CAL,    requestBody: event }),
@@ -389,7 +390,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar, grupal } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
@@ -413,7 +414,7 @@ module.exports = async (req, res) => {
       let vendorEventId = req.body.vendorEventId || '';
       if (!skipCalendar) {
         try {
-          const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '', calColorId);
+          const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '', calColorId, grupal);
           masterEventId = ids.masterEventId;
           vendorEventId = ids.vendorEventId;
         } catch(calErr) {
