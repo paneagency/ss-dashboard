@@ -803,10 +803,7 @@
       <form id="sale-form" onsubmit="submitSale(event)">
         <div class="form-grid">
 
-          <div class="form-section" style="display:flex;align-items:center;justify-content:space-between">
-            <span>Datos del cliente</span>
-            <button type="button" id="btn-multi-artista" onclick="toggleMultiArtista()" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:500">👥 Pauta grupal</button>
-          </div>
+          <div class="form-section">Datos del cliente</div>
 
           <!-- Artista único (modo default) -->
           <div id="single-artista-group" class="form-group full">
@@ -3571,19 +3568,10 @@ let _artistaDebounces = new WeakMap();
 
 function toggleMultiArtista() {
   _isMultiArtista = !_isMultiArtista;
-  const btn         = document.getElementById('btn-multi-artista');
   const singleGroup = document.getElementById('single-artista-group');
   const fArtista    = document.getElementById('f-artista');
-
-  if (_isMultiArtista) {
-    btn.style.cssText = 'background:rgba(99,102,241,0.12);color:var(--indigo);border-color:rgba(99,102,241,0.35);font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:600';
-    singleGroup.style.display = 'none';
-    fArtista.required = false;
-  } else {
-    btn.style.cssText = 'font-size:11px;padding:3px 8px;text-transform:none;letter-spacing:0;font-weight:500';
-    singleGroup.style.display = '';
-    fArtista.required = true;
-  }
+  singleGroup.style.display = _isMultiArtista ? 'none' : '';
+  fArtista.required = !_isMultiArtista;
 }
 
 function addArtistaRow(nombre, link) {
