@@ -906,6 +906,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-ghost" id="sinpago-btn" onclick="submitSinPago(event)" style="color:var(--amber);border-color:rgba(245,158,11,0.4)">💳 Sin Pago</button>
       <button class="btn btn-primary" id="submit-btn" onclick="submitSale(event)">Registrar Venta</button>
     </div>
   </div>
@@ -1332,6 +1333,7 @@
       <button class="btn btn-sm camp-view-btn" data-view="hoy" onclick="setCampView('hoy')">⚡ Hoy</button>
       <button class="btn btn-sm camp-view-btn" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
       <button class="btn btn-sm camp-view-btn" data-view="vencidas" onclick="setCampView('vencidas')">⚠️ Vencidas</button>
+      <button class="btn btn-sm camp-view-btn" data-view="sinpago" onclick="setCampView('sinpago')" style="color:var(--amber)">💳 Sin Pago</button>
     </div>
     <div style="position:relative;margin-bottom:16px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;opacity:0.4;pointer-events:none">🔍</span>
@@ -3630,6 +3632,120 @@ async function submitSale(e) {
   }
 }
 
+async function submitSinPago(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById('sinpago-btn');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    const artista  = document.getElementById('f-artista').value.trim();
+    const venta    = document.getElementById('f-venta').value.trim();
+    const metodo   = document.getElementById('f-metodo').value.trim();
+    const precio   = document.getElementById('f-precio').value.trim();
+    const gasto    = document.getElementById('f-gasto').value.trim();
+    const fechaRaw = document.getElementById('f-fecha').value;
+    const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
+    const pauta    = document.getElementById('f-pauta').value.trim();
+    const link     = document.getElementById('f-link').value.trim();
+    const vencimientoVal   = document.getElementById('f-vencimiento').value;
+    const duracion         = parseInt(document.getElementById('f-duracion').value) || 30;
+    const representanteVal = document.getElementById('f-representante').value.trim();
+    const spotifyArtistId  = window._spotifyArtistId || null;
+    const spotifyImageUrl  = window._spotifyImageUrl  || null;
+
+    if (!artista) { showToast('Ingresá el artista', 'error'); return; }
+    if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
+
+    const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(row => ({
+      amount:   parseFloat(row.querySelector('.gasto-amount').value) || 0,
+      provider: row.querySelector('.gasto-provider').value.trim(),
+    })).filter(r => r.amount > 0);
+
+    const resp = await fetch('/api/campaign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        artista, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
+        fechaVencimiento: vencimientoVal || null, precio, metodo, gasto,
+        pauta, link, gastosRows, representante: representanteVal,
+        spotifyArtistId, spotifyImageUrl, sinPago: true,
+      }),
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
+
+    showToast('Campaña registrada (sin pago)', 'success');
+    closeModal(true);
+    // Recargar campañas para que aparezca la nueva
+    _campaniasLoaded = false;
+    _campaniasLoading = false;
+    loadCampanias().catch(() => {});
+
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💳 Sin Pago';
+  }
+}
+
+async function cobrarCampania(row) {
+  const c = _campanias.find(c => c.row === row);
+  if (!c) return;
+  if (!confirm(`¿Registrar el cobro de ${c.artista}?\n\nSe creará la venta por $${c.precio} (${c.metodo}) y la campaña pasará a activa.`)) return;
+
+  try {
+    // 1. Marcar como cobrada en campaign
+    const r1 = await fetch('/api/campaign', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'cobrar', row, masterEventId: c.masterEventId, vendorEventId: c.vendorEventId, vendedor: c.vendedor }),
+    });
+    if (!r1.ok) throw new Error('Error actualizando campaña');
+
+    // 2. Registrar venta en sheet principal
+    const comisionPct = (({ 'PayPal':11,'Wise':5.2,'Mercado Pago':11,'Transferencia Ars':1,'Sin Comision':0 })[c.metodo] ?? 0);
+    const precio = parseFloat(c.precio) || 0;
+    const gasto  = parseFloat(c.gasto)  || 0;
+    const neto   = (precio - gasto) * (1 - comisionPct / 100);
+    const today  = new Date();
+    const fechaFmt = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+    const sheetRow = [c.artista, c.vendedor, c.metodo, comisionPct, precio, gasto, +neto.toFixed(2), '', '', fechaFmt, c.genero || 'Sin género'];
+    const r2 = await fetch('/api/sheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: sheetRow }),
+    });
+    if (!r2.ok) throw new Error('Error registrando venta');
+
+    showToast(`Cobro registrado para ${c.artista}`, 'success');
+    // Recargar campañas
+    _campaniasLoaded = false;
+    _campaniasLoading = false;
+    loadCampanias().catch(() => {});
+    // Agregar fila localmente para reflejar la venta sin recargar el CSV
+    const today2 = new Date();
+    const fecha2 = new Date(today2.getFullYear(), today2.getMonth(), today2.getDate());
+    const newRow = {
+      artista: c.artista, venta: c.vendedor, metodo: c.metodo || '',
+      genero: c.genero || 'Sin género',
+      comision: 0, precio: parseFloat(c.precio) || 0,
+      gasto: parseFloat(c.gasto) || 0, neto: +neto.toFixed(2),
+      margen: 0, final: +neto.toFixed(2),
+      fecha: fecha2, monthKey: monthKey(fecha2), _addedAt: Date.now(),
+    };
+    allData.push(newRow);
+    window._localSales = window._localSales || [];
+    window._localSales.push(newRow);
+    document.getElementById('badge-text').textContent = `${allData.length} registros`;
+    applyFilters();
+
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
 function renderResumenCampaniasHoy() {
   const isSecondary = window._currentUser?.role === 'secondary_admin';
   const elId = isSecondary ? 'vendor-campanias-hoy' : 'resumen-campanias-hoy';
@@ -3770,6 +3886,9 @@ function renderCampaniasTab() {
     data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) === 0);
   } else if (_campView === 'vencidas') {
     data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0);
+  } else if (_campView === 'sinpago') {
+    data = data.filter(c => c.estado === 'pendiente_pago');
+    data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
   } else {
     data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
   }
@@ -3782,8 +3901,9 @@ function renderCampList(data, today) {
 
   if (!data.length) {
     let emptyMsg = '📅 No hay campañas activas';
-    if (_campView === 'hoy')     emptyMsg = '⚡ No hay campañas venciendo hoy';
+    if (_campView === 'hoy')      emptyMsg = '⚡ No hay campañas venciendo hoy';
     if (_campView === 'vencidas') emptyMsg = '🎉 No hay campañas vencidas';
+    if (_campView === 'sinpago')  emptyMsg = '✅ No hay campañas pendientes de pago';
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">${emptyMsg.split(' ')[0]}</div><p>${emptyMsg.split(' ').slice(1).join(' ')}</p></div>`;
     return;
   }
@@ -3794,11 +3914,13 @@ function renderCampList(data, today) {
     const days    = Math.floor(diffMs / 86400000);
     const daysLbl    = days < 0 ? `${Math.abs(days)}d` : days === 0 ? 'Hoy' : `${days}d`;
     const daysSubLbl = days < 0 ? 'vencida' : days === 0 ? '' : 'restantes';
+    const sinPago = c.estado === 'pendiente_pago';
 
     let badgeBg, badgeColor, borderColor;
-    if (days < 0)      { badgeBg = 'rgba(248,81,73,0.15)';   badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
+    if (sinPago)       { badgeBg = 'rgba(245,158,11,0.18)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.5)'; }
+    else if (days < 0) { badgeBg = 'rgba(248,81,73,0.15)';  badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
     else if (days === 0){ badgeBg = 'rgba(245,158,11,0.15)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
-    else               { badgeBg = 'rgba(16,185,129,0.12)';  badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.25)'; }
+    else               { badgeBg = 'rgba(16,185,129,0.12)'; badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.25)'; }
 
     const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -3807,22 +3929,24 @@ function renderCampList(data, today) {
     const hasGastos = !!c.detalleGastos;
     const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const borderStyle = sinPago ? `border-style:dashed;border-color:${borderColor}` : `border-color:${borderColor}`;
 
     return `
-    <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
+    <div class="campania-card" id="camp-card-${idx}" style="${borderStyle};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
-        ${daysLbl}
-        <span class="badge-days-label">${daysSubLbl}</span>
+        ${sinPago ? '💳' : daysLbl}
+        <span class="badge-days-label">${sinPago ? 'sin pago' : daysSubLbl}</span>
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
         <div class="campania-meta">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
       </div>
       <div class="campania-actions" onclick="event.stopPropagation()">
+        ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
-        <button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>
+        ${!sinPago ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
         <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
@@ -3881,9 +4005,11 @@ function renderCampCalendario(data, today) {
 
     const chips = camps.map(c => {
       const days  = Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000);
-      const color = days < 0 ? 'var(--red)' : days === 0 ? 'var(--amber)' : 'var(--green)';
-      const bg    = days < 0 ? 'rgba(248,81,73,0.15)' : days === 0 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
-      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};cursor:pointer" onclick="showCampCalDetail(event,${c.row})" title="${c.artista} — ${c.vendedor}">${c.artista}</div>`;
+      const sinPago = c.estado === 'pendiente_pago';
+      const color = sinPago ? 'var(--amber)' : days < 0 ? 'var(--red)' : days === 0 ? 'var(--amber)' : 'var(--green)';
+      const bg    = sinPago ? 'rgba(245,158,11,0.18)' : days < 0 ? 'rgba(248,81,73,0.15)' : days === 0 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
+      const border= sinPago ? 'border:1px dashed rgba(245,158,11,0.6);' : '';
+      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};${border}cursor:pointer" onclick="showCampCalDetail(event,${c.row})" title="${c.artista} — ${c.vendedor}${sinPago ? ' (sin pago)' : ''}">${c.artista}${sinPago ? ' 💳' : ''}</div>`;
     }).join('');
 
     html += `<div class="camp-cal-day${isToday ? ' today' : ''}">
@@ -3926,8 +4052,10 @@ function showCampCalDetail(evt, row) {
   const daysLbl = days < 0 ? 'Vencida' : days === 0 ? 'Hoy' : `${days}d`;
   const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+  const sinPago = c.estado === 'pendiente_pago';
   let badgeBg, badgeColor, borderColor;
-  if (days < 0)       { badgeBg = 'rgba(248,81,73,0.15)';  badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
+  if (sinPago)        { badgeBg = 'rgba(245,158,11,0.18)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.5)'; }
+  else if (days < 0)  { badgeBg = 'rgba(248,81,73,0.15)';  badgeColor = 'var(--red)';   borderColor = 'rgba(248,81,73,0.4)'; }
   else if (days === 0){ badgeBg = 'rgba(245,158,11,0.15)'; badgeColor = 'var(--amber)'; borderColor = 'rgba(245,158,11,0.4)'; }
   else                { badgeBg = 'rgba(16,185,129,0.12)'; badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.25)'; }
 
@@ -3940,7 +4068,7 @@ function showCampCalDetail(evt, row) {
   const content = document.getElementById('camp-cal-popover-content');
   content.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-right:20px">
-      <div style="background:${badgeBg};color:${badgeColor};border-radius:8px;padding:6px 10px;font-weight:700;font-size:14px;flex-shrink:0">${daysLbl}${days >= 0 ? '<div style="font-size:9px;font-weight:400">restantes</div>' : ''}</div>
+      <div style="background:${badgeBg};color:${badgeColor};border-radius:8px;padding:6px 10px;font-weight:700;font-size:14px;flex-shrink:0">${sinPago ? '💳<div style="font-size:9px;font-weight:400">sin pago</div>' : daysLbl + (days >= 0 ? '<div style="font-size:9px;font-weight:400">restantes</div>' : '')}</div>
       <div>
         <div style="font-weight:600;font-size:15px">${c.artista}</div>
         <div style="font-size:12px;color:var(--muted)">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
@@ -3948,10 +4076,11 @@ function showCampCalDetail(evt, row) {
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${hasPauta||hasGastos?'10px':'0'}">
+      ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${row});closeCampCalPopover()">💳 Cobrado</button>` : ''}
       ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})">📋 Copiar pauta</button>` : ''}
       ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">💰 Gastos</button><div class="campania-expand" style="width:100%;margin-top:6px">${gastosEsc}</div>` : ''}
       <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${row});closeCampCalPopover()">⚙️ Editar</button>
-      <button class="btn btn-sm btn-renovar" onclick="renovarRapido(${row});closeCampCalPopover()">↻ Renovar</button>
+      ${!sinPago ? `<button class="btn btn-sm btn-renovar" onclick="renovarRapido(${row});closeCampCalPopover()">↻ Renovar</button>` : ''}
       <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${row});closeCampCalPopover()">✕ No renueva</button>
     </div>
     ${hasPauta ? `<div style="font-size:12px;color:var(--muted);white-space:pre-wrap;line-height:1.5;max-height:120px;overflow-y:auto;border-top:1px solid var(--border);padding-top:8px">${pautaEsc}</div>` : ''}

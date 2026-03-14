@@ -223,7 +223,7 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
 
 // ── Helpers: Calendar ──────────────────────────────────────────
 
-function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante) {
+function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId) {
   const parts = [];
   if (pauta) parts.push(pauta);
   // Solo agregar el link si no está ya incluido en la pauta
@@ -239,12 +239,12 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
     description: parts.join('\n'),
     start: { date: fechaVencimiento },
     end:   { date: fechaVencimiento },
-    colorId: '2',
+    colorId: colorId || '2',
   };
 }
 
-async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows, representante) {
-  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante);
+async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId) {
+  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId);
   const vendorCalId = VENDOR_CALS[vendedor];
   const [masterRes, vendorRes] = await Promise.all([
     cal.events.insert({ calendarId: MASTER_CAL,    requestBody: event }),
@@ -348,7 +348,7 @@ module.exports = async (req, res) => {
           pauta: r[16] || '',
           representante: r[17] || '',
         }))
-        .filter(c => c.estado === 'activa' && c.artista);
+        .filter(c => ['activa', 'pendiente_pago'].includes(c.estado) && c.artista);
 
       if (vendedor && vendedor !== 'all')
         campanias = campanias.filter(c => c.vendedor === vendedor);
@@ -389,12 +389,16 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
       const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
+      const estadoCampana    = sinPago ? 'pendiente_pago' : 'activa';
+      // colorId: '6' = tangerine (naranja) para pendiente_pago, '2' = sage (verde) para activa
+      const calColorId = sinPago ? '6' : '2';
+
       const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '', vendedor, metodo || '');
 
       if (spotifyArtistId) {
@@ -406,7 +410,7 @@ module.exports = async (req, res) => {
 
       let masterEventId = '', vendorEventId = '';
       try {
-        const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '');
+        const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '', calColorId);
         masterEventId = ids.masterEventId;
         vendorEventId = ids.vendorEventId;
       } catch(calErr) {
@@ -422,7 +426,7 @@ module.exports = async (req, res) => {
         spreadsheetId: SPREADSHEET_ID,
         range: `${CAMPANAS_SHEET}!A:R`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '']] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '']] },
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento });
@@ -446,6 +450,36 @@ module.exports = async (req, res) => {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '']] },
       });
+      return res.json({ ok: true });
+    }
+
+    // ── PUT: cobrar campaña pendiente ─────────────────────────
+    if (req.method === 'PUT' && req.body.mode === 'cobrar') {
+      const { row, masterEventId, vendorEventId, vendedor } = req.body;
+      if (!row) return res.status(400).json({ error: 'row requerido' });
+
+      // Actualizar estado a 'activa' en sheet
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CAMPANAS_SHEET}!H${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [['activa']] },
+      });
+
+      // Actualizar color del evento de calendario a verde (colorId '2')
+      if (masterEventId || vendorEventId) {
+        const vendorCalId = VENDOR_CALS[vendedor];
+        const patchColor = { colorId: '2' };
+        await Promise.allSettled([
+          masterEventId
+            ? cal.events.patch({ calendarId: MASTER_CAL, eventId: masterEventId, requestBody: patchColor })
+            : null,
+          (vendorEventId && vendorCalId)
+            ? cal.events.patch({ calendarId: vendorCalId, eventId: vendorEventId, requestBody: patchColor })
+            : null,
+        ].filter(Boolean));
+      }
+
       return res.json({ ok: true });
     }
 
