@@ -577,7 +577,41 @@ module.exports = async (req, res) => {
 
     // ── DELETE: no renueva / borrar campaña por artista ──────
     if (req.method === 'DELETE') {
-      let { row, masterEventId, vendorEventId, vendedor, artista } = req.body;
+      let { row, masterEventId, vendorEventId, vendedor, artista, fechaInicio } = req.body;
+
+      // Pauta grupal (artista = "Varios"): borrar todas las campañas que comparten masterEventId
+      if (!row && artista === 'Varios' && vendedor && fechaInicio) {
+        const campResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:H`,
+        });
+        const campRows = (campResp.data.values || []).slice(1);
+        // Encontrar campaña activa del mismo vendedor + fechaInicio para obtener el masterEventId compartido
+        const anchor = campRows.find(r =>
+          (r[1] || '').toLowerCase().trim() === vendedor.toLowerCase().trim() &&
+          (r[2] || '').trim() === fechaInicio &&
+          ['activa', 'pendiente_pago'].includes(r[7] || '')
+        );
+        if (!anchor) return res.json({ ok: true, skipped: true });
+        const sharedMasterId = anchor[5] || '';
+        // Marcar como finalizada TODAS las campañas con ese masterEventId
+        const toFinalize = campRows
+          .map((r, i) => ({ r, i }))
+          .filter(({ r }) => r[5] === sharedMasterId && ['activa', 'pendiente_pago'].includes(r[7] || ''));
+        if (!toFinalize.length) return res.json({ ok: true, skipped: true });
+        // Borrar evento de calendario (solo una vez)
+        await deleteCalEvents(cal, vendedor, sharedMasterId, anchor[6] || '');
+        // Marcar todas las filas como finalizada
+        await Promise.all(toFinalize.map(({ i }) =>
+          sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${CAMPANAS_SHEET}!H${i + 2}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [['finalizada']] },
+          })
+        ));
+        return res.json({ ok: true });
+      }
 
       // Si no viene row, buscar por artista+vendedor
       if (!row && artista) {

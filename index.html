@@ -4775,11 +4775,13 @@ async function deleteSale(idx) {
     }
     document.getElementById('badge-text').textContent = `${allData.length} registros`;
 
-    // Borrar campaña de calendario asociada (si existe)
+    // Borrar campaña(s) de calendario asociada(s)
+    const delBody = { artista: r.artista, vendedor: r.venta };
+    if (r.artista === 'Varios') delBody.fechaInicio = fechaNorm; // para lookup grupal
     fetch('/api/campaign', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista: r.artista, vendedor: r.venta }),
+      body: JSON.stringify(delBody),
     }).catch(() => {});
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
