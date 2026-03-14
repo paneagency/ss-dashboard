@@ -3754,7 +3754,18 @@ function renderCampaniasTab() {
   if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
 
-  if (_campView === 'calendario') { renderCampCalendario(data, today); return; }
+  if (_campView === 'calendario') {
+    // Si hay búsqueda y la primera campaña está en otro mes, navegar automáticamente
+    if (searchQ && data.length) {
+      const firstDate = new Date(data[0].fechaVencimiento + 'T12:00:00');
+      if (firstDate.getFullYear() !== _campCalMonth.getFullYear() ||
+          firstDate.getMonth()    !== _campCalMonth.getMonth()) {
+        _campCalMonth = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+      }
+    }
+    renderCampCalendario(data, today);
+    return;
+  }
   if (_campView === 'hoy') {
     data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) === 0);
   } else if (_campView === 'vencidas') {
