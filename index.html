@@ -4377,8 +4377,13 @@ function showCampCalDetail(evt, row) {
   // Toggle
   if (_campCalDetailRow === row) { closeCampCalPopover(); return; }
   _campCalDetailRow = row;
-  const c = _campanias.find(c => c.row === row);
+  let c = _campanias.find(c => c.row === row);
   if (!c) return;
+  // Si es parte de un grupo, construir objeto agrupado (igual que agruparPorEvento)
+  if (c.masterEventId) {
+    const group = _campanias.filter(x => x.masterEventId === c.masterEventId);
+    if (group.length > 1) c = { ...c, artista: 'Varios', _grupalArtistas: group.map(x => x.artista) };
+  }
 
   const today = new Date(); today.setHours(0,0,0,0);
   const venc    = new Date(c.fechaVencimiento + 'T12:00:00');
