@@ -4404,7 +4404,7 @@ function showCampCalDetail(evt, row) {
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-right:20px">
       <div style="background:${badgeBg};color:${badgeColor};border-radius:8px;padding:6px 10px;font-weight:700;font-size:14px;flex-shrink:0">${sinPago ? '💳<div style="font-size:9px;font-weight:400">sin pago</div>' : daysLbl + (days >= 0 ? '<div style="font-size:9px;font-weight:400">restantes</div>' : '')}</div>
       <div>
-        <div style="font-weight:600;font-size:15px">${c.artista}</div>
+        <div style="font-weight:600;font-size:15px">${c._grupalArtistas ? 'Varios' : c.artista}</div>
         ${c._grupalArtistas ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${c._grupalArtistas.join(' · ')}</div>` : ''}
         <div style="font-size:12px;color:var(--muted)">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días</div>
         ${c.representante ? `<div style="font-size:11px;margin-top:3px"><span style="color:var(--muted)">Rep:</span> <span style="color:var(--text);font-weight:500">${c.representante}</span></div>` : ''}
