@@ -1431,8 +1431,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeRenovarModal()">Cancelar</button>
-        <button class="btn btn-ghost" id="editar-actual-btn" onclick="submitEditarActual()">Editar actual</button>
-        <button class="btn btn-primary" id="renovar-submit-btn" onclick="submitRenovar()">Renovar y registrar venta</button>
+        <button class="btn btn-primary" id="editar-actual-btn" onclick="submitEditarActual()">Guardar</button>
       </div>
     </div>
   </div>
@@ -4714,7 +4713,7 @@ async function submitEditarActual() {
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   } finally {
-    btn.disabled = false; btn.textContent = 'Editar actual';
+    btn.disabled = false; btn.textContent = 'Guardar';
   }
 }
 
