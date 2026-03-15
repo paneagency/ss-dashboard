@@ -4613,10 +4613,15 @@ function openCampaniaFromArtista(artista, vendedor, fecha, precio, metodo, evt) 
 }
 function openRenovarModal(row) {
   _renovarRow = row;
-  const camp = _campanias.find(c => c.row === row);
+  let camp = _campanias.find(c => c.row === row);
   if (!camp) return;
 
-  document.getElementById('renovar-artista-label').textContent = `${camp.artista} — ${camp.vendedor}`;
+  // Si es parte de un grupo grupal, mostrar "Varios" como nombre
+  const esGrupalModal = camp.masterEventId && _campanias.some(c =>
+    c.masterEventId === camp.masterEventId && c.row !== camp.row && c.estado === 'activa'
+  );
+  const artistaLabel = esGrupalModal ? 'Varios' : camp.artista;
+  document.getElementById('renovar-artista-label').textContent = `${artistaLabel} — ${camp.vendedor}`;
   document.getElementById('renovar-duracion').value = camp.duracion || 30;
   document.getElementById('renovar-fechavenc').value = camp.fechaVencimiento || '';
   document.getElementById('renovar-fecha').value = localDateStr(new Date());
