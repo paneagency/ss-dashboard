@@ -512,11 +512,25 @@ module.exports = async (req, res) => {
       // Fecha vencimiento: usar la enviada si viene (edición manual), sino calcular desde base
       const nuevaFechaVenc = fechaVencBody || addDays(baseDate, duracion);
 
+      // Detectar si es campaña grupal: buscar otros rows activos con el mismo masterEventId
+      let siblingRows = []; // [{rowNum}]
+      if (masterEventId) {
+        const allResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!F:H`, // F=EVENT_ID_MASTER, H=ESTADO
+        });
+        const allVals = (allResp.data.values || []).slice(1); // skip header
+        siblingRows = allVals
+          .map((r, i) => ({ rowNum: i + 2, masterId: r[0] || '', estado: r[2] || '' }))
+          .filter(r => r.masterId === masterEventId && r.estado === 'activa' && r.rowNum !== parseInt(row));
+      }
+      const esGrupal = siblingRows.length > 0;
+
       await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
 
       let newMasterId = '', newVendorId = '';
       try {
-        const ids = await createCalEvents(cal, artista, vendedor, nuevaFechaVenc, duracion, precio || 0, metodo || '', pauta || '', '', gastosRows || [], representante);
+        const ids = await createCalEvents(cal, artista, vendedor, nuevaFechaVenc, duracion, precio || 0, metodo || '', pauta || '', '', gastosRows || [], representante, null, esGrupal);
         newMasterId = ids.masterEventId;
         newVendorId = ids.vendorEventId;
       } catch(calErr) {
@@ -530,10 +544,11 @@ module.exports = async (req, res) => {
 
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
 
-      // Período de gracia: si la campaña tiene ≤3 días, sobreescribir sin historial
+      // Campañas grupales: siempre sobreescribir (nunca historial) para mantener consistencia del grupo
+      // Campañas individuales: respetar período de gracia de 3 días
       const fechaInicioDate = parseDateStr(fechaInicio) || new Date();
       const diasDesdeCreacion = Math.floor((Date.now() - fechaInicioDate.getTime()) / 86400000);
-      const enPeriodoGracia = esEdicion && diasDesdeCreacion <= 3;
+      const enPeriodoGracia = esEdicion && (esGrupal || diasDesdeCreacion <= 3);
 
       if (enPeriodoGracia) {
         // Sobreescribir fila existente sin dejar historial
@@ -543,6 +558,17 @@ module.exports = async (req, res) => {
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
         });
+        // Actualizar masterEventId/vendorEventId en todos los siblings del grupo
+        if (siblingRows.length && newMasterId) {
+          await Promise.all(siblingRows.map(sib =>
+            sheets.spreadsheets.values.update({
+              spreadsheetId: SPREADSHEET_ID,
+              range: `${CAMPANAS_SHEET}!F${sib.rowNum}:G${sib.rowNum}`,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [[newMasterId, newVendorId]] },
+            })
+          ));
+        }
       } else {
         // Marcar fila vieja como historial ('editada' o 'renovada') y agregar nueva fila activa
         const estadoHistorial = esEdicion ? 'editada' : 'renovada';
