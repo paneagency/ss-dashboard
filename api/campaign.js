@@ -488,9 +488,9 @@ module.exports = async (req, res) => {
       return res.json({ ok: true });
     }
 
-    // ── PUT: renovar campaña ──────────────────────────────────
+    // ── PUT: editar/renovar campaña ───────────────────────────
     if (req.method === 'PUT') {
-      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, editOnly } = req.body;
+      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
       // Leer fila completa actual para obtener fechaInicio y vencimiento base
@@ -509,9 +509,8 @@ module.exports = async (req, res) => {
         representante, vendedor, metodoPago: metodo, estado: 'Activa',
       });
 
-      const nuevaFechaVenc = editOnly
-        ? (fechaVencBody || baseDate)
-        : addDays(baseDate, duracion);
+      // Fecha vencimiento: usar la enviada si viene (edición manual), sino calcular desde base
+      const nuevaFechaVenc = fechaVencBody || addDays(baseDate, duracion);
 
       await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
 
@@ -531,31 +530,20 @@ module.exports = async (req, res) => {
 
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
 
-      if (editOnly) {
-        // Actualizar fila existente en place, sin crear nueva venta
-        await sheets.spreadsheets.values.update({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A${row}:R${row}`,
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
-        });
-      } else {
-        // 1. Marcar fila vieja como "renovada"
-        await sheets.spreadsheets.values.update({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!H${row}`,
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [['renovada']] },
-        });
-
-        // 2. Agregar nueva fila activa con los datos actualizados
-        await sheets.spreadsheets.values.append({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:R`,
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
-        });
-      }
+      // Marcar fila vieja como historial ('editada' o 'renovada') y agregar nueva fila activa
+      const estadoHistorial = esEdicion ? 'editada' : 'renovada';
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CAMPANAS_SHEET}!H${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[estadoHistorial]] },
+      });
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CAMPANAS_SHEET}!A:R`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
+      });
 
       return res.json({ ok: true, nuevaFechaVenc });
     }

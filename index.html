@@ -4796,7 +4796,7 @@ async function submitEditarActual() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        editOnly: true,
+        esEdicion: true,
         row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
         duracion, fechaVencimiento,
         masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
