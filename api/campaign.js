@@ -530,20 +530,35 @@ module.exports = async (req, res) => {
 
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
 
-      // Marcar fila vieja como historial ('editada' o 'renovada') y agregar nueva fila activa
-      const estadoHistorial = esEdicion ? 'editada' : 'renovada';
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!H${row}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[estadoHistorial]] },
-      });
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:R`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
-      });
+      // Período de gracia: si la campaña tiene ≤3 días, sobreescribir sin historial
+      const fechaInicioDate = parseDateStr(fechaInicio) || new Date();
+      const diasDesdeCreacion = Math.floor((Date.now() - fechaInicioDate.getTime()) / 86400000);
+      const enPeriodoGracia = esEdicion && diasDesdeCreacion <= 3;
+
+      if (enPeriodoGracia) {
+        // Sobreescribir fila existente sin dejar historial
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A${row}:R${row}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
+        });
+      } else {
+        // Marcar fila vieja como historial ('editada' o 'renovada') y agregar nueva fila activa
+        const estadoHistorial = esEdicion ? 'editada' : 'renovada';
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!H${row}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[estadoHistorial]] },
+        });
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:R`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
+        });
+      }
 
       return res.json({ ok: true, nuevaFechaVenc });
     }
