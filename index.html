@@ -4583,11 +4583,22 @@ function openEditModal(row) { openRenovarModal(row); }
 
 function openCampaniaFromArtista(artista, vendedor, evt) {
   if (evt) evt.stopPropagation();
-  const camp = (_campanias || []).find(c =>
-    c.estado === 'activa' &&
-    c.artista.toLowerCase() === artista.toLowerCase() &&
-    (!vendedor || c.vendedor === vendedor)
-  );
+  let camp;
+  if (artista === 'Varios') {
+    // Buscar cualquier campaña activa de un grupo (masterEventId) para este vendedor
+    const grupales = (_campanias || []).filter(c =>
+      c.estado === 'activa' && c.masterEventId && (!vendedor || c.vendedor === vendedor)
+    );
+    // Agrupar y tomar la primera campaña del primer grupo encontrado
+    const masterId = grupales[0]?.masterEventId;
+    camp = masterId ? grupales.find(c => c.masterEventId === masterId) : null;
+  } else {
+    camp = (_campanias || []).find(c =>
+      c.estado === 'activa' &&
+      c.artista.toLowerCase() === artista.toLowerCase() &&
+      (!vendedor || c.vendedor === vendedor)
+    );
+  }
   if (!camp) { showToast('No se encontró campaña activa para ' + artista, 'error'); return; }
   openEditModal(camp.row);
 }
