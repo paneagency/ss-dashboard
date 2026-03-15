@@ -2143,7 +2143,10 @@ function renderTodayPanel() {
         <div style="font-size:14px;font-weight:700;color:var(--green)">${fmt$(r.final)}</div>
         <div style="font-size:11px;color:var(--muted)">${fmt$(r.precio)} bruto</div>
       </div>
-      ${isToday ? `<button onclick="deleteSale(${idx})" title="Eliminar venta" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>` : ''}
+      ${isToday ? `
+        <button onclick="openCampaniaFromArtista('${r.artista.replace(/'/g,"\\'")}','${(r.venta||'').replace(/'/g,"\\'")}',event)" title="Editar campaña" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--indigo)';this.style.background='rgba(99,102,241,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">⚙️</button>
+        <button onclick="deleteSale(${idx})" title="Eliminar venta" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>
+      ` : ''}
     </div>`).join('')
   : `<div class="empty-state" style="padding:28px 0"><div class="empty-icon">🌙</div><div>Sin ventas registradas</div></div>`;
 
@@ -4577,6 +4580,17 @@ function renovarAutofillPrecio() {
 }
 
 function openEditModal(row) { openRenovarModal(row); }
+
+function openCampaniaFromArtista(artista, vendedor, evt) {
+  if (evt) evt.stopPropagation();
+  const camp = (_campanias || []).find(c =>
+    c.estado === 'activa' &&
+    c.artista.toLowerCase() === artista.toLowerCase() &&
+    (!vendedor || c.vendedor === vendedor)
+  );
+  if (!camp) { showToast('No se encontró campaña activa para ' + artista, 'error'); return; }
+  openEditModal(camp.row);
+}
 function openRenovarModal(row) {
   _renovarRow = row;
   const camp = _campanias.find(c => c.row === row);
