@@ -1359,11 +1359,11 @@
   </div>
 
   <!-- Modal: Renovar campaña -->
-  <div id="renovar-modal" class="modal-overlay" onclick="if(event.target===this)closeRenovarModal()">
+  <div id="renovar-modal" class="modal-overlay" onclick="if(event.target===this)maybeCloseRenovarModal()">
     <div class="modal">
       <div class="modal-header">
         <span class="modal-title">Editar campaña</span>
-        <button class="modal-close" onclick="closeRenovarModal()">✕</button>
+        <button class="modal-close" onclick="maybeCloseRenovarModal()">✕</button>
       </div>
       <div class="modal-body">
         <p id="renovar-artista-label" style="font-size:15px;font-weight:600;margin-bottom:16px"></p>
@@ -1422,7 +1422,7 @@
 
           <div class="form-group full">
             <label class="form-label">Pauta / Promoción</label>
-            <textarea class="form-input" id="renovar-pauta" rows="4" style="resize:vertical;line-height:1.4" oninput="renovarAutofillPrecio()"></textarea>
+            <textarea class="form-input" id="renovar-pauta" rows="4" style="resize:vertical;line-height:1.4" oninput="renovarAutofillPrecio();smartRenovarDetect()"></textarea>
           </div>
 
         </div>
@@ -3458,7 +3458,9 @@ function autofillFromSpotify() {}
 // ── SMART PAUTA DETECTION ───────────────────────────────────
 let _processedTrackUrls = new Map(); // url → {track, artist, artistId, image}
 let _prefixedUrls = new Map(); // url → isMulti state when prefix was last inserted/confirmed
+let _renovarPrefixedUrls = new Map(); // same but for renovar modal
 let _smartPautaTimer = null;
+let _renovarPautaTimer = null;
 const _TRACK_RE = /https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/([A-Za-z0-9]+)(?:\?[^\s]*)?/g;
 
 function smartPautaDetect() {
@@ -4512,6 +4514,7 @@ async function renovarRapido(idx) {
 
 // Modal editar campaña
 let _renovarRow = null;
+let _renovarOriginalData = null;
 
 function renovarAutoComision() {
   const metodo = document.getElementById('renovar-metodo').value.trim().toLowerCase();
@@ -4597,6 +4600,20 @@ function openRenovarModal(row) {
   renovarRecalcular();
   document.getElementById('renovar-error').style.display = 'none';
 
+  // Snapshot para detectar cambios al cerrar
+  _renovarOriginalData = {
+    duracion: String(camp.duracion || 30),
+    fechaVencimiento: camp.fechaVencimiento || '',
+    representante: (camp.representante || '').trim(),
+    metodo: camp.metodo || '',
+    precio: String(camp.precio || '').trim(),
+    pauta: (camp.pauta || '').trim(),
+    detalleGastos: (camp.detalleGastos || '').split('\n')
+      .map(l => { const m2 = l.trim().match(/^\((\d+(?:\.\d+)?)\)\s*(.*)?$/); return m2 ? `(${parseFloat(m2[1])}) ${(m2[2]||'').trim()}`.trim() : null; })
+      .filter(Boolean).join('\n'),
+  };
+  _renovarPrefixedUrls = new Map();
+
   const m = document.getElementById('renovar-modal');
   m.style.display = 'flex';
   requestAnimationFrame(() => m.classList.add('open'));
@@ -4607,6 +4624,88 @@ function closeRenovarModal() {
   m.classList.remove('open');
   setTimeout(() => { m.style.display = 'none'; }, 200);
   _renovarRow = null;
+  _renovarOriginalData = null;
+  _renovarPrefixedUrls = new Map();
+  clearTimeout(_renovarPautaTimer);
+}
+
+function maybeCloseRenovarModal() {
+  if (renovarModalHasChanges()) {
+    if (!confirm('¿Salir sin guardar los cambios?')) return;
+  }
+  closeRenovarModal();
+}
+
+function renovarModalHasChanges() {
+  if (!_renovarOriginalData) return false;
+  const o = _renovarOriginalData;
+  if (document.getElementById('renovar-duracion').value != o.duracion) return true;
+  if (document.getElementById('renovar-fechavenc').value !== o.fechaVencimiento) return true;
+  if (document.getElementById('renovar-representante').value.trim() !== o.representante) return true;
+  if (document.getElementById('renovar-metodo').value !== o.metodo) return true;
+  if (document.getElementById('renovar-precio').value.trim() !== o.precio) return true;
+  if (document.getElementById('renovar-pauta').value.trim() !== o.pauta) return true;
+  const currentGastos = [...document.querySelectorAll('#renovar-gasto-rows .gasto-row')]
+    .map(r => `(${parseFloat(r.querySelector('.gasto-amount').value)||0}) ${r.querySelector('.gasto-provider').value||''}`.trim())
+    .join('\n');
+  if (currentGastos !== o.detalleGastos) return true;
+  return false;
+}
+
+function smartRenovarDetect() {
+  clearTimeout(_renovarPautaTimer);
+  _renovarPautaTimer = setTimeout(async () => {
+    const fPauta = document.getElementById('renovar-pauta');
+    if (!fPauta) return;
+    const text = fPauta.value;
+    const matches = [...text.matchAll(_TRACK_RE)].map(m => m[0]);
+    const urls = [...new Set(matches)];
+    if (!urls.length) return;
+    // Fetch URLs nuevas (comparte caché con smartPautaDetect)
+    const newUrls = urls.filter(u => !_processedTrackUrls.has(u));
+    await Promise.all(newUrls.map(async url => {
+      try {
+        const res = await fetch(`/api/spotify?url=${encodeURIComponent(url)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        _processedTrackUrls.set(url, data);
+      } catch(e) { /* silencioso */ }
+    }));
+    // Colectar artistas para determinar isMulti
+    const artistsMap = new Map();
+    for (const url of urls) {
+      const data = _processedTrackUrls.get(url);
+      if (!data?.artist) continue;
+      const key = data.artistSpotifyId || data.artist;
+      if (!artistsMap.has(key)) artistsMap.set(key, true);
+    }
+    const isMulti = artistsMap.size > 1;
+    // Insertar prefijos
+    let newText = fPauta.value;
+    let modified = false;
+    for (const url of urls) {
+      const data = _processedTrackUrls.get(url);
+      if (!data?.track) continue;
+      const urlIdx = newText.indexOf(url);
+      if (urlIdx === -1) continue;
+      const before = newText.substring(0, urlIdx);
+      const lastNewline = before.lastIndexOf('\n');
+      const prevLine = before.substring(lastNewline + 1).trim();
+      const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
+      if (_renovarPrefixedUrls.has(url) && _renovarPrefixedUrls.get(url) === isMulti) continue;
+      if (prevLine === expectedPrefix) { _renovarPrefixedUrls.set(url, isMulti); continue; }
+      const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
+      if (prevLine === altPrefix) {
+        const prevLineStart = before.lastIndexOf('\n') + 1;
+        newText = newText.substring(0, prevLineStart) + expectedPrefix + '\n' + newText.substring(urlIdx);
+      } else {
+        newText = newText.substring(0, urlIdx) + expectedPrefix + '\n' + newText.substring(urlIdx);
+      }
+      _renovarPrefixedUrls.set(url, isMulti);
+      modified = true;
+    }
+    if (modified) fPauta.value = newText;
+  }, 800);
 }
 
 async function submitRenovar() {
