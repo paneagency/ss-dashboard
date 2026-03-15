@@ -4656,7 +4656,10 @@ function openRenovarModal(row) {
       .map(l => { const m2 = l.trim().match(/^\((\d+(?:\.\d+)?)\)\s*(.*)?$/); return m2 ? `(${parseFloat(m2[1])}) ${(m2[2]||'').trim()}`.trim() : null; })
       .filter(Boolean).join('\n'),
   };
+  // Pre-marcar URLs ya existentes en la pauta para que smartRenovarDetect no los toque
   _renovarPrefixedUrls = new Map();
+  const existingPautaUrls = [...(camp.pauta || '').matchAll(_TRACK_RE)].map(m => m[0]);
+  [...new Set(existingPautaUrls)].forEach(url => _renovarPrefixedUrls.set(url, 'existing'));
 
   const m = document.getElementById('renovar-modal');
   m.style.display = 'flex';
@@ -4736,7 +4739,7 @@ function smartRenovarDetect() {
       const lastNewline = before.lastIndexOf('\n');
       const prevLine = before.substring(lastNewline + 1).trim();
       const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
-      if (_renovarPrefixedUrls.has(url) && _renovarPrefixedUrls.get(url) === isMulti) continue;
+      if (_renovarPrefixedUrls.has(url)) continue; // skip pre-existentes y ya procesados
       if (prevLine === expectedPrefix) { _renovarPrefixedUrls.set(url, isMulti); continue; }
       const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
       if (prevLine === altPrefix) {
