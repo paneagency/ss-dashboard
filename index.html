@@ -4710,6 +4710,8 @@ function openRenovarModal(row) {
     .filter(Boolean);
   if (gastoLines.length) {
     gastoLines.forEach(m2 => addRenovarGastoRow(parseFloat(m2[1]), (m2[2] || '').trim()));
+  } else if (parseFloat(camp.gasto) > 0) {
+    addRenovarGastoRow(parseFloat(camp.gasto), '');
   } else {
     addRenovarGastoRow();
   }
