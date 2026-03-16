@@ -1620,11 +1620,9 @@ async function fetchFromAPI() {
   return parseRawRows(json.values || []);
 }
 
-const TEST_ARTISTS = ['campedrinos'];
-
 function applyLoadedData(parsed) {
   if (!parsed.length) throw new Error('No se encontraron registros válidos en el archivo.');
-  allData = parsed.filter(r => !TEST_ARTISTS.includes((r.artista || '').toLowerCase().trim()));
+  allData = parsed;
   const cacheCutoff = Date.now() - 10 * 60 * 1000; // 10 minutos
   const sameRow = (a, b) => a.artista === b.artista && a.venta === b.venta &&
     a.fecha.toDateString() === b.fecha.toDateString() && a.precio === b.precio;

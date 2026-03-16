@@ -404,7 +404,7 @@ module.exports = async (req, res) => {
           notas: r[18] || '',
           campaignId: r[19] || '',
         }))
-        .filter(c => ['activa', 'pendiente_pago'].includes(c.estado) && c.artista);
+        .filter(c => ['activa', 'pendiente_pago', 'prueba'].includes(c.estado) && c.artista);
 
       if (vendedor && vendedor !== 'all')
         campanias = campanias.filter(c => c.vendedor === vendedor);
