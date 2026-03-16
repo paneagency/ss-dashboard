@@ -707,7 +707,8 @@ module.exports = async (req, res) => {
 
     // ── DELETE: no renueva / borrar campaña por artista ──────
     if (req.method === 'DELETE') {
-      let { row, masterEventId, vendorEventId, vendedor, artista, fechaInicio } = req.body;
+      let { row, masterEventId, vendorEventId, vendedor, artista, fechaInicio, estado: estadoFinal } = req.body;
+      estadoFinal = estadoFinal || 'finalizada';
 
       // Pauta grupal (artista = "Varios"): borrar todas las campañas que comparten masterEventId
       if (!row && artista === 'Varios' && vendedor && fechaInicio) {
@@ -731,13 +732,13 @@ module.exports = async (req, res) => {
         if (!toFinalize.length) return res.json({ ok: true, skipped: true });
         // Borrar evento de calendario (solo una vez)
         await deleteCalEvents(cal, vendedor, sharedMasterId, anchor[6] || '');
-        // Marcar todas las filas como finalizada
+        // Marcar todas las filas con el estado correspondiente
         await Promise.all(toFinalize.map(({ i }) =>
           sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
             range: `${CAMPANAS_SHEET}!H${i + 2}`,
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [['finalizada']] },
+            requestBody: { values: [[estadoFinal]] },
           })
         ));
         return res.json({ ok: true });
@@ -776,7 +777,7 @@ module.exports = async (req, res) => {
         spreadsheetId: SPREADSHEET_ID,
         range: `${CAMPANAS_SHEET}!H${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [['finalizada']] },
+        requestBody: { values: [[estadoFinal]] },
       });
 
       // Actualizar ESTADO en Clientes si no quedan campañas activas para este artista
