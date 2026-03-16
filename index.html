@@ -1598,9 +1598,9 @@ function parseRawRows(rows) {
     const margen   = parseNum(row[C.MARGEN_PCT]);
     const final    = parseNum(row[C.FINAL]) || neto;
 
-    const campaignRow = parseInt(row[C.CAMPAIGN_ROW]) || null;
+    const campaignId = row[C.CAMPAIGN_ROW] || null;
     data.push({ artista, venta, metodo, genero, comision, precio, gasto, neto, margen, final, fecha,
-      monthKey: monthKey(fecha), rowIdx: i, campaignRow });
+      monthKey: monthKey(fecha), rowIdx: i, campaignId });
   });
   return data;
 }
@@ -2132,9 +2132,9 @@ function renderTodayPanel() {
     <button onclick="_panelDayOffset+=(${dir});renderTodayPanel()" ${disabled?'disabled':''} style="background:none;border:1px solid var(--border2);color:${disabled?'var(--muted2)':'var(--muted)'};border-radius:6px;width:28px;height:28px;cursor:${disabled?'default':'pointer'};font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.15s" ${disabled?'':` onmouseover="this.style.borderColor='var(--indigo)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'"`}>${dir===-1?'←':'→'}</button>`;
 
   const rows_html = rows.length ? rows.map((r, idx) => {
-    // Resolver campaña: primero col L (CAMPAIGN_ROW), fallback a match por precio
-    const campRow = (() => {
-      if (r.campaignRow) return r.campaignRow;
+    // Resolver campaña: primero por campaignId (col L), fallback a match por precio
+    const camp = (() => {
+      if (r.campaignId) return (_campanias || []).find(c => c.campaignId === r.campaignId) || null;
       const todas = (_campanias || []).filter(c =>
         c.artista.toLowerCase() === (r.artista || '').toLowerCase() &&
         c.vendedor === r.venta
@@ -2145,7 +2145,7 @@ function renderTodayPanel() {
         todas.find(c => c.estado === 'activa' && precioMatch(c)) ||
         todas.find(c => precioMatch(c) && c.metodo === r.metodo) ||
         todas.find(c => precioMatch(c))
-      )?.row ?? null;
+      ) || null;
     })();
     return `
     <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
@@ -2159,7 +2159,7 @@ function renderTodayPanel() {
         <div style="font-size:11px;color:var(--muted)">${fmt$(r.precio)} bruto</div>
       </div>
       ${canEdit ? `
-        ${campRow != null ? `<button onclick="openEditModal(${campRow});event.stopPropagation()" title="Editar campaña" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--indigo)';this.style.background='rgba(99,102,241,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">⚙️</button>` : ''}
+        ${camp ? `<button onclick="openEditModal(${camp.row});event.stopPropagation()" title="Editar campaña" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--indigo)';this.style.background='rgba(99,102,241,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">⚙️</button>` : ''}
         <button onclick="deleteSale(${idx})" title="Eliminar venta" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>
       ` : ''}
     </div>`;
@@ -3975,8 +3975,8 @@ async function submitSale(e) {
             sharedMasterId = cd.masterEventId || '';
             sharedVendorId = cd.vendorEventId || '';
             // Vincular venta a campaña en col L
-            if (saleSheetRow && cd.campaignRow) {
-              fetch('/api/sheets', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleRow: saleSheetRow, campaignRow: cd.campaignRow }) }).catch(() => {});
+            if (saleSheetRow && cd.campaignId) {
+              fetch('/api/sheets', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleRow: saleSheetRow, campaignId: cd.campaignId }) }).catch(() => {});
             }
           }
         }
@@ -4591,7 +4591,7 @@ async function renovarRapido(idx) {
     const saleResp = await fetch('/api/sheets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo || '', comisionPct, precioN, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''], campaignRow: data.newCampaignRow || null }),
+      body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo || '', comisionPct, precioN, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''], campaignId: data.campaignId || null }),
     });
     const saleData = await saleResp.json();
     if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
@@ -4909,7 +4909,7 @@ async function submitRenovar() {
     const saleResp = await fetch('/api/sheets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: saleRow, campaignRow: campData.newCampaignRow || null }),
+      body: JSON.stringify({ values: saleRow, campaignId: campData.campaignId || null }),
     });
     const saleData = await saleResp.json();
     if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
@@ -5041,9 +5041,9 @@ async function deleteSale(idx) {
 
     // Borrar campaña(s) de calendario asociada(s)
     const delBody = { artista: r.artista, vendedor: r.venta, estado: 'eliminada' };
-    if (r.campaignRow) {
-      const camp = (_campanias || []).find(c => c.row === r.campaignRow);
-      delBody.row = r.campaignRow;
+    if (r.campaignId) {
+      const camp = (_campanias || []).find(c => c.campaignId === r.campaignId);
+      delBody.campaignId = r.campaignId;
       if (camp) { delBody.masterEventId = camp.masterEventId; delBody.vendorEventId = camp.vendorEventId; }
     }
     if (r.artista === 'Varios') delBody.fechaInicio = fechaNorm; // para lookup grupal
@@ -5296,9 +5296,9 @@ async function deleteVendorSale(idx) {
     if (localIdx !== -1) allData.splice(localIdx, 1);
     // Borrar campaña de calendario asociada (si existe)
     const vendorDelBody = { artista: r.artista, vendedor: r.venta, estado: 'eliminada' };
-    if (r.campaignRow) {
-      const camp = (_campanias || []).find(c => c.row === r.campaignRow);
-      vendorDelBody.row = r.campaignRow;
+    if (r.campaignId) {
+      const camp = (_campanias || []).find(c => c.campaignId === r.campaignId);
+      vendorDelBody.campaignId = r.campaignId;
       if (camp) { vendorDelBody.masterEventId = camp.masterEventId; vendorDelBody.vendorEventId = camp.vendorEventId; }
     }
     fetch('/api/campaign', {

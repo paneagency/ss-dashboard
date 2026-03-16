@@ -307,10 +307,10 @@ module.exports = async (req, res) => {
       const { mode, vendedor } = req.query;
 
       if (mode === 'migrate-campaign-rows') {
-        // Leer ventas (A:L) y campañas
+        // Leer ventas (A:L) y campañas (A:T para incluir campaignId en col T)
         const [ventasResp, campResp] = await Promise.all([
           sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'A:L' }),
-          sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${CAMPANAS_SHEET}!A:J` }),
+          sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${CAMPANAS_SHEET}!A:T` }),
         ]);
         const ventasRows = (ventasResp.data.values || []).slice(1);
         const campRows   = (campResp.data.values  || []).slice(1);
@@ -321,11 +321,11 @@ module.exports = async (req, res) => {
         const updates = [];
         for (let i = 0; i < ventasRows.length; i++) {
           const v = ventasRows[i];
-          if (v[11]) continue; // ya tiene CAMPAIGN_ROW
+          if (v[11]) continue; // ya tiene CAMPAIGN_ID
           const fecha = parseDate(v[9]);
           if (!fecha || fecha.getTime() < cutoff) continue;
 
-          const artista = (v[0] || '').toLowerCase().trim();
+          const artista  = (v[0] || '').toLowerCase().trim();
           const vendedor = (v[1] || '').toLowerCase().trim();
           const precio   = parseFloat(v[4]) || 0;
           const metodo   = (v[2] || '').toLowerCase().trim();
@@ -338,10 +338,11 @@ module.exports = async (req, res) => {
             if ((c[1]||'').toLowerCase().trim() !== vendedor) continue;
             if (Math.abs(parseFloat(c[9]) - precio) > 0.5) continue;
             const metodoCamp = (c[8]||'').toLowerCase().trim();
-            if (!best || metodoCamp === metodo) best = { row: j + 2, metodoMatch: metodoCamp === metodo };
+            const campId = c[19] || '';
+            if (!best || metodoCamp === metodo) best = { campId, metodoMatch: metodoCamp === metodo };
             if (best.metodoMatch) break;
           }
-          if (best) updates.push({ sheetRow: i + 2, campaignRow: best.row });
+          if (best && best.campId) updates.push({ sheetRow: i + 2, campaignId: best.campId });
         }
 
         // Escribir en batch
@@ -350,7 +351,7 @@ module.exports = async (req, res) => {
             spreadsheetId: SPREADSHEET_ID,
             requestBody: {
               valueInputOption: 'USER_ENTERED',
-              data: updates.map(u => ({ range: `L${u.sheetRow}`, values: [[u.campaignRow]] })),
+              data: updates.map(u => ({ range: `L${u.sheetRow}`, values: [[u.campaignId]] })),
             },
           });
         }
@@ -385,7 +386,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:S`,
+        range: `${CAMPANAS_SHEET}!A:T`,
       });
       let campanias = (resp.data.values || []).slice(1)
         .map((r, i) => ({
@@ -401,6 +402,7 @@ module.exports = async (req, res) => {
           pauta: r[16] || '',
           representante: r[17] || '',
           notas: r[18] || '',
+          campaignId: r[19] || '',
         }))
         .filter(c => ['activa', 'pendiente_pago'].includes(c.estado) && c.artista);
 
@@ -481,17 +483,15 @@ module.exports = async (req, res) => {
         .map(r => `(${r.amount})${r.provider ? ' ' + r.provider : ''}`)
         .join('\n');
 
-      const postAppendResp = await sheets.spreadsheets.values.append({
+      const campaignId = 'CP_' + Date.now();
+      await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:S`,
+        range: `${CAMPANAS_SHEET}!A:T`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '']] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '', campaignId]] },
       });
-      const postRange = postAppendResp.data?.updates?.updatedRange || '';
-      const postRowMatch = postRange.match(/(\d+)$/);
-      const campaignRow = postRowMatch ? parseInt(postRowMatch[1]) : null;
 
-      return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId, campaignRow });
+      return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId, campaignId });
     }
 
     // ── PUT: editar cliente ───────────────────────────────────
@@ -550,10 +550,10 @@ module.exports = async (req, res) => {
       const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
-      // Leer fila completa actual para obtener fechaInicio y vencimiento base
+      // Leer fila completa actual para obtener fechaInicio, vencimiento base y campaignId
       const campResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A${row}:S${row}`,
+        range: `${CAMPANAS_SHEET}!A${row}:T${row}`,
       });
       const oldRow        = campResp.data.values?.[0] || [];
       const fechaInicio   = oldRow[2] || new Date().toISOString().split('T')[0];
@@ -561,6 +561,7 @@ module.exports = async (req, res) => {
       const genero        = generoBody || oldRow[14] || '';
       const representante = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
       const notas         = notasBody !== undefined ? notasBody : (oldRow[18] || '');
+      const oldCampaignId = oldRow[19] || '';
 
       // Sincronizar campos en hoja Clientes
       await updateClientFields(sheets, artista, {
@@ -607,15 +608,17 @@ module.exports = async (req, res) => {
       const fechaInicioDate = parseDateStr(fechaInicio) || new Date();
       const diasDesdeCreacion = Math.floor((Date.now() - fechaInicioDate.getTime()) / 86400000);
       const enPeriodoGracia = esEdicion && (esGrupal || diasDesdeCreacion <= 3);
+      // campaignId: en edición se conserva el mismo; en renovación se genera uno nuevo
+      const campaignId = esEdicion ? (oldCampaignId || 'CP_' + Date.now()) : 'CP_' + Date.now();
       let newCampaignRow = row; // para enPeriodoGracia el row no cambia
 
       if (enPeriodoGracia) {
         // Sobreescribir fila existente sin dejar historial
         await sheets.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A${row}:S${row}`,
+          range: `${CAMPANAS_SHEET}!A${row}:T${row}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId]] },
         });
         // Actualizar masterEventId/vendorEventId en todos los siblings del grupo
         if (siblingRows.length && newMasterId) {
@@ -639,9 +642,9 @@ module.exports = async (req, res) => {
         });
         const appendResp = await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:S`,
+          range: `${CAMPANAS_SHEET}!A:T`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId]] },
         });
         // Extraer row number de la respuesta del append
         const updatedRange = appendResp.data?.updates?.updatedRange || '';
@@ -649,7 +652,7 @@ module.exports = async (req, res) => {
         if (rowMatch) newCampaignRow = parseInt(rowMatch[1]);
       }
 
-      // Actualizar METODO, COMISION_PCT y CAMPAIGN_ROW en la hoja de ventas principal
+      // Actualizar METODO, COMISION_PCT y CAMPAIGN_ID en la hoja de ventas principal
       try {
         const ventasResp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
@@ -659,10 +662,10 @@ module.exports = async (req, res) => {
         const targetArtista = (artista || '').toLowerCase().trim();
         const targetPrecio  = parseFloat(precio) || 0;
         const nuevaComision = METHOD_COMMISSIONS[metodo] ?? 0;
-        // Buscar primero por CAMPAIGN_ROW (col L, idx 11), fallback artista+precio
+        // Buscar primero por CAMPAIGN_ID (col L), fallback artista+precio
         let matchIdx = -1;
         for (let i = 1; i < ventasRows.length; i++) {
-          if (parseInt(ventasRows[i][11]) === row) { matchIdx = i; break; }
+          if (ventasRows[i][11] === oldCampaignId && oldCampaignId) { matchIdx = i; break; }
         }
         if (matchIdx === -1) {
           for (let i = 1; i < ventasRows.length; i++) {
@@ -674,11 +677,10 @@ module.exports = async (req, res) => {
         }
         if (matchIdx !== -1) {
           const sheetRow = matchIdx + 1;
-          const updateData = [{ range: `C${sheetRow}:D${sheetRow}`, values: [[metodo || '', nuevaComision]] }];
-          // Si se creó nuevo campaign row (editar fuera de gracia), actualizar col L también
-          if (newCampaignRow !== row) {
-            updateData.push({ range: `L${sheetRow}`, values: [[newCampaignRow]] });
-          }
+          const updateData = [
+            { range: `C${sheetRow}:D${sheetRow}`, values: [[metodo || '', nuevaComision]] },
+            { range: `L${sheetRow}`, values: [[campaignId]] },
+          ];
           await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
             requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
@@ -688,7 +690,7 @@ module.exports = async (req, res) => {
         console.error('Error actualizando hoja ventas:', e.message);
       }
 
-      return res.json({ ok: true, nuevaFechaVenc, newCampaignRow });
+      return res.json({ ok: true, nuevaFechaVenc, newCampaignRow, campaignId });
     }
 
     // ── DELETE: borrar cliente ────────────────────────────────
@@ -708,8 +710,25 @@ module.exports = async (req, res) => {
 
     // ── DELETE: no renueva / borrar campaña por artista ──────
     if (req.method === 'DELETE') {
-      let { row, masterEventId, vendorEventId, vendedor, artista, fechaInicio, estado: estadoFinal } = req.body;
+      let { row, masterEventId, vendorEventId, vendedor, artista, fechaInicio, estado: estadoFinal, campaignId } = req.body;
       estadoFinal = estadoFinal || 'finalizada';
+
+      // Si viene campaignId, buscar la fila en col T
+      if (!row && campaignId) {
+        const campIdResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:T`,
+        });
+        const campIdRows = (campIdResp.data.values || []).slice(1);
+        const matchIdx = campIdRows.findIndex(r => r[19] === campaignId);
+        if (matchIdx !== -1) {
+          row = matchIdx + 2;
+          masterEventId = masterEventId || campIdRows[matchIdx][5] || '';
+          vendorEventId = vendorEventId || campIdRows[matchIdx][6] || '';
+          vendedor      = vendedor      || campIdRows[matchIdx][1] || '';
+          artista       = artista       || campIdRows[matchIdx][0] || '';
+        }
+      }
 
       // Pauta grupal (artista = "Varios"): borrar todas las campañas que comparten masterEventId
       if (!row && artista === 'Varios' && vendedor && fechaInicio) {
