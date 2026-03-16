@@ -3352,7 +3352,7 @@ function removeGastoRow(btn) {
 }
 
 function recalcularGasto() {
-  const total = [...document.querySelectorAll('.gasto-amount')]
+  const total = [...document.querySelectorAll('#gasto-rows .gasto-amount')]
     .reduce((sum, el) => sum + (parseFloat(el.value) || 0), 0);
   document.getElementById('f-gasto').value = total;
   recalcular();
