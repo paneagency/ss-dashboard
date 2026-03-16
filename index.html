@@ -808,6 +808,11 @@
             <textarea class="form-input" id="f-pauta" rows="4" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
           </div>
 
+          <div class="form-group full">
+            <label class="form-label">Notas</label>
+            <textarea class="form-input" id="f-notas" rows="2" placeholder="Anotaciones internas sobre esta campaña..." style="resize:vertical;line-height:1.4"></textarea>
+          </div>
+
           <div class="form-section">Datos del cliente</div>
 
           <!-- Artista único (modo default) -->
@@ -1423,6 +1428,11 @@
           <div class="form-group full">
             <label class="form-label">Pauta / Promoción</label>
             <textarea class="form-input" id="renovar-pauta" rows="4" style="resize:vertical;line-height:1.4" oninput="renovarAutofillPrecio();smartRenovarDetect()"></textarea>
+          </div>
+
+          <div class="form-group full">
+            <label class="form-label">Notas</label>
+            <textarea class="form-input" id="renovar-notas" rows="2" placeholder="Anotaciones internas sobre esta campaña..." style="resize:vertical;line-height:1.4"></textarea>
           </div>
 
         </div>
@@ -3783,7 +3793,7 @@ function openModal() {
 }
 
 function modalHasData() {
-  const fields = ['f-artista','f-genero','f-pauta','f-venta','f-representante','f-metodo','f-precio'];
+  const fields = ['f-artista','f-genero','f-pauta','f-notas','f-venta','f-representante','f-metodo','f-precio'];
   if (fields.some(id => (document.getElementById(id)?.value || '').trim() !== '')) return true;
   const gastoInputs = document.querySelectorAll('#gasto-rows .gasto-amount');
   return [...gastoInputs].some(el => (el.value || '').trim() !== '' && el.value !== '0');
@@ -3902,6 +3912,7 @@ async function submitSale(e) {
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
     const duracion         = parseInt(document.getElementById('f-duracion').value) || 30;
     const representanteVal = document.getElementById('f-representante').value.trim();
+    const notasVal         = document.getElementById('f-notas').value.trim();
     const spotifyArtistId  = window._spotifyArtistId || null;
     const spotifyImageUrl  = window._spotifyImageUrl  || null;
     const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(r => ({
@@ -3929,7 +3940,7 @@ async function submitSale(e) {
           const campBody = {
             artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
             fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
-            link: a.link || '', gastosRows, representante: representanteVal,
+            link: a.link || '', gastosRows, representante: representanteVal, notas: notasVal,
             spotifyArtistId: a.spotifyArtistId,
             spotifyImageUrl: a.spotifyImageUrl,
             ...(i === 0 && esGrupal ? { grupal: true } : {}),
@@ -3997,6 +4008,7 @@ async function submitSinPago(e) {
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
     const duracion         = parseInt(document.getElementById('f-duracion').value) || 30;
     const representanteVal = document.getElementById('f-representante').value.trim();
+    const notasVal         = document.getElementById('f-notas').value.trim();
     const spotifyArtistId  = window._spotifyArtistId || null;
     const spotifyImageUrl  = window._spotifyImageUrl  || null;
 
@@ -4026,7 +4038,7 @@ async function submitSinPago(e) {
       const campBody = {
         artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
         fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
-        link: a.link || '', gastosRows, representante: representanteVal,
+        link: a.link || '', gastosRows, representante: representanteVal, notas: notasVal,
         spotifyArtistId: a.spotifyArtistId,
         spotifyImageUrl: a.spotifyImageUrl,
         sinPago: true,
@@ -4137,8 +4149,10 @@ function renderResumenCampaniasHoy() {
     const idx       = c.row;
     const hasPauta  = !!c.pauta;
     const hasGastos = !!c.detalleGastos;
+    const hasNotas  = !!c.notas;
     const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     return `
     <div class="campania-card" id="camp-card-${idx}" style="border-color:rgba(245,158,11,0.4);${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:rgba(245,158,11,0.15);color:var(--amber)">
@@ -4151,12 +4165,14 @@ function renderResumenCampaniasHoy() {
       <div class="campania-actions" onclick="event.stopPropagation()">
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
+        ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
         <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
         <button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>
         <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
       ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}
+      ${hasNotas  ? `<div class="campania-expand" id="camp-expand-notas-${idx}">${notasEsc}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -4294,8 +4310,10 @@ function renderCampList(data, today) {
     const idx = c.row;
     const hasPauta  = !!c.pauta;
     const hasGastos = !!c.detalleGastos;
+    const hasNotas  = !!c.notas;
     const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const borderStyle = sinPago ? `border-style:dashed;border-color:${borderColor}` : `border-color:${borderColor}`;
 
     return `
@@ -4312,12 +4330,14 @@ function renderCampList(data, today) {
         ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
+        ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
         <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
         ${!sinPago ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
         <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
       ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}
+      ${hasNotas  ? `<div class="campania-expand" id="camp-expand-notas-${idx}">${notasEsc}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -4436,8 +4456,10 @@ function showCampCalDetail(evt, row) {
 
   const hasPauta  = !!c.pauta;
   const hasGastos = !!c.detalleGastos;
+  const hasNotas  = !!c.notas;
   const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
   const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+  const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
 
   const pop = document.getElementById('camp-cal-popover');
   const content = document.getElementById('camp-cal-popover-content');
@@ -4455,6 +4477,7 @@ function showCampCalDetail(evt, row) {
       ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${row});closeCampCalPopover()">💳 Cobrado</button>` : ''}
       ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})">📋 Copiar pauta</button>` : ''}
       ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">💰 Gastos</button><div class="campania-expand" style="width:100%;margin-top:6px">${gastosEsc}</div>` : ''}
+      ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">📝 Notas</button><div class="campania-expand" style="width:100%;margin-top:6px">${notasEsc}</div>` : ''}
       <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${row});closeCampCalPopover()">⚙️ Editar</button>
       ${!sinPago ? `<button class="btn btn-sm btn-renovar" onclick="renovarRapido(${row});closeCampCalPopover()">↻ Renovar</button>` : ''}
       <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${row});closeCampCalPopover()">✕ No renueva</button>
@@ -4486,10 +4509,10 @@ function showCampCalDetail(evt, row) {
 function toggleCampExpand(idx, tipo) {
   const el = document.getElementById(`camp-expand-${tipo}-${idx}`);
   if (!el) return;
-  // Cerrar el otro si está abierto
-  const otro = tipo === 'pauta' ? 'gastos' : 'pauta';
-  const elOtro = document.getElementById(`camp-expand-${otro}-${idx}`);
-  if (elOtro) elOtro.classList.remove('open');
+  // Cerrar los otros si están abiertos
+  ['pauta','gastos','notas'].filter(t => t !== tipo).forEach(t => {
+    document.getElementById(`camp-expand-${t}-${idx}`)?.classList.remove('open');
+  });
   el.classList.toggle('open');
 }
 
@@ -4523,7 +4546,7 @@ async function renovarRapido(idx) {
         row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
         duracion: camp.duracion, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
         precio: camp.precio, gasto: camp.gasto, metodo: camp.metodo, pauta: camp.pauta,
-        gastosRows, genero: camp.genero, representante: camp.representante || '',
+        gastosRows, genero: camp.genero, representante: camp.representante || '', notas: camp.notas || '',
       }),
     });
     const data = await resp.json();
@@ -4663,6 +4686,7 @@ function openRenovarModal(row) {
   renovarAutoComision();
   document.getElementById('renovar-precio').value = camp.precio || '';
   document.getElementById('renovar-pauta').value = camp.pauta || '';
+  document.getElementById('renovar-notas').value = camp.notas || '';
 
   // Pre-rellenar filas de gasto desde detalleGastos "(35) Daniel Rios"
   document.getElementById('renovar-gasto-rows').innerHTML = '';
@@ -4685,6 +4709,7 @@ function openRenovarModal(row) {
     metodo: camp.metodo || '',
     precio: String(camp.precio || '').trim(),
     pauta: (camp.pauta || '').trim(),
+    notas: (camp.notas || '').trim(),
     detalleGastos: (camp.detalleGastos || '').split('\n')
       .map(l => { const m2 = l.trim().match(/^\((\d+(?:\.\d+)?)\)\s*(.*)?$/); return m2 ? `(${parseFloat(m2[1])}) ${(m2[2]||'').trim()}`.trim() : null; })
       .filter(Boolean).join('\n'),
@@ -4725,6 +4750,7 @@ function renovarModalHasChanges() {
   if (document.getElementById('renovar-metodo').value !== o.metodo) return true;
   if (document.getElementById('renovar-precio').value.trim() !== o.precio) return true;
   if (document.getElementById('renovar-pauta').value.trim() !== o.pauta) return true;
+  if (document.getElementById('renovar-notas').value.trim() !== o.notas) return true;
   const currentGastos = [...document.querySelectorAll('#renovar-gasto-rows .gasto-row')]
     .map(r => `(${parseFloat(r.querySelector('.gasto-amount').value)||0}) ${r.querySelector('.gasto-provider').value||''}`.trim())
     .join('\n');
@@ -4866,6 +4892,7 @@ async function submitEditarActual() {
     const precio          = document.getElementById('renovar-precio').value.trim();
     const gasto           = document.getElementById('renovar-gasto').value || '0';
     const pauta           = document.getElementById('renovar-pauta').value.trim();
+    const notas           = document.getElementById('renovar-notas').value.trim();
     const representante   = document.getElementById('renovar-representante').value.trim();
     const gastosRows      = [...document.querySelectorAll('#renovar-gasto-rows .gasto-row')].map(r => ({
       amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
@@ -4880,7 +4907,7 @@ async function submitEditarActual() {
         row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
         duracion, fechaVencimiento,
         masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
-        precio, gasto, metodo, pauta, gastosRows, genero: camp.genero, representante,
+        precio, gasto, metodo, pauta, notas, gastosRows, genero: camp.genero, representante,
       }),
     });
     const data = await resp.json();

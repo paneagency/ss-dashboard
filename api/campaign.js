@@ -76,8 +76,8 @@ async function ensureSheets(sheets) {
     headerData.push({ range: `${CLIENTES_SHEET}!A1:O1`,
       values: [['ID','ARTISTA','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','FECHA_PRIMERA_COMPRA','REPRESENTANTE','NOMBRE','APODO','VENDEDOR','METODO_PAGO','ESTADO','IMAGEN']] });
   if (toCreate.includes(CAMPANAS_SHEET))
-    headerData.push({ range: `${CAMPANAS_SHEET}!A1:R1`,
-      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO','DETALLE_GASTOS','PAUTA','REPRESENTANTE']] });
+    headerData.push({ range: `${CAMPANAS_SHEET}!A1:S1`,
+      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO','DETALLE_GASTOS','PAUTA','REPRESENTANTE','NOTAS']] });
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
@@ -333,7 +333,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:R`,
+        range: `${CAMPANAS_SHEET}!A:S`,
       });
       let campanias = (resp.data.values || []).slice(1)
         .map((r, i) => ({
@@ -348,6 +348,7 @@ module.exports = async (req, res) => {
           detalleGastos: r[15] || '',
           pauta: r[16] || '',
           representante: r[17] || '',
+          notas: r[18] || '',
         }))
         .filter(c => ['activa', 'pendiente_pago'].includes(c.estado) && c.artista);
 
@@ -390,7 +391,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar, grupal } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar, grupal, notas } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
@@ -429,9 +430,9 @@ module.exports = async (req, res) => {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:R`,
+        range: `${CAMPANAS_SHEET}!A:S`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '']] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '']] },
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId });
@@ -490,19 +491,20 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar/renovar campaña ───────────────────────────
     if (req.method === 'PUT') {
-      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion } = req.body;
+      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
       // Leer fila completa actual para obtener fechaInicio y vencimiento base
       const campResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A${row}:R${row}`,
+        range: `${CAMPANAS_SHEET}!A${row}:S${row}`,
       });
       const oldRow        = campResp.data.values?.[0] || [];
       const fechaInicio   = oldRow[2] || new Date().toISOString().split('T')[0];
       const baseDate      = oldRow[3] || new Date().toISOString().split('T')[0];
       const genero        = generoBody || oldRow[14] || '';
       const representante = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
+      const notas         = notasBody !== undefined ? notasBody : (oldRow[18] || '');
 
       // Sincronizar campos en hoja Clientes
       await updateClientFields(sheets, artista, {
@@ -554,9 +556,9 @@ module.exports = async (req, res) => {
         // Sobreescribir fila existente sin dejar historial
         await sheets.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A${row}:R${row}`,
+          range: `${CAMPANAS_SHEET}!A${row}:S${row}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas]] },
         });
         // Actualizar masterEventId/vendorEventId en todos los siblings del grupo
         if (siblingRows.length && newMasterId) {
@@ -580,9 +582,9 @@ module.exports = async (req, res) => {
         });
         await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:R`,
+          range: `${CAMPANAS_SHEET}!A:S`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas]] },
         });
       }
 
