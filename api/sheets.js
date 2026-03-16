@@ -2,7 +2,7 @@ const { google } = require('googleapis');
 
 const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
 const SHEET_GID      = 162664118;
-const SHEET_RANGE    = 'A:K';
+const SHEET_RANGE    = 'A:L';
 
 function getSheets() {
   const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);

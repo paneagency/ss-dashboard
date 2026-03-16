@@ -1467,7 +1467,7 @@ const PROXIES = [
 ];
 
 // Column indices (header row will be skipped)
-const C = { ARTISTA:0, VENTA:1, METODO:2, COMISION_PCT:3, PRECIO:4, GASTO:5, NETO:6, MARGEN_PCT:7, FINAL:8, FECHA:9, GENERO:10 };
+const C = { ARTISTA:0, VENTA:1, METODO:2, COMISION_PCT:3, PRECIO:4, GASTO:5, NETO:6, MARGEN_PCT:7, FINAL:8, FECHA:9, GENERO:10, CAMPAIGN_ROW:11 };
 
 const PALETTE = ['#6366f1','#10b981','#f59e0b','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#e11d48','#0ea5e9'];
 const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -1597,8 +1597,9 @@ function parseRawRows(rows) {
     const margen   = parseNum(row[C.MARGEN_PCT]);
     const final    = parseNum(row[C.FINAL]) || neto;
 
+    const campaignRow = parseInt(row[C.CAMPAIGN_ROW]) || null;
     data.push({ artista, venta, metodo, genero, comision, precio, gasto, neto, margen, final, fecha,
-      monthKey: monthKey(fecha), rowIdx: i });
+      monthKey: monthKey(fecha), rowIdx: i, campaignRow });
   });
   return data;
 }
@@ -2127,14 +2128,14 @@ function renderTodayPanel() {
     <button onclick="_panelDayOffset+=(${dir});renderTodayPanel()" ${disabled?'disabled':''} style="background:none;border:1px solid var(--border2);color:${disabled?'var(--muted2)':'var(--muted)'};border-radius:6px;width:28px;height:28px;cursor:${disabled?'default':'pointer'};font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.15s" ${disabled?'':` onmouseover="this.style.borderColor='var(--indigo)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'"`}>${dir===-1?'←':'→'}</button>`;
 
   const rows_html = rows.length ? rows.map((r, idx) => {
-    // Resolver campaña en tiempo de render para usar row ID directo
+    // Resolver campaña: primero col L (CAMPAIGN_ROW), fallback a match por precio
     const campRow = (() => {
+      if (r.campaignRow) return r.campaignRow;
       const todas = (_campanias || []).filter(c =>
         c.artista.toLowerCase() === (r.artista || '').toLowerCase() &&
         c.vendedor === r.venta
       );
       const precioMatch = c => Math.abs(parseFloat(c.precio) - r.precio) < 0.01;
-      // Sin match de precio no mostrar botón (evita abrir campaña equivocada)
       return (
         todas.find(c => c.estado === 'activa' && precioMatch(c) && c.metodo === r.metodo) ||
         todas.find(c => c.estado === 'activa' && precioMatch(c)) ||
