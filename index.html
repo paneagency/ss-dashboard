@@ -4233,6 +4233,7 @@ async function loadCampanias() {
     _campaniasLoading = false;
     renderCampaniasTab();
     renderResumenCampaniasHoy();
+    renderTodayPanel();
     // Poblar datalist de representantes
     fillDatalist('list-representantes', _campanias.map(c => c.representante).filter(Boolean));
     // Poblar filtro de representantes
