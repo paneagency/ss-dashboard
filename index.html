@@ -2129,15 +2129,18 @@ function renderTodayPanel() {
   const rows_html = rows.length ? rows.map((r, idx) => {
     // Resolver campaña en tiempo de render para usar row ID directo
     const campRow = (() => {
-      const activas = (_campanias || []).filter(c =>
-        c.estado === 'activa' &&
+      const todas = (_campanias || []).filter(c =>
         c.artista.toLowerCase() === (r.artista || '').toLowerCase() &&
         c.vendedor === r.venta
       );
-      const match = activas.find(c => String(c.precio) === String(r.precio) && c.metodo === r.metodo)
-        || activas.find(c => String(c.precio) === String(r.precio))
-        || activas[0];
-      return match ? match.row : null;
+      // Buscar match exacto por precio+método primero en activas, luego en todas
+      return (
+        todas.find(c => c.estado === 'activa' && String(c.precio) === String(r.precio) && c.metodo === r.metodo) ||
+        todas.find(c => c.estado === 'activa' && String(c.precio) === String(r.precio)) ||
+        todas.find(c => String(c.precio) === String(r.precio) && c.metodo === r.metodo) ||
+        todas.find(c => String(c.precio) === String(r.precio)) ||
+        todas.find(c => c.estado === 'activa')
+      )?.row ?? null;
     })();
     return `
     <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
