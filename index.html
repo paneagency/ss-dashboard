@@ -4673,11 +4673,13 @@ function openCampaniaFromArtista(artista, vendedor, fecha, precio, metodo, evt) 
     || grupos.find(c => c.fechaInicio === fecha)
     || grupos[0];
   } else {
-    camp = (_campanias || []).find(c =>
+    const activas = (_campanias || []).filter(c =>
       c.estado === 'activa' &&
       c.artista.toLowerCase() === artista.toLowerCase() &&
       (!vendedor || c.vendedor === vendedor)
     );
+    // Si hay varias, intentar match exacto por precio; fallback a la primera
+    camp = activas.find(c => String(c.precio) === String(precio)) || activas[0];
   }
   if (!camp) { showToast('No se encontró campaña activa para ' + artista, 'error'); return; }
   openEditModal(camp.row);
