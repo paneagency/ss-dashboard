@@ -2117,6 +2117,7 @@ function renderTodayPanel() {
   const targetStr = target.toDateString();
 
   const isToday = _panelDayOffset === 0;
+  const canEdit = _panelDayOffset >= -6; // últimos 7 días
   const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
   const dayLabel = isToday ? 'Hoy · ' + capitalize(target.toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long' }))
                  : _panelDayOffset === -1 ? 'Ayer · ' + capitalize(target.toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long' }))
@@ -2143,7 +2144,7 @@ function renderTodayPanel() {
         <div style="font-size:14px;font-weight:700;color:var(--green)">${fmt$(r.final)}</div>
         <div style="font-size:11px;color:var(--muted)">${fmt$(r.precio)} bruto</div>
       </div>
-      ${isToday ? `
+      ${canEdit ? `
         <button onclick="openCampaniaFromArtista('${r.artista.replace(/'/g,"\\'")}','${(r.venta||'').replace(/'/g,"\\'")}','${r.fecha instanceof Date ? r.fecha.toISOString().split('T')[0] : ''}',${r.precio||0},'${(r.metodo||'').replace(/'/g,"\\'")}',event)" title="Editar campaña" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--indigo)';this.style.background='rgba(99,102,241,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">⚙️</button>
         <button onclick="deleteSale(${idx})" title="Eliminar venta" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>
       ` : ''}
