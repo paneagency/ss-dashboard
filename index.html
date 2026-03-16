@@ -789,6 +789,7 @@
       </div>
       <button class="btn btn-ghost btn-sm" id="refresh-btn" onclick="init()">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="btn-cuenta-vendedor" onclick="openVendorAccountModal()" style="display:none">💼 Cuenta Vendedor</button>
+      <button class="btn btn-ghost btn-sm" id="btn-migrate-campaigns" onclick="migrateCampaignRows()" style="display:none;font-size:11px;opacity:0.6" title="Vincular ventas a campañas (últimos 15 días)">🔗 Vincular</button>
       <button class="btn btn-primary btn-sm" id="btn-nueva-venta" onclick="openModal()">+ Nueva Venta</button>
     </div>
   </div>
@@ -1659,6 +1660,7 @@ function applyLoadedData(parsed) {
   const adminUser = window._currentUser;
   if (adminUser && adminUser.role !== 'vendedor' && adminUser.role !== 'secondary_admin') {
     document.getElementById('btn-cuenta-vendedor').style.display = 'inline-flex';
+    document.getElementById('btn-migrate-campaigns').style.display = 'inline-flex';
   }
 
   applyFilters();
@@ -5638,6 +5640,21 @@ async function deleteMovimiento(sheetId, sheetName, row, vendorName) {
 }
 
 // ── ADMIN: modal cuenta vendedor ─────────────────────────────
+async function migrateCampaignRows() {
+  const btn = document.getElementById('btn-migrate-campaigns');
+  btn.disabled = true; btn.textContent = '⏳ Vinculando...';
+  try {
+    const resp = await fetch('/api/campaign?mode=migrate-campaign-rows');
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    showToast(`✅ ${data.updated} ventas vinculadas`, 'success');
+    btn.style.display = 'none'; // ocultar tras ejecutar
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+    btn.disabled = false; btn.textContent = '🔗 Vincular';
+  }
+}
+
 function openVendorAccountModal() {
   const select = document.getElementById('va-vendor-select');
   const vendors = window._currentUser?.vendorAccounts || [];

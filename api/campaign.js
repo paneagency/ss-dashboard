@@ -306,6 +306,58 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const { mode, vendedor } = req.query;
 
+      if (mode === 'migrate-campaign-rows') {
+        // Leer ventas (A:L) y campañas
+        const [ventasResp, campResp] = await Promise.all([
+          sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'A:L' }),
+          sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${CAMPANAS_SHEET}!A:J` }),
+        ]);
+        const ventasRows = (ventasResp.data.values || []).slice(1);
+        const campRows   = (campResp.data.values  || []).slice(1);
+
+        const cutoff = Date.now() - 15 * 24 * 60 * 60 * 1000;
+        const parseDate = s => { if (!s) return null; const p = String(s).trim(); let m; m = p.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) return new Date(+m[3],+m[2]-1,+m[1]); m = p.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if (m) return new Date(+m[1],+m[2]-1,+m[3]); return null; };
+
+        const updates = [];
+        for (let i = 0; i < ventasRows.length; i++) {
+          const v = ventasRows[i];
+          if (v[11]) continue; // ya tiene CAMPAIGN_ROW
+          const fecha = parseDate(v[9]);
+          if (!fecha || fecha.getTime() < cutoff) continue;
+
+          const artista = (v[0] || '').toLowerCase().trim();
+          const vendedor = (v[1] || '').toLowerCase().trim();
+          const precio   = parseFloat(v[4]) || 0;
+          const metodo   = (v[2] || '').toLowerCase().trim();
+
+          // Buscar mejor campaña: artista+vendedor+precio+metodo, luego sin metodo
+          let best = null;
+          for (let j = 0; j < campRows.length; j++) {
+            const c = campRows[j];
+            if ((c[0]||'').toLowerCase().trim() !== artista) continue;
+            if ((c[1]||'').toLowerCase().trim() !== vendedor) continue;
+            if (Math.abs(parseFloat(c[9]) - precio) > 0.5) continue;
+            const metodoCamp = (c[8]||'').toLowerCase().trim();
+            if (!best || metodoCamp === metodo) best = { row: j + 2, metodoMatch: metodoCamp === metodo };
+            if (best.metodoMatch) break;
+          }
+          if (best) updates.push({ sheetRow: i + 2, campaignRow: best.row });
+        }
+
+        // Escribir en batch
+        if (updates.length) {
+          await sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: SPREADSHEET_ID,
+            requestBody: {
+              valueInputOption: 'USER_ENTERED',
+              data: updates.map(u => ({ range: `L${u.sheetRow}`, values: [[u.campaignRow]] })),
+            },
+          });
+        }
+
+        return res.json({ ok: true, updated: updates.length, updates });
+      }
+
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
