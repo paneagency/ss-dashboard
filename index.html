@@ -801,92 +801,83 @@
 
 
       <form id="sale-form" onsubmit="submitSale(event)">
-        <div class="form-grid">
 
-          <div class="form-group full">
-            <label class="form-label">Pauta / Promoción</label>
-            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
-          </div>
+        <!-- ── PAUTA — campo principal ───────────────────────── -->
+        <div style="margin-bottom:12px">
+          <label style="font-size:13px;font-weight:700;color:var(--text);display:block;margin-bottom:6px">Pauta <span style="color:var(--muted);font-weight:400;font-size:12px">/ Promoción</span></label>
+          <textarea class="form-input" id="f-pauta" rows="6" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;line-height:1.5;border-color:rgba(99,102,241,0.4);background:rgba(99,102,241,0.03);font-size:13px;padding:12px 14px" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
+        </div>
 
-          <div class="form-group full">
-            <label class="form-label">Notas</label>
-            <textarea class="form-input" id="f-notas" rows="2" placeholder="Anotaciones internas sobre esta campaña..." style="resize:vertical;line-height:1.4"></textarea>
-          </div>
+        <!-- ── NOTAS ─────────────────────────────────────────── -->
+        <div style="margin-bottom:18px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:5px">Notas</label>
+          <textarea class="form-input" id="f-notas" rows="2" placeholder="Anotaciones internas..." style="resize:vertical;line-height:1.4;font-size:12px"></textarea>
+        </div>
 
-          <div class="form-section">Datos del cliente</div>
+        <!-- ── CAMPOS COMPACTOS ──────────────────────────────── -->
+        <div class="form-grid" style="gap:10px">
 
-          <!-- Artista único (modo default) -->
+          <!-- Artista (full) + artista-rows oculto -->
           <div id="single-artista-group" class="form-group full">
             <label class="form-label">Artista / Cliente<span>*</span></label>
             <input class="form-input" id="f-artista" list="list-artistas" placeholder="Nombre del artista" oninput="autofillFromArtist()">
             <datalist id="list-artistas"></datalist>
           </div>
-
           <div id="artista-rows" style="display:none"></div>
 
+          <!-- Género (half) -->
           <div class="form-group">
             <label class="form-label">Género</label>
-            <input class="form-input" id="f-genero" list="list-generos" placeholder="Ej: Pop, Reggaeton...">
+            <input class="form-input" id="f-genero" list="list-generos" placeholder="Pop, Reggaeton...">
             <datalist id="list-generos"></datalist>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Fecha<span>*</span></label>
-            <input class="form-input" id="f-fecha" type="date" required oninput="updateVencimiento()">
-
-          <div class="form-section" style="margin-top:4px">Campaña de Spotify</div>
-
-          <div class="form-group">
-            <label class="form-label">Duración<span>*</span></label>
-            <select class="form-input" id="f-duracion" onchange="updateVencimiento()">
-              <option value="7">7 días</option>
-              <option value="14">14 días</option>
-              <option value="30" selected>30 días</option>
-              <option value="60">60 días</option>
-              <option value="90">90 días</option>
-            </select>
+          <!-- Fecha + Duración + Vence el — 3 columnas -->
+          <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-group">
+              <label class="form-label">Fecha<span>*</span></label>
+              <input class="form-input" id="f-fecha" type="date" required oninput="updateVencimiento()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Duración<span>*</span></label>
+              <select class="form-input" id="f-duracion" onchange="updateVencimiento()">
+                <option value="7">7 días</option>
+                <option value="14">14 días</option>
+                <option value="30" selected>30 días</option>
+                <option value="60">60 días</option>
+                <option value="90">90 días</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vence el</label>
+              <input class="form-input" id="f-vencimiento" type="date">
+            </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Vence el</label>
-            <input class="form-input" id="f-vencimiento" type="date">
-            <span class="form-hint">Auto calculado, podés modificarlo</span>
-          </div>
-          </div>
-
-          <div class="form-section">Comercial</div>
-
+          <!-- Vendedor + Representante -->
           <div class="form-group">
             <label class="form-label">Vendedor<span>*</span></label>
-            <input class="form-input" id="f-venta" list="list-ventas" placeholder="Nombre del vendedor" required>
+            <input class="form-input" id="f-venta" list="list-ventas" placeholder="Vendedor" required>
             <datalist id="list-ventas"></datalist>
           </div>
-
           <div class="form-group">
             <label class="form-label">Representante</label>
             <input class="form-input" id="f-representante" list="list-representantes" placeholder="Manager, intermediario...">
             <datalist id="list-representantes"></datalist>
-            <span class="form-hint">Opcional — contacto que intermedia con el artista</span>
           </div>
 
+          <!-- Método + Precio -->
           <div class="form-group">
             <label class="form-label">Método de cobro<span>*</span></label>
-            <input class="form-input" id="f-metodo" list="list-metodos" placeholder="Ej: Transferencia, PayPal..." required oninput="autoComision()">
+            <input class="form-input" id="f-metodo" list="list-metodos" placeholder="PayPal, Wise..." required oninput="autoComision()">
             <datalist id="list-metodos"></datalist>
           </div>
-
-          <div class="form-group" style="display:none">
-            <label class="form-label">Comisión %</label>
-            <input class="form-input" id="f-comision" type="number" step="0.01" min="0" max="100" placeholder="0">
-          </div>
-
-          <div class="form-section">Importes</div>
-
           <div class="form-group">
             <label class="form-label">Precio bruto<span>*</span></label>
             <input class="form-input" id="f-precio" type="number" step="0.01" min="0" placeholder="0.00" oninput="recalcular()" required>
           </div>
 
+          <!-- Gastos / Proveedores -->
           <div class="form-group full">
             <label class="form-label">Gasto / Proveedores</label>
             <div id="gasto-rows"></div>
@@ -894,23 +885,11 @@
             <input type="hidden" id="f-gasto" value="0">
           </div>
 
-          <div class="form-group" style="display:none">
-            <label class="form-label">Neto</label>
-            <input class="form-input auto" id="f-neto" type="number" step="0.01" placeholder="Auto">
-            <span class="form-hint">Precio − Gasto (editable)</span>
-          </div>
-
-          <div class="form-group" style="display:none">
-            <label class="form-label">Final</label>
-            <input class="form-input auto" id="f-final" type="number" step="0.01" placeholder="Auto" oninput="recalcMargen()">
-            <span class="form-hint">Ingreso real recibido (editable)</span>
-          </div>
-
-          <div class="form-group" style="display:none">
-            <label class="form-label">Margen %</label>
-            <input class="form-input auto" id="f-margen" type="number" step="0.01" placeholder="Auto">
-            <span class="form-hint">Final / Precio × 100 (auto)</span>
-          </div>
+          <!-- Campos ocultos de cálculo -->
+          <input type="hidden" id="f-comision">
+          <div style="display:none"><input id="f-neto"   type="number" step="0.01"></div>
+          <div style="display:none"><input id="f-final"  type="number" step="0.01" oninput="recalcMargen()"></div>
+          <div style="display:none"><input id="f-margen" type="number" step="0.01"></div>
 
         </div>
       </form>
@@ -3789,7 +3768,7 @@ function openModal() {
 
   document.getElementById('modal-overlay').classList.add('open');
   // focus solo en desktop (en mobile dispara teclado virtual y causa reflow)
-  if (window.innerWidth > 768) document.getElementById('f-artista').focus();
+  if (window.innerWidth > 768) document.getElementById('f-pauta').focus();
 }
 
 function modalHasData() {
