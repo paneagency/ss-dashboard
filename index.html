@@ -3326,6 +3326,13 @@ function autofillPrecioFromPauta() {
     if (p > 0) hits.push({ pos: m.index, price: p });
   }
 
+  // Patrón 3: "Desc. Esp: X usd" (descuento especial, cualquier variante)
+  const re3 = /Desc\.?\s*Esp\.?:\s*([\d.,]+)\s*usd/gi;
+  while ((m = re3.exec(clean)) !== null) {
+    const p = parseFloat(m[1].replace(',', '.'));
+    if (p > 0) hits.push({ pos: m.index, price: p });
+  }
+
   if (!hits.length) return;
   const lastPrice = hits.sort((a, b) => b.pos - a.pos)[0].price;
   document.getElementById('f-precio').value = lastPrice;
@@ -4623,6 +4630,11 @@ function renovarAutofillPrecio() {
   }
   const re2 = /-\d+(?:[.,]\d+)?%:\s*([\d.,]+)\s*usd/gi;
   while ((m = re2.exec(clean)) !== null) {
+    const p = parseFloat(m[1].replace(',', '.'));
+    if (p > 0) hits.push({ pos: m.index, price: p });
+  }
+  const re3 = /Desc\.?\s*Esp\.?:\s*([\d.,]+)\s*usd/gi;
+  while ((m = re3.exec(clean)) !== null) {
     const p = parseFloat(m[1].replace(',', '.'));
     if (p > 0) hits.push({ pos: m.index, price: p });
   }
