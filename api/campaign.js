@@ -673,11 +673,14 @@ module.exports = async (req, res) => {
         }
         if (matchIdx !== -1) {
           const sheetRow = matchIdx + 1;
-          await sheets.spreadsheets.values.update({
+          const updateData = [{ range: `C${sheetRow}:D${sheetRow}`, values: [[metodo || '', nuevaComision]] }];
+          // Si se creó nuevo campaign row (editar fuera de gracia), actualizar col L también
+          if (newCampaignRow !== row) {
+            updateData.push({ range: `L${sheetRow}`, values: [[newCampaignRow]] });
+          }
+          await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
-            range: `C${sheetRow}:D${sheetRow}`,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[metodo || '', nuevaComision]] },
+            requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
           });
         }
       } catch (e) {
