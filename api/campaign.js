@@ -449,7 +449,8 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
       const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
-      const estadoCampana    = sinPago ? 'pendiente_pago' : 'activa';
+      const esPrueba = (artista || '').toLowerCase().trim() === 'campedrinos';
+      const estadoCampana    = esPrueba ? 'prueba' : sinPago ? 'pendiente_pago' : 'activa';
       // colorId: '6' = tangerine (naranja) para pendiente_pago, '2' = sage (verde) para activa
       const calColorId = sinPago ? '6' : '2';
 
