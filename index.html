@@ -5037,6 +5037,11 @@ async function deleteSale(idx) {
 
     // Borrar campaña(s) de calendario asociada(s)
     const delBody = { artista: r.artista, vendedor: r.venta };
+    if (r.campaignRow) {
+      const camp = (_campanias || []).find(c => c.row === r.campaignRow);
+      delBody.row = r.campaignRow;
+      if (camp) { delBody.masterEventId = camp.masterEventId; delBody.vendorEventId = camp.vendorEventId; }
+    }
     if (r.artista === 'Varios') delBody.fechaInicio = fechaNorm; // para lookup grupal
     fetch('/api/campaign', {
       method: 'DELETE',
@@ -5286,10 +5291,16 @@ async function deleteVendorSale(idx) {
     const localIdx = allData.indexOf(r);
     if (localIdx !== -1) allData.splice(localIdx, 1);
     // Borrar campaña de calendario asociada (si existe)
+    const vendorDelBody = { artista: r.artista, vendedor: r.venta };
+    if (r.campaignRow) {
+      const camp = (_campanias || []).find(c => c.row === r.campaignRow);
+      vendorDelBody.row = r.campaignRow;
+      if (camp) { vendorDelBody.masterEventId = camp.masterEventId; vendorDelBody.vendorEventId = camp.vendorEventId; }
+    }
     fetch('/api/campaign', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ artista: r.artista, vendedor: r.venta }),
+      body: JSON.stringify(vendorDelBody),
     }).catch(() => {});
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
