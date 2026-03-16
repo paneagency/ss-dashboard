@@ -72,7 +72,7 @@ module.exports = async (req, res) => {
 
     // ── AGREGAR VENTA ─────────────────────────────────────────
     if (req.method === 'POST') {
-      const { values } = req.body;
+      const { values, campaignRow } = req.body;
       if (!values || !Array.isArray(values)) return res.status(400).json({ error: 'values requerido' });
 
       const colResp = await sheets.spreadsheets.values.get({
@@ -86,15 +86,29 @@ module.exports = async (req, res) => {
       rowToWrite[6] = `=(E${nextRow} - F${nextRow}) * (1 - D${nextRow} / 100)`;
       rowToWrite[7] = `=BUSCARV(B${nextRow}, Vendedores!A:B, 2, FALSO)`;
       rowToWrite[8] = `=G${nextRow} * (1 - H${nextRow} / 100)`;
+      if (campaignRow) rowToWrite[11] = campaignRow;
 
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `A${nextRow}:K${nextRow}`,
+        range: `A${nextRow}:L${nextRow}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [rowToWrite] },
       });
 
       return res.json({ ok: true, row: nextRow });
+    }
+
+    // ── VINCULAR VENTA A CAMPAÑA (actualizar col L) ───────────
+    if (req.method === 'PUT') {
+      const { saleRow, campaignRow } = req.body;
+      if (!saleRow || !campaignRow) return res.status(400).json({ error: 'saleRow y campaignRow requeridos' });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `L${saleRow}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[campaignRow]] },
+      });
+      return res.json({ ok: true });
     }
 
     // ── BORRAR VENTA ──────────────────────────────────────────

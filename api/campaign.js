@@ -428,14 +428,17 @@ module.exports = async (req, res) => {
         .map(r => `(${r.amount})${r.provider ? ' ' + r.provider : ''}`)
         .join('\n');
 
-      await sheets.spreadsheets.values.append({
+      const postAppendResp = await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
         range: `${CAMPANAS_SHEET}!A:S`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '']] },
       });
+      const postRange = postAppendResp.data?.updates?.updatedRange || '';
+      const postRowMatch = postRange.match(/(\d+)$/);
+      const campaignRow = postRowMatch ? parseInt(postRowMatch[1]) : null;
 
-      return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId });
+      return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId, campaignRow });
     }
 
     // ── PUT: editar cliente ───────────────────────────────────
@@ -551,6 +554,7 @@ module.exports = async (req, res) => {
       const fechaInicioDate = parseDateStr(fechaInicio) || new Date();
       const diasDesdeCreacion = Math.floor((Date.now() - fechaInicioDate.getTime()) / 86400000);
       const enPeriodoGracia = esEdicion && (esGrupal || diasDesdeCreacion <= 3);
+      let newCampaignRow = row; // para enPeriodoGracia el row no cambia
 
       if (enPeriodoGracia) {
         // Sobreescribir fila existente sin dejar historial
@@ -580,32 +584,40 @@ module.exports = async (req, res) => {
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[estadoHistorial]] },
         });
-        await sheets.spreadsheets.values.append({
+        const appendResp = await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A:S`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas]] },
         });
+        // Extraer row number de la respuesta del append
+        const updatedRange = appendResp.data?.updates?.updatedRange || '';
+        const rowMatch = updatedRange.match(/(\d+)$/);
+        if (rowMatch) newCampaignRow = parseInt(rowMatch[1]);
       }
 
-      // Actualizar METODO y COMISION_PCT en la hoja de ventas principal
+      // Actualizar METODO, COMISION_PCT y CAMPAIGN_ROW en la hoja de ventas principal
       try {
         const ventasResp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: 'A:K',
+          range: 'A:L',
         });
         const ventasRows = ventasResp.data.values || [];
         const targetArtista = (artista || '').toLowerCase().trim();
         const targetPrecio  = parseFloat(precio) || 0;
         const nuevaComision = METHOD_COMMISSIONS[metodo] ?? 0;
-        // Buscar fila por artista + precio (mejor match)
+        // Buscar primero por CAMPAIGN_ROW (col L, idx 11), fallback artista+precio
         let matchIdx = -1;
         for (let i = 1; i < ventasRows.length; i++) {
-          const r = ventasRows[i];
-          if ((r[0] || '').toLowerCase().trim() !== targetArtista) continue;
-          if (Math.abs(parseFloat(r[4]) - targetPrecio) > 0.5) continue;
-          matchIdx = i;
-          break;
+          if (parseInt(ventasRows[i][11]) === row) { matchIdx = i; break; }
+        }
+        if (matchIdx === -1) {
+          for (let i = 1; i < ventasRows.length; i++) {
+            const r = ventasRows[i];
+            if ((r[0] || '').toLowerCase().trim() !== targetArtista) continue;
+            if (Math.abs(parseFloat(r[4]) - targetPrecio) > 0.5) continue;
+            matchIdx = i; break;
+          }
         }
         if (matchIdx !== -1) {
           const sheetRow = matchIdx + 1;
@@ -620,7 +632,7 @@ module.exports = async (req, res) => {
         console.error('Error actualizando hoja ventas:', e.message);
       }
 
-      return res.json({ ok: true, nuevaFechaVenc });
+      return res.json({ ok: true, nuevaFechaVenc, newCampaignRow });
     }
 
     // ── DELETE: borrar cliente ────────────────────────────────

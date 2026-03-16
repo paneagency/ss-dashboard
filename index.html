@@ -3924,6 +3924,7 @@ async function submitSale(e) {
     });
     const result = await resp.json();
     if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
+    const saleSheetRow = result.row;
 
     // Leer estos valores ANTES de closeModal() porque resetea el form
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
@@ -3964,10 +3965,14 @@ async function submitSale(e) {
             ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
           };
           const cr = await fetch('/api/campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campBody) });
+          const cd = await cr.json();
           if (i === 0) {
-            const cd = await cr.json();
             sharedMasterId = cd.masterEventId || '';
             sharedVendorId = cd.vendorEventId || '';
+            // Vincular venta a campaña en col L
+            if (saleSheetRow && cd.campaignRow) {
+              fetch('/api/sheets', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleRow: saleSheetRow, campaignRow: cd.campaignRow }) }).catch(() => {});
+            }
           }
         }
         if (artistasList.length > 1) {
@@ -4580,7 +4585,7 @@ async function renovarRapido(idx) {
     const saleResp = await fetch('/api/sheets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo || '', comisionPct, precioN, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''] }),
+      body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo || '', comisionPct, precioN, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''], campaignRow: data.newCampaignRow || null }),
     });
     const saleData = await saleResp.json();
     if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
@@ -4898,7 +4903,7 @@ async function submitRenovar() {
     const saleResp = await fetch('/api/sheets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: saleRow }),
+      body: JSON.stringify({ values: saleRow, campaignRow: campData.newCampaignRow || null }),
     });
     const saleData = await saleResp.json();
     if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
