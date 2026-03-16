@@ -2133,12 +2133,14 @@ function renderTodayPanel() {
         c.artista.toLowerCase() === (r.artista || '').toLowerCase() &&
         c.vendedor === r.venta
       );
-      // Buscar match exacto por precio+método primero en activas, luego en todas
+      console.log('[campRow debug]', r.artista, 'venta precio:', r.precio, 'campañas encontradas:', todas.map(c => ({row:c.row, precio:c.precio, estado:c.estado, metodo:c.metodo})));
+      const precioMatch = c => Math.abs(parseFloat(c.precio) - r.precio) < 0.01;
+      // Buscar match por precio+método primero en activas, luego en todas
       return (
-        todas.find(c => c.estado === 'activa' && String(c.precio) === String(r.precio) && c.metodo === r.metodo) ||
-        todas.find(c => c.estado === 'activa' && String(c.precio) === String(r.precio)) ||
-        todas.find(c => String(c.precio) === String(r.precio) && c.metodo === r.metodo) ||
-        todas.find(c => String(c.precio) === String(r.precio)) ||
+        todas.find(c => c.estado === 'activa' && precioMatch(c) && c.metodo === r.metodo) ||
+        todas.find(c => c.estado === 'activa' && precioMatch(c)) ||
+        todas.find(c => precioMatch(c) && c.metodo === r.metodo) ||
+        todas.find(c => precioMatch(c)) ||
         todas.find(c => c.estado === 'activa')
       )?.row ?? null;
     })();
