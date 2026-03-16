@@ -324,6 +324,10 @@
     .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     @media (max-width: 540px) { .form-grid { grid-template-columns: 1fr; } }
+    /* Grid compacto para modal Nueva Venta — mantiene 2-col en mobile */
+    .nv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .nv-dates { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; grid-column: 1/-1; }
+    @media (max-width: 380px) { .nv-dates { grid-template-columns: 1fr 1fr; } }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
     .form-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
@@ -815,7 +819,7 @@
         </div>
 
         <!-- ── CAMPOS COMPACTOS ──────────────────────────────── -->
-        <div class="form-grid" style="gap:10px">
+        <div class="nv-grid">
 
           <!-- Artista (full) + artista-rows oculto -->
           <div id="single-artista-group" class="form-group full">
@@ -833,7 +837,7 @@
           </div>
 
           <!-- Fecha + Duración + Vence el — 3 columnas -->
-          <div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div class="nv-dates">
             <div class="form-group">
               <label class="form-label">Fecha<span>*</span></label>
               <input class="form-input" id="f-fecha" type="date" required oninput="updateVencimiento()">
