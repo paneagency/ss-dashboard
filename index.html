@@ -3307,19 +3307,19 @@ function autofillPrecioFromPauta() {
   const text = document.getElementById('f-pauta').value;
   if (!text) return;
 
-  // Busca "Promo: X usd" primero (precio con descuento aplicado)
-  let m = text.match(/Promo:\s*([\d.,]+)\s*usd/i);
-  // Si no hay promo, busca "Total: X usd" que NO esté tachado (~...~)
-  if (!m) m = text.match(/(?<!~)Total:\s*([\d.,]+)\s*usd/i);
-  if (!m) return;
+  // Tomar el ÚLTIMO Total/Promo. Si hay "-X% Y usd" después, Y es el precio bruto.
+  const re = /(?:Total|Promo):\s*([\d.,]+)\s*usd(?:[^\S\n]*-\d+(?:[.,]\d+)?%[^\S\n]*([\d.,]+)\s*usd)?/gi;
+  let lastPrice = null;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[2] || m[1]; // m[2] = precio post-descuento, m[1] = precio base
+    const p = parseFloat(raw.replace(',', '.'));
+    if (p > 0) lastPrice = p;
+  }
+  if (!lastPrice) return;
 
-  const precio = parseFloat(m[1].replace(',', '.'));
-  if (!precio) return;
-
-  document.getElementById('f-precio').value = precio;
+  document.getElementById('f-precio').value = lastPrice;
   recalcular();
-
-  // También detecta líneas de gasto tipo "(35) Daniel Rios" y pre-rellena filas
   autofillGastosFromPauta(text);
 }
 
@@ -4603,11 +4603,15 @@ function renovarSyncPrecioToPauta() {
 function renovarAutofillPrecio() {
   const text = document.getElementById('renovar-pauta').value;
   if (!text) return;
-  let m = text.match(/Promo:\s*([\d.,]+)\s*usd/i);
-  if (!m) m = text.match(/(?<!~)Total:\s*([\d.,]+)\s*usd/i);
-  if (!m) return;
-  const precio = parseFloat(m[1].replace(',', '.'));
-  if (precio) { document.getElementById('renovar-precio').value = precio; }
+  const re = /(?:Total|Promo):\s*([\d.,]+)\s*usd(?:[^\S\n]*-\d+(?:[.,]\d+)?%[^\S\n]*([\d.,]+)\s*usd)?/gi;
+  let lastPrice = null;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[2] || m[1];
+    const p = parseFloat(raw.replace(',', '.'));
+    if (p > 0) lastPrice = p;
+  }
+  if (lastPrice) { document.getElementById('renovar-precio').value = lastPrice; }
   // Auto-detectar proveedores
   const lines = text.split('\n');
   const gastoLines = lines.map(l => l.trim().match(/^\((\d+(?:\.\d+)?)\)\s+(.+)$/)).filter(Boolean);
