@@ -3319,15 +3319,15 @@ function autofillPrecioFromPauta() {
     if (p > 0) hits.push({ pos: m.index, price: p });
   }
 
-  // Patrón 2: "-X%: Y usd" como línea independiente
-  const re2 = /-\d+(?:[.,]\d+)?%:\s*([\d.,]+)\s*usd/gi;
+  // Patrón 2: descuento por porcentaje — acepta "-25%: X usd" y "-%25: X usd"
+  const re2 = /-(?:%\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?%):\s*([\d.,]+)\s*usd/gi;
   while ((m = re2.exec(clean)) !== null) {
     const p = parseFloat(m[1].replace(',', '.'));
     if (p > 0) hits.push({ pos: m.index, price: p });
   }
 
-  // Patrón 3: "Desc. Esp: X usd" (descuento especial, cualquier variante)
-  const re3 = /Desc\.?\s*Esp\.?:\s*([\d.,]+)\s*usd/gi;
+  // Patrón 3: "Desc. Esp: X usd" o "Promo Especial: X usd"
+  const re3 = /(?:Desc\.?\s*Esp\.?|Promo\s*Especial):\s*([\d.,]+)\s*usd/gi;
   while ((m = re3.exec(clean)) !== null) {
     const p = parseFloat(m[1].replace(',', '.'));
     if (p > 0) hits.push({ pos: m.index, price: p });
@@ -4628,12 +4628,12 @@ function renovarAutofillPrecio() {
     const p = parseFloat((m[2] || m[1]).replace(',', '.'));
     if (p > 0) hits.push({ pos: m.index, price: p });
   }
-  const re2 = /-\d+(?:[.,]\d+)?%:\s*([\d.,]+)\s*usd/gi;
+  const re2 = /-(?:%\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?%):\s*([\d.,]+)\s*usd/gi;
   while ((m = re2.exec(clean)) !== null) {
     const p = parseFloat(m[1].replace(',', '.'));
     if (p > 0) hits.push({ pos: m.index, price: p });
   }
-  const re3 = /Desc\.?\s*Esp\.?:\s*([\d.,]+)\s*usd/gi;
+  const re3 = /(?:Desc\.?\s*Esp\.?|Promo\s*Especial):\s*([\d.,]+)\s*usd/gi;
   while ((m = re3.exec(clean)) !== null) {
     const p = parseFloat(m[1].replace(',', '.'));
     if (p > 0) hits.push({ pos: m.index, price: p });
