@@ -803,6 +803,11 @@
       <form id="sale-form" onsubmit="submitSale(event)">
         <div class="form-grid">
 
+          <div class="form-group full">
+            <label class="form-label">Pauta / Promoción</label>
+            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
+          </div>
+
           <div class="form-section">Datos del cliente</div>
 
           <!-- Artista único (modo default) -->
@@ -818,11 +823,6 @@
             <label class="form-label">Género</label>
             <input class="form-input" id="f-genero" list="list-generos" placeholder="Ej: Pop, Reggaeton...">
             <datalist id="list-generos"></datalist>
-          </div>
-
-          <div class="form-group full">
-            <label class="form-label">Pauta / Promoción</label>
-            <textarea class="form-input" id="f-pauta" rows="4" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;line-height:1.4" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
           </div>
 
           <div class="form-group">
