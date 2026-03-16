@@ -588,6 +588,38 @@ module.exports = async (req, res) => {
         });
       }
 
+      // Actualizar METODO y COMISION_PCT en la hoja de ventas principal
+      try {
+        const ventasResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: 'A:K',
+        });
+        const ventasRows = ventasResp.data.values || [];
+        const targetArtista = (artista || '').toLowerCase().trim();
+        const targetPrecio  = parseFloat(precio) || 0;
+        const nuevaComision = METHOD_COMMISSIONS[metodo] ?? 0;
+        // Buscar fila por artista + precio (mejor match)
+        let matchIdx = -1;
+        for (let i = 1; i < ventasRows.length; i++) {
+          const r = ventasRows[i];
+          if ((r[0] || '').toLowerCase().trim() !== targetArtista) continue;
+          if (Math.abs(parseFloat(r[4]) - targetPrecio) > 0.5) continue;
+          matchIdx = i;
+          break;
+        }
+        if (matchIdx !== -1) {
+          const sheetRow = matchIdx + 1;
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `C${sheetRow}:D${sheetRow}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[metodo || '', nuevaComision]] },
+          });
+        }
+      } catch (e) {
+        console.error('Error actualizando hoja ventas:', e.message);
+      }
+
       return res.json({ ok: true, nuevaFechaVenc });
     }
 
