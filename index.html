@@ -3307,17 +3307,27 @@ function autofillPrecioFromPauta() {
   const text = document.getElementById('f-pauta').value;
   if (!text) return;
 
-  // Tomar el ÚLTIMO Total/Promo. Si hay "-X% Y usd" después, Y es el precio bruto.
-  const re = /(?:Total|Promo):\s*([\d.,]+)\s*usd(?:[^\S\n]*-\d+(?:[.,]\d+)?%[^\S\n]*([\d.,]+)\s*usd)?/gi;
-  let lastPrice = null;
+  // Eliminar texto tachado (~texto~) antes de parsear
+  const clean = text.replace(/~[^~\n]+~/g, '');
+  const hits = [];
   let m;
-  while ((m = re.exec(text)) !== null) {
-    const raw = m[2] || m[1]; // m[2] = precio post-descuento, m[1] = precio base
-    const p = parseFloat(raw.replace(',', '.'));
-    if (p > 0) lastPrice = p;
-  }
-  if (!lastPrice) return;
 
+  // Patrón 1: "Total: X usd" o "Promo: X usd" con posible "-X% Y usd" inline
+  const re1 = /(?:Total|Promo):\s*([\d.,]+)\s*usd(?:[^\S\n]*-\d+(?:[.,]\d+)?%[^\S\n]*([\d.,]+)\s*usd)?/gi;
+  while ((m = re1.exec(clean)) !== null) {
+    const p = parseFloat((m[2] || m[1]).replace(',', '.'));
+    if (p > 0) hits.push({ pos: m.index, price: p });
+  }
+
+  // Patrón 2: "-X%: Y usd" como línea independiente
+  const re2 = /-\d+(?:[.,]\d+)?%:\s*([\d.,]+)\s*usd/gi;
+  while ((m = re2.exec(clean)) !== null) {
+    const p = parseFloat(m[1].replace(',', '.'));
+    if (p > 0) hits.push({ pos: m.index, price: p });
+  }
+
+  if (!hits.length) return;
+  const lastPrice = hits.sort((a, b) => b.pos - a.pos)[0].price;
   document.getElementById('f-precio').value = lastPrice;
   recalcular();
   autofillGastosFromPauta(text);
@@ -4603,14 +4613,20 @@ function renovarSyncPrecioToPauta() {
 function renovarAutofillPrecio() {
   const text = document.getElementById('renovar-pauta').value;
   if (!text) return;
-  const re = /(?:Total|Promo):\s*([\d.,]+)\s*usd(?:[^\S\n]*-\d+(?:[.,]\d+)?%[^\S\n]*([\d.,]+)\s*usd)?/gi;
-  let lastPrice = null;
+  const clean = text.replace(/~[^~\n]+~/g, '');
+  const hits = [];
   let m;
-  while ((m = re.exec(text)) !== null) {
-    const raw = m[2] || m[1];
-    const p = parseFloat(raw.replace(',', '.'));
-    if (p > 0) lastPrice = p;
+  const re1 = /(?:Total|Promo):\s*([\d.,]+)\s*usd(?:[^\S\n]*-\d+(?:[.,]\d+)?%[^\S\n]*([\d.,]+)\s*usd)?/gi;
+  while ((m = re1.exec(clean)) !== null) {
+    const p = parseFloat((m[2] || m[1]).replace(',', '.'));
+    if (p > 0) hits.push({ pos: m.index, price: p });
   }
+  const re2 = /-\d+(?:[.,]\d+)?%:\s*([\d.,]+)\s*usd/gi;
+  while ((m = re2.exec(clean)) !== null) {
+    const p = parseFloat(m[1].replace(',', '.'));
+    if (p > 0) hits.push({ pos: m.index, price: p });
+  }
+  const lastPrice = hits.length ? hits.sort((a, b) => b.pos - a.pos)[0].price : null;
   if (lastPrice) { document.getElementById('renovar-precio').value = lastPrice; }
   // Auto-detectar proveedores
   const lines = text.split('\n');
