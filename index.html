@@ -3553,8 +3553,40 @@ function smartPautaDetect() {
     } else {
       // Múltiples artistas → activar modo grupal (oculta campo artista)
       if (!_isMultiArtista) toggleMultiArtista();
+      autofillFromMultiArtistas(uniqueArtists.map(a => a.artist));
     }
   }, 800);
+}
+
+// Autofill campo por campo recorriendo artistas en orden hasta encontrar valor en DB
+function autofillFromMultiArtistas(artistNames) {
+  const role = window._currentUser?.role;
+  const fields = { genero: null, vendedor: null, metodo: null, representante: null };
+
+  for (const name of artistNames) {
+    const key = name.toLowerCase().trim();
+    const cliente = window._clientesMap?.[key];
+    if (cliente) {
+      if (!fields.genero && cliente.genero && cliente.genero !== 'Sin género') fields.genero = cliente.genero;
+      if (!fields.vendedor && cliente.vendedor) fields.vendedor = cliente.vendedor;
+      if (!fields.metodo && cliente.metodoPago) fields.metodo = cliente.metodoPago;
+      if (!fields.representante && cliente.representante) fields.representante = cliente.representante;
+    } else if (allData?.length) {
+      const matches = allData.filter(r => r.artista?.toLowerCase() === key);
+      if (matches.length) {
+        const latest = matches.sort((a, b) => b.fecha - a.fecha)[0];
+        if (!fields.genero && latest.genero && latest.genero !== 'Sin género') fields.genero = latest.genero;
+        if (!fields.vendedor && latest.venta) fields.vendedor = latest.venta;
+        if (!fields.metodo && latest.metodo) fields.metodo = latest.metodo;
+      }
+    }
+    if (fields.genero && fields.vendedor && fields.metodo && fields.representante) break;
+  }
+
+  if (fields.genero) document.getElementById('f-genero').value = fields.genero;
+  if (fields.vendedor && role !== 'vendedor') document.getElementById('f-venta').value = fields.vendedor;
+  if (fields.metodo) { document.getElementById('f-metodo').value = fields.metodo; autoComision(); recalcular(); }
+  if (fields.representante) document.getElementById('f-representante').value = fields.representante;
 }
 
 // Agrupa campañas que comparten masterEventId → una entrada "Varios" por grupo
