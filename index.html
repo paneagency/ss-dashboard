@@ -4386,12 +4386,13 @@ function renderCampHistorial() {
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
   if (_historialFilter !== 'todas') data = data.filter(c => c.estado === _historialFilter);
 
-  // Sort por timestamp DESC (fecha/hora real de la operación), fallback fechaVencimiento DESC
-  data = [...data].sort((a, b) => {
-    const ta = a.timestamp || a.fechaVencimiento || '';
-    const tb = b.timestamp || b.fechaVencimiento || '';
-    return tb.localeCompare(ta);
-  });
+  // Para editadas, el timestamp real está en la fila siguiente (_current), no en la propia
+  const getTs = c => c.estado === 'editada'
+    ? (c._current?.timestamp || c.timestamp || c.fechaVencimiento || '')
+    : (c.timestamp || c.fechaVencimiento || '');
+
+  // Sort por timestamp DESC
+  data = [...data].sort((a, b) => getTs(b).localeCompare(getTs(a)));
 
   const ESTADO_STYLES = {
     finalizada: { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada' },
@@ -4489,7 +4490,7 @@ function renderCampHistorial() {
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaVencimiento)}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--text);font-weight:500">${precio}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.metodo || '—')}</td>
-        <td style="padding:10px 12px;font-size:12px;font-weight:700;color:var(--text)">${fmtTs(c.timestamp)}</td>
+        <td style="padding:10px 12px;font-size:12px;font-weight:700;color:var(--text)">${fmtTs(getTs(c))}</td>
       </tr>
       ${hasExpand ? `<tr id="${expandId}" style="display:none"><td colspan="8" style="padding:8px 16px 16px 28px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border)">${expandHtml}</td></tr>` : ''}`;
   }).join('');
