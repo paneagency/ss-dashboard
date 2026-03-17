@@ -4386,13 +4386,15 @@ function renderCampHistorial() {
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
   if (_historialFilter !== 'todas') data = data.filter(c => c.estado === _historialFilter);
 
-  // Para editadas, el timestamp real está en la fila siguiente (_current), no en la propia
-  const getTs = c => c.estado === 'editada'
-    ? (c._current?.timestamp || c.timestamp || c.fechaVencimiento || '')
-    : (c.timestamp || c.fechaVencimiento || '');
+  // Timestamp real para display (sin fallback a fechaVencimiento — evita mostrar fecha incorrecta)
+  const getTs     = c => c.estado === 'editada'
+    ? (c._current?.timestamp || c.timestamp || '')
+    : (c.timestamp || '');
+  // Sort key (puede usar fechaVencimiento como fallback para ordenar las sin timestamp)
+  const getSortTs = c => getTs(c) || c.fechaVencimiento || '';
 
   // Sort por timestamp DESC
-  data = [...data].sort((a, b) => getTs(b).localeCompare(getTs(a)));
+  data = [...data].sort((a, b) => getSortTs(b).localeCompare(getSortTs(a)));
 
   const ESTADO_STYLES = {
     finalizada: { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada' },
