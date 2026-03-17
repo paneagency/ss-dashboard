@@ -4420,9 +4420,9 @@ function renderCampHistorial() {
   const countBase = filterVendor === 'all' ? _historial : _historial.filter(c => c.vendedor === filterVendor);
   const pills = [
     { key: 'todas',      label: 'Todas (' + countBase.length + ')' },
+    { key: 'editada',    label: 'Editadas' },
     { key: 'finalizada', label: 'Finalizadas' },
     { key: 'eliminada',  label: 'Eliminadas' },
-    { key: 'editada',    label: 'Editadas' },
   ].map(p => `<span style="${pillStyle(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
 
   if (!data.length) {
