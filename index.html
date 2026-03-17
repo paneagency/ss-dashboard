@@ -1358,51 +1358,63 @@
         <button class="modal-close" onclick="maybeCloseRenovarModal()">✕</button>
       </div>
       <div class="modal-body">
-        <p id="renovar-artista-label" style="font-size:15px;font-weight:600;margin-bottom:16px"></p>
-        <div class="form-grid">
-          <div class="form-section">Campaña</div>
+        <p id="renovar-artista-label" style="font-size:15px;font-weight:600;margin-bottom:14px;color:var(--text)"></p>
 
-          <div class="form-group">
-            <label class="form-label">Duración<span>*</span></label>
-            <select class="form-input" id="renovar-duracion">
-              <option value="7">7 días</option>
-              <option value="14">14 días</option>
-              <option value="30" selected>30 días</option>
-              <option value="60">60 días</option>
-              <option value="90">90 días</option>
-            </select>
+        <!-- ── PAUTA — campo principal ───────────────────────── -->
+        <div style="margin-bottom:12px">
+          <label style="font-size:13px;font-weight:700;color:var(--text);display:block;margin-bottom:6px">Pauta <span style="color:var(--muted);font-weight:400;font-size:12px">/ Promoción</span></label>
+          <textarea class="form-input" id="renovar-pauta" rows="6" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;border-color:rgba(99,102,241,0.4);background:rgba(99,102,241,0.03);padding:12px 14px" oninput="renovarAutofillPrecio();smartRenovarDetect()"></textarea>
+        </div>
+
+        <!-- ── NOTAS ─────────────────────────────────────────── -->
+        <div style="margin-bottom:18px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:5px">Notas</label>
+          <textarea class="form-input" id="renovar-notas" rows="2" placeholder="Anotaciones internas sobre esta campaña..." style="resize:vertical;line-height:1.4;font-size:12px"></textarea>
+        </div>
+
+        <!-- ── CAMPOS COMPACTOS ──────────────────────────────── -->
+        <div class="nv-grid">
+
+          <!-- Fechas: Duración | Fecha renovación | Vence el -->
+          <div class="nv-dates">
+            <div class="form-group">
+              <label class="form-label">Duración<span>*</span></label>
+              <select class="form-input" id="renovar-duracion">
+                <option value="7">7 días</option>
+                <option value="14">14 días</option>
+                <option value="30" selected>30 días</option>
+                <option value="60">60 días</option>
+                <option value="90">90 días</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fecha renovación<span>*</span></label>
+              <input class="form-input" id="renovar-fecha" type="date">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vence el</label>
+              <input class="form-input" id="renovar-fechavenc" type="date">
+            </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Fecha vencimiento</label>
-            <input class="form-input" id="renovar-fechavenc" type="date">
-            <span class="form-hint">Editar: usa esta fecha. Renovar: extiende desde aquí.</span>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Fecha de renovación<span>*</span></label>
-            <input class="form-input" id="renovar-fecha" type="date">
-            <span class="form-hint">Fecha en que se registra la nueva venta</span>
-          </div>
-
-          <div class="form-section">Comercial</div>
-
+          <!-- Representante + Método -->
           <div class="form-group">
             <label class="form-label">Representante</label>
             <input class="form-input" id="renovar-representante" list="list-representantes" placeholder="Manager, intermediario...">
           </div>
-
           <div class="form-group">
             <label class="form-label">Método de cobro</label>
             <input class="form-input" id="renovar-metodo" list="list-metodos" oninput="renovarAutoComision()">
           </div>
 
+          <!-- Precio -->
           <div class="form-group">
             <label class="form-label">Precio bruto</label>
             <input class="form-input" id="renovar-precio" type="number" step="0.01" min="0" placeholder="0.00" oninput="renovarRecalcular();renovarSyncPrecioToPauta()">
             <input type="hidden" id="renovar-comision-hidden" value="0">
           </div>
 
+          <!-- Gasto -->
           <div class="form-group full">
             <label class="form-label">Gasto / Proveedores</label>
             <div id="renovar-gasto-rows"></div>
@@ -1410,20 +1422,7 @@
             <input type="hidden" id="renovar-gasto" value="0">
           </div>
 
-          <div class="form-section">Pauta</div>
-
-          <div class="form-group full">
-            <label class="form-label">Pauta / Promoción</label>
-            <textarea class="form-input" id="renovar-pauta" rows="4" style="resize:vertical" oninput="renovarAutofillPrecio();smartRenovarDetect()"></textarea>
-          </div>
-
-          <div class="form-group full">
-            <label class="form-label">Notas</label>
-            <textarea class="form-input" id="renovar-notas" rows="2" placeholder="Anotaciones internas sobre esta campaña..." style="resize:vertical;line-height:1.4"></textarea>
-          </div>
-
         </div>
-        <p style="font-size:12px;color:var(--muted);margin-top:10px">La campaña se extenderá desde el vencimiento actual. Se registrará una nueva venta automáticamente.</p>
         <div id="renovar-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none"></div>
       </div>
       <div class="modal-footer">
