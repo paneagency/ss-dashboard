@@ -3555,13 +3555,15 @@ function smartPautaDetect() {
       const lastNewline = before.lastIndexOf('\n');
       const prevLine = before.substring(lastNewline + 1).trim();
       const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
+      // Normalizar prevLine: quitar *asteriscos* de WhatsApp para comparar
+      const prevLineNorm = prevLine.replace(/^\*(.+)\*$/, '$1').trim();
       // Saltar si ya fue prefijado con el mismo estado isMulti — no re-insertar al seguir escribiendo
       if (_prefixedUrls.has(url) && _prefixedUrls.get(url) === isMulti) continue;
-      // Saltar si ya está el prefijo correcto (pre-existente en el texto)
-      if (prevLine === expectedPrefix) { _prefixedUrls.set(url, isMulti); continue; }
+      // Saltar si ya está el prefijo correcto (pre-existente en el texto, con o sin asteriscos)
+      if (prevLineNorm === expectedPrefix) { _prefixedUrls.set(url, isMulti); continue; }
       // Reemplazar prefijo incorrecto (cambio de modo single↔multi)
       const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
-      if (prevLine === altPrefix) {
+      if (prevLineNorm === altPrefix) {
         const prevLineStart = before.lastIndexOf('\n') + 1;
         newText = newText.substring(0, prevLineStart) + expectedPrefix + '\n' + newText.substring(urlIdx);
       } else {
@@ -4856,10 +4858,11 @@ function smartRenovarDetect() {
       const lastNewline = before.lastIndexOf('\n');
       const prevLine = before.substring(lastNewline + 1).trim();
       const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
+      const prevLineNorm = prevLine.replace(/^\*(.+)\*$/, '$1').trim();
       if (_renovarPrefixedUrls.has(url)) continue; // skip pre-existentes y ya procesados
-      if (prevLine === expectedPrefix) { _renovarPrefixedUrls.set(url, isMulti); continue; }
+      if (prevLineNorm === expectedPrefix) { _renovarPrefixedUrls.set(url, isMulti); continue; }
       const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
-      if (prevLine === altPrefix) {
+      if (prevLineNorm === altPrefix) {
         const prevLineStart = before.lastIndexOf('\n') + 1;
         newText = newText.substring(0, prevLineStart) + expectedPrefix + '\n' + newText.substring(urlIdx);
       } else {
