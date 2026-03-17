@@ -4371,11 +4371,15 @@ function renderCampHistorial() {
   // Enriquecer editadas con la versión siguiente (activa o en historial) para diff
   const allVersions = [..._campanias, ..._historial];
   const enriched = _historial.map(c => {
-    if (c.estado !== 'editada' || !c.masterEventId) return { ...c, _current: null };
-    // Buscar la fila con mismo masterEventId y row mayor (la versión que reemplazó a esta)
-    const next = allVersions
-      .filter(a => a.masterEventId === c.masterEventId && a.row > c.row)
-      .sort((a, b) => a.row - b.row)[0] || null;
+    if (c.estado !== 'editada') return { ...c, _current: null };
+    // Buscar por masterEventId primero
+    let next = c.masterEventId
+      ? allVersions.filter(a => a.masterEventId === c.masterEventId && a.row > c.row).sort((a, b) => a.row - b.row)[0] || null
+      : null;
+    // Fallback: buscar por artista+vendedor si no se encontró
+    if (!next) {
+      next = allVersions.filter(a => a.artista === c.artista && a.vendedor === c.vendedor && a.row > c.row).sort((a, b) => a.row - b.row)[0] || null;
+    }
     return { ...c, _current: next };
   });
 
