@@ -418,7 +418,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:U`,
+        range: `${CAMPANAS_SHEET}!A:V`,
       });
       let campanias = (resp.data.values || []).slice(1)
         .map((r, i) => ({
