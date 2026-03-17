@@ -4423,7 +4423,6 @@ function renderCampHistorial() {
     { key: 'finalizada', label: 'Finalizadas' },
     { key: 'eliminada',  label: 'Eliminadas' },
     { key: 'editada',    label: 'Editadas' },
-    { key: 'renovada',   label: 'Renovadas' },
   ].map(p => `<span style="${pillStyle(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
 
   if (!data.length) {
