@@ -4248,9 +4248,16 @@ async function loadCampanias() {
   if (list) list.innerHTML = '<div style="color:var(--muted);padding:24px">Cargando campañas...</div>';
 
   try {
-    const resp = await fetch(`/api/campaign?vendedor=${encodeURIComponent(param)}`);
-    const data = await resp.json();
+    const [resp, histResp] = await Promise.all([
+      fetch(`/api/campaign?vendedor=${encodeURIComponent(param)}`),
+      fetch(`/api/campaign?mode=historial&vendedor=${encodeURIComponent(param)}`),
+    ]);
+    const data     = await resp.json();
+    const histData = await histResp.json();
     _campanias = data.campanias || [];
+    _historial = (histData.historial || []).sort((a, b) =>
+      new Date(b.fechaVencimiento || b.fechaInicio || 0) - new Date(a.fechaVencimiento || a.fechaInicio || 0)
+    );
     _campaniasLoaded = true;
     _campaniasLoading = false;
     renderCampaniasTab();
@@ -4328,27 +4335,14 @@ function renderCampaniasTab() {
 }
 
 // ── HISTORIAL ────────────────────────────────────────────────
-async function renderCampHistorial() {
+function renderCampHistorial() {
   const list = document.getElementById('campanias-list');
   if (!list) return;
+  const escH = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // Cargar datos si no están en cache
   if (!_historial) {
     list.innerHTML = '<div style="color:var(--muted);padding:24px">Cargando historial...</div>';
-    try {
-      const role   = window._currentUser?.role;
-      const vendor = window._currentUser?.vendorName;
-      const isAdmin = role === 'admin' || role === 'secondary_admin';
-      const param  = isAdmin ? 'all' : (vendor || 'all');
-      const resp = await fetch(`/api/campaign?mode=historial&vendedor=${encodeURIComponent(param)}`);
-      const data = await resp.json();
-      _historial = (data.historial || []).sort((a, b) =>
-        new Date(b.fechaVencimiento || b.fechaInicio || 0) - new Date(a.fechaVencimiento || a.fechaInicio || 0)
-      );
-    } catch(e) {
-      list.innerHTML = `<div style="color:var(--red);padding:24px">Error cargando historial: ${e.message}</div>`;
-      return;
-    }
+    return;
   }
 
   const searchQ = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
@@ -4399,18 +4393,18 @@ async function renderCampHistorial() {
     const hasPauta = !!c.pauta;
     return `
       <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-        <td style="padding:10px 12px;font-weight:600;font-size:13px;color:var(--text)">${esc(c.artista)}</td>
-        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${esc(c.vendedor || '—')}</td>
+        <td style="padding:10px 12px;font-weight:600;font-size:13px;color:var(--text)">${escH(c.artista)}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.vendedor || '—')}</td>
         <td style="padding:10px 12px">${badge}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaInicio)}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaVencimiento)}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--text);font-weight:500">${precio}</td>
-        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${esc(c.metodo || '—')}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.metodo || '—')}</td>
         <td style="padding:10px 12px;text-align:center">
           ${hasPauta ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('${pautaId}').style.display=document.getElementById('${pautaId}').style.display==='none'?'block':'none'">ver</button>` : '<span style="color:var(--border2)">—</span>'}
         </td>
       </tr>
-      ${hasPauta ? `<tr id="${pautaId}" style="display:none"><td colspan="8" style="padding:0 12px 14px 24px"><pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0;background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border-left:3px solid var(--border2)">${esc(c.pauta)}</pre></td></tr>` : ''}`;
+      ${hasPauta ? `<tr id="${pautaId}" style="display:none"><td colspan="8" style="padding:0 12px 14px 24px"><pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0;background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border-left:3px solid var(--border2)">${escH(c.pauta)}</pre></td></tr>` : ''}`;
   }).join('');
 
   list.innerHTML = `
