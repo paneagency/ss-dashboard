@@ -4368,11 +4368,11 @@ function renderCampHistorial() {
     { key: 'pauta',            label: 'Pauta',         fmt: v => v ? (v.length > 100 ? v.slice(0,100) + '…' : v) : '—' },
   ];
 
-  // Enriquecer editadas con fecha de edición desde _campanias (para sort y display)
+  // Enriquecer editadas con campaña activa (para diff y sort)
   const enriched = _historial.map(c => {
-    if (c.estado !== 'editada' || !c.masterEventId) return { ...c, _editDate: null };
+    if (c.estado !== 'editada' || !c.masterEventId) return { ...c, _current: null };
     const cur = _campanias.find(a => a.masterEventId === c.masterEventId);
-    return { ...c, _editDate: cur?.fechaInicio || null, _current: cur || null };
+    return { ...c, _current: cur || null };
   });
 
   // Filtros
@@ -4382,11 +4382,13 @@ function renderCampHistorial() {
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
   if (_historialFilter !== 'todas') data = data.filter(c => c.estado === _historialFilter);
 
-  // Sort: editadas por fecha de edición DESC; resto por fechaVencimiento DESC
+  // Sort: editadas por row de la campaña activa DESC (mayor row = más reciente en el sheet)
+  // fallback: row propio DESC. Resto: fechaVencimiento DESC
   data = [...data].sort((a, b) => {
-    const da = a.estado === 'editada' ? (a._editDate || a.fechaVencimiento || '') : (a.fechaVencimiento || '');
-    const db = b.estado === 'editada' ? (b._editDate || b.fechaVencimiento || '') : (b.fechaVencimiento || '');
-    return db.localeCompare(da);
+    const ra = a.estado === 'editada' ? (a._current?.row ?? a.row) : 0;
+    const rb = b.estado === 'editada' ? (b._current?.row ?? b.row) : 0;
+    if (ra !== rb) return rb - ra;
+    return (b.fechaVencimiento || '').localeCompare(a.fechaVencimiento || '');
   });
 
   const ESTADO_STYLES = {
@@ -4434,10 +4436,6 @@ function renderCampHistorial() {
     if (isEditada) {
       const cur = c._current;
       if (cur) {
-        // Fecha de edición
-        if (cur.fechaInicio) {
-          fechaEdicionHtml = `<span style="color:var(--amber);font-size:11px;display:block;margin-top:2px">editado el ${fmtDate(cur.fechaInicio)}</span>`;
-        }
         // Calcular diff
         const diffs = DIFF_FIELDS.filter(f => String(c[f.key] || '').trim() !== String(cur[f.key] || '').trim());
         if (diffs.length) {
