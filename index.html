@@ -3321,6 +3321,15 @@ function updateVencimiento() {
   el.value = d.toISOString().slice(0, 10);
 }
 
+function formatPauta(text) {
+  const esc = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const lines = esc.split('\n');
+  return lines.map((line, i) => {
+    const next = lines[i + 1] || '';
+    return /open\.spotify\.com\/track\//i.test(next) ? `<strong>${line}</strong>` : line;
+  }).join('\n');
+}
+
 function autofillPrecioFromPauta() {
   const text = document.getElementById('f-pauta').value;
   if (!text) return;
@@ -4173,7 +4182,7 @@ function renderResumenCampaniasHoy() {
     const hasPauta  = !!c.pauta;
     const hasGastos = !!c.detalleGastos;
     const hasNotas  = !!c.notas;
-    const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const pautaEsc  = hasPauta  ? formatPauta(c.pauta) : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     return `
@@ -4335,7 +4344,7 @@ function renderCampList(data, today) {
     const hasPauta  = !!c.pauta;
     const hasGastos = !!c.detalleGastos;
     const hasNotas  = !!c.notas;
-    const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const pautaEsc  = hasPauta  ? formatPauta(c.pauta) : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const borderStyle = sinPago ? `border-style:dashed;border-color:${borderColor}` : `border-color:${borderColor}`;
@@ -4481,7 +4490,7 @@ function showCampCalDetail(evt, row) {
   const hasPauta  = !!c.pauta;
   const hasGastos = !!c.detalleGastos;
   const hasNotas  = !!c.notas;
-  const pautaEsc  = hasPauta  ? c.pauta.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+  const pautaEsc  = hasPauta  ? formatPauta(c.pauta) : '';
   const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
   const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
 
