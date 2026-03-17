@@ -335,8 +335,9 @@
     .form-input {
       background: var(--surface2); border: 1px solid var(--border2); color: var(--text);
       padding: 9px 12px; border-radius: var(--radius-sm); font-size: 14px; outline: none;
-      transition: border 0.15s; width: 100%;
+      transition: border 0.15s; width: 100%; font-family: inherit;
     }
+    textarea.form-input { line-height: 1.6; font-size: 13px; }
     .form-input:focus { border-color: var(--indigo); }
     .form-input.auto { border-style: dashed; color: var(--muted); }
     .form-input.auto:focus { border-style: solid; color: var(--text); }
@@ -809,7 +810,7 @@
         <!-- ── PAUTA — campo principal ───────────────────────── -->
         <div style="margin-bottom:12px">
           <label style="font-size:13px;font-weight:700;color:var(--text);display:block;margin-bottom:6px">Pauta <span style="color:var(--muted);font-weight:400;font-size:12px">/ Promoción</span></label>
-          <textarea class="form-input" id="f-pauta" rows="6" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;line-height:1.5;border-color:rgba(99,102,241,0.4);background:rgba(99,102,241,0.03);font-size:13px;padding:12px 14px" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
+          <textarea class="form-input" id="f-pauta" rows="6" placeholder="Pegá la pauta aquí — los links de Spotify se detectan automáticamente..." style="resize:vertical;border-color:rgba(99,102,241,0.4);background:rgba(99,102,241,0.03);padding:12px 14px" oninput="autofillPrecioFromPauta();smartPautaDetect()"></textarea>
         </div>
 
         <!-- ── NOTAS ─────────────────────────────────────────── -->
@@ -1410,7 +1411,7 @@
 
           <div class="form-group full">
             <label class="form-label">Pauta / Promoción</label>
-            <textarea class="form-input" id="renovar-pauta" rows="4" style="resize:vertical;line-height:1.4" oninput="renovarAutofillPrecio();smartRenovarDetect()"></textarea>
+            <textarea class="form-input" id="renovar-pauta" rows="4" style="resize:vertical" oninput="renovarAutofillPrecio();smartRenovarDetect()"></textarea>
           </div>
 
           <div class="form-group full">
