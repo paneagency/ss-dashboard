@@ -339,6 +339,9 @@
     }
     textarea.form-input { line-height: 1.6; font-size: 13px; }
     .form-input:focus { border-color: var(--indigo); }
+    input[type=number].form-input::-webkit-outer-spin-button,
+    input[type=number].form-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number].form-input { -moz-appearance: textfield; }
     .form-input.auto { border-style: dashed; color: var(--muted); }
     .form-input.auto:focus { border-style: solid; color: var(--text); }
     .form-hint { font-size: 11px; color: var(--muted2); }
