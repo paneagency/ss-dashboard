@@ -4476,13 +4476,11 @@ function renderCampHistorial() {
     }
 
     const hasExpand = !!expandHtml;
-    const btnLabel  = isEditada ? '🔍 ver cambios' : 'ver pauta';
-    const btnStyle  = isEditada
-      ? 'padding:2px 8px;font-size:11px;color:var(--amber);border-color:rgba(245,158,11,0.4)'
-      : 'padding:2px 8px;font-size:11px';
+    const rowCursor = hasExpand ? 'cursor:pointer;' : '';
+    const rowClick  = hasExpand ? `onclick="histToggle('${expandId}')"` : '';
 
     return `
-      <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+      <tr ${rowClick} style="${rowCursor}border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
         <td style="padding:10px 12px;font-weight:600;font-size:13px;color:var(--text)">${escH(c.artista)}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.vendedor || '—')}</td>
         <td style="padding:10px 12px">${badge}</td>
@@ -4490,13 +4488,8 @@ function renderCampHistorial() {
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaVencimiento)}${fechaEdicionHtml}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--text);font-weight:500">${precio}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.metodo || '—')}</td>
-        <td style="padding:10px 12px;text-align:center">
-          ${hasExpand
-            ? `<button class="btn btn-ghost btn-sm" style="${btnStyle}" onclick="histToggle('${expandId}')">${btnLabel}</button>`
-            : '<span style="color:var(--border2)">—</span>'}
-        </td>
       </tr>
-      ${hasExpand ? `<tr id="${expandId}" style="display:none"><td colspan="8" style="padding:8px 16px 16px 28px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border)">${expandHtml}</td></tr>` : ''}`;
+      ${hasExpand ? `<tr id="${expandId}" style="display:none"><td colspan="7" style="padding:8px 16px 16px 28px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border)">${expandHtml}</td></tr>` : ''}`;
   }).join('');
 
   list.innerHTML = `
@@ -4513,7 +4506,6 @@ function renderCampHistorial() {
               <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Vencimiento</th>
               <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Precio</th>
               <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Método</th>
-              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Pauta</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
