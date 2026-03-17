@@ -4338,7 +4338,9 @@ function renderCampaniasTab() {
 function histToggle(id) {
   var el = document.getElementById(id);
   if (!el) return;
-  el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+  const opening = el.style.display === 'none';
+  document.querySelectorAll('[id^="hx-"]').forEach(r => { if (r.id !== id) r.style.display = 'none'; });
+  el.style.display = opening ? 'table-row' : 'none';
 }
 
 function renderCampHistorial() {
