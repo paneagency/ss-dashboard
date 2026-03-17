@@ -4478,7 +4478,7 @@ function renderCampHistorial() {
     const fmtTs = t => {
       if (!t) return '—';
       const d = new Date(t);
-      return isNaN(d) ? '—' : d.toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      return isNaN(d) ? '—' : d.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
     };
 
     return `
