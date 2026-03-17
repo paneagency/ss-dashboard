@@ -4553,7 +4553,12 @@ function copiarPauta(idx) {
   const c = _campanias.find(c => c.row === idx);
   const text = c?.pauta || document.getElementById(`camp-expand-pauta-${idx}`)?.textContent || '';
   if (!text.trim()) return;
-  navigator.clipboard.writeText(text.trim())
+  // Formatear para WhatsApp: línea antes de un track de Spotify → *negrita*
+  const formatted = text.trim().split('\n').map((line, i, arr) => {
+    const next = arr[i + 1] || '';
+    return /open\.spotify\.com\/track\//i.test(next) ? `*${line}*` : line;
+  }).join('\n');
+  navigator.clipboard.writeText(formatted)
     .then(() => showToast('Pauta copiada', 'success'))
     .catch(() => showToast('No se pudo copiar', 'error'));
 }
