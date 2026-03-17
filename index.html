@@ -4368,7 +4368,7 @@ function renderCampHistorial() {
     { key: 'pauta',            label: 'Pauta',         fmt: v => v ? (v.length > 100 ? v.slice(0,100) + '…' : v) : '—' },
   ];
 
-  // Enriquecer editadas con campaña activa (para diff y sort)
+  // Enriquecer editadas con campaña activa (para diff)
   const enriched = _historial.map(c => {
     if (c.estado !== 'editada' || !c.masterEventId) return { ...c, _current: null };
     const cur = _campanias.find(a => a.masterEventId === c.masterEventId);
@@ -4382,13 +4382,11 @@ function renderCampHistorial() {
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
   if (_historialFilter !== 'todas') data = data.filter(c => c.estado === _historialFilter);
 
-  // Sort: editadas por row de la campaña activa DESC (mayor row = más reciente en el sheet)
-  // fallback: row propio DESC. Resto: fechaVencimiento DESC
+  // Sort por timestamp DESC (fecha/hora real de la operación), fallback fechaVencimiento DESC
   data = [...data].sort((a, b) => {
-    const ra = a.estado === 'editada' ? (a._current?.row ?? a.row) : 0;
-    const rb = b.estado === 'editada' ? (b._current?.row ?? b.row) : 0;
-    if (ra !== rb) return rb - ra;
-    return (b.fechaVencimiento || '').localeCompare(a.fechaVencimiento || '');
+    const ta = a.timestamp || a.fechaVencimiento || '';
+    const tb = b.timestamp || b.fechaVencimiento || '';
+    return tb.localeCompare(ta);
   });
 
   const ESTADO_STYLES = {
@@ -4432,6 +4430,14 @@ function renderCampHistorial() {
     // Construir contenido del expand
     let expandHtml = '';
     let fechaEdicionHtml = '';
+
+    // Fecha de edición desde el propio timestamp del registro historial
+    if (c.timestamp) {
+      const d = new Date(c.timestamp);
+      if (!isNaN(d)) {
+        fechaEdicionHtml = `<span style="color:var(--amber);font-size:11px;display:block;margin-top:2px">${d.toLocaleString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`;
+      }
+    }
 
     if (isEditada) {
       const cur = c._current;

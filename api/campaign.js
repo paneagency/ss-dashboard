@@ -76,8 +76,8 @@ async function ensureSheets(sheets) {
     headerData.push({ range: `${CLIENTES_SHEET}!A1:O1`,
       values: [['ID','ARTISTA','GÉNERO','PAIS','TELÉFONO','EMAIL','SPOTIFY','FECHA_PRIMERA_COMPRA','REPRESENTANTE','NOMBRE','APODO','VENDEDOR','METODO_PAGO','ESTADO','IMAGEN']] });
   if (toCreate.includes(CAMPANAS_SHEET))
-    headerData.push({ range: `${CAMPANAS_SHEET}!A1:S1`,
-      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO','DETALLE_GASTOS','PAUTA','REPRESENTANTE','NOTAS']] });
+    headerData.push({ range: `${CAMPANAS_SHEET}!A1:U1`,
+      values: [['ARTISTA','VENDEDOR','FECHA_INICIO','FECHA_VENCIMIENTO','DURACION_DIAS','EVENT_ID_MASTER','EVENT_ID_VENDOR','ESTADO','METODO','PRECIO','GASTO','NETO','MARGEN_PCT','FINAL','GENERO','DETALLE_GASTOS','PAUTA','REPRESENTANTE','NOTAS','CAMPAIGN_ID','TIMESTAMP']] });
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
@@ -387,7 +387,7 @@ module.exports = async (req, res) => {
       if (mode === 'historial') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:T`,
+          range: `${CAMPANAS_SHEET}!A:U`,
         });
         const HIST_STATES = ['finalizada', 'eliminada', 'editada', 'renovada'];
         let historial = (resp.data.values || []).slice(1)
@@ -406,6 +406,7 @@ module.exports = async (req, res) => {
             representante: r[17] || '',
             notas: r[18] || '',
             campaignId: r[19] || '',
+            timestamp: r[20] || '',
           }))
           .filter(c => HIST_STATES.includes(c.estado) && c.artista);
         if (vendedor && vendedor !== 'all')
@@ -416,7 +417,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:T`,
+        range: `${CAMPANAS_SHEET}!A:U`,
       });
       let campanias = (resp.data.values || []).slice(1)
         .map((r, i) => ({
@@ -433,6 +434,7 @@ module.exports = async (req, res) => {
           representante: r[17] || '',
           notas: r[18] || '',
           campaignId: r[19] || '',
+          timestamp: r[20] || '',
         }))
         .filter(c => ['activa', 'pendiente_pago', 'prueba'].includes(c.estado) && c.artista);
 
@@ -516,9 +518,9 @@ module.exports = async (req, res) => {
       const campaignId = 'CP_' + Date.now();
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:T`,
+        range: `${CAMPANAS_SHEET}!A:U`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '', campaignId]] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '', campaignId, new Date().toISOString()]] },
       });
 
       return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId, campaignId });
@@ -648,7 +650,7 @@ module.exports = async (req, res) => {
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A${row}:T${row}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString()]] },
         });
         // Actualizar masterEventId/vendorEventId en todos los siblings del grupo
         if (siblingRows.length && newMasterId) {
@@ -674,7 +676,7 @@ module.exports = async (req, res) => {
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A:T`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString()]] },
         });
         // Extraer row number de la respuesta del append
         const updatedRange = appendResp.data?.updates?.updatedRange || '';
@@ -783,12 +785,17 @@ module.exports = async (req, res) => {
         // Borrar evento de calendario (solo una vez)
         await deleteCalEvents(cal, vendedor, sharedMasterId, anchor[6] || '');
         // Marcar todas las filas con el estado correspondiente
+        const ts = new Date().toISOString();
         await Promise.all(toFinalize.map(({ i }) =>
-          sheets.spreadsheets.values.update({
+          sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${CAMPANAS_SHEET}!H${i + 2}`,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[estadoFinal]] },
+            requestBody: {
+              valueInputOption: 'USER_ENTERED',
+              data: [
+                { range: `${CAMPANAS_SHEET}!H${i + 2}`, values: [[estadoFinal]] },
+                { range: `${CAMPANAS_SHEET}!U${i + 2}`, values: [[ts]] },
+              ],
+            },
           })
         ));
         return res.json({ ok: true });
@@ -823,11 +830,15 @@ module.exports = async (req, res) => {
 
       const calResult = await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
 
-      await sheets.spreadsheets.values.update({
+      await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!H${row}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[estadoFinal]] },
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: [
+            { range: `${CAMPANAS_SHEET}!H${row}`, values: [[estadoFinal]] },
+            { range: `${CAMPANAS_SHEET}!U${row}`, values: [[new Date().toISOString()]] },
+          ],
+        },
       });
 
       // Actualizar ESTADO en Clientes si no quedan campañas activas para este artista
