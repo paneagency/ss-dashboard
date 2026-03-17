@@ -387,7 +387,7 @@ module.exports = async (req, res) => {
       if (mode === 'historial') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:U`,
+          range: `${CAMPANAS_SHEET}!A:V`,
         });
         const HIST_STATES = ['finalizada', 'eliminada', 'editada', 'renovada'];
         let historial = (resp.data.values || []).slice(1)
@@ -407,6 +407,7 @@ module.exports = async (req, res) => {
             notas: r[18] || '',
             campaignId: r[19] || '',
             timestamp: r[20] || '',
+            editadoPor: r[21] || '',
           }))
           .filter(c => HIST_STATES.includes(c.estado) && c.artista);
         if (vendedor && vendedor !== 'all')
@@ -435,6 +436,7 @@ module.exports = async (req, res) => {
           notas: r[18] || '',
           campaignId: r[19] || '',
           timestamp: r[20] || '',
+          editadoPor: r[21] || '',
         }))
         .filter(c => ['activa', 'pendiente_pago', 'prueba'].includes(c.estado) && c.artista);
 
@@ -579,7 +581,7 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar/renovar campaña ───────────────────────────
     if (req.method === 'PUT') {
-      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody } = req.body;
+      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody, editadoPor } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
       // Leer fila completa actual para obtener fechaInicio, vencimiento base y campaignId
@@ -648,9 +650,9 @@ module.exports = async (req, res) => {
         // Sobreescribir fila existente sin dejar historial
         await sheets.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A${row}:T${row}`,
+          range: `${CAMPANAS_SHEET}!A${row}:V${row}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString()]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '']] },
         });
         // Actualizar masterEventId/vendorEventId en todos los siblings del grupo
         if (siblingRows.length && newMasterId) {
@@ -674,9 +676,9 @@ module.exports = async (req, res) => {
         });
         const appendResp = await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:T`,
+          range: `${CAMPANAS_SHEET}!A:V`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString()]] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '']] },
         });
         // Extraer row number de la respuesta del append
         const updatedRange = appendResp.data?.updates?.updatedRange || '';
