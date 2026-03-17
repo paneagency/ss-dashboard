@@ -4384,27 +4384,75 @@ function renderCampHistorial() {
     return;
   }
 
+  const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+  const fmtPrecio = (v) => v ? `$${parseFloat(v).toLocaleString('es-AR', {minimumFractionDigits:0})}` : '—';
+
+  const DIFF_FIELDS = [
+    { key: 'precio',          label: 'Precio',      fmt: fmtPrecio },
+    { key: 'metodo',          label: 'Método',      fmt: v => v || '—' },
+    { key: 'representante',   label: 'Representante', fmt: v => v || '—' },
+    { key: 'fechaVencimiento',label: 'Vencimiento', fmt: fmtDate },
+    { key: 'duracion',        label: 'Duración',    fmt: v => v ? `${v} días` : '—' },
+    { key: 'notas',           label: 'Notas',       fmt: v => v || '—' },
+    { key: 'pauta',           label: 'Pauta',       fmt: v => v ? (v.length > 80 ? v.slice(0,80) + '…' : v) : '—' },
+  ];
+
   const rows = data.map(c => {
     const st = ESTADO_STYLES[c.estado] || { bg: 'rgba(99,102,241,0.1)', color: 'var(--muted)', label: c.estado };
     const badge = `<span style="background:${st.bg};color:${st.color};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${st.label}</span>`;
-    const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
-    const precio = c.precio ? `$${parseFloat(c.precio).toLocaleString('es-AR', {minimumFractionDigits:0})}` : '—';
-    const pautaId = `hist-pauta-${c.row}`;
-    const hasPauta = !!c.pauta;
+    const precio = fmtPrecio(c.precio);
+    const expandId = `hist-expand-${c.row}`;
+    const isEditada = c.estado === 'editada';
+
+    // Para "editada": buscar versión activa por masterEventId para calcular diff y fecha de edición
+    let expandHtml = '';
+    let fechaEdicion = '';
+    if (isEditada && c.masterEventId) {
+      const current = _campanias.find(a => a.masterEventId === c.masterEventId);
+      if (current) {
+        fechaEdicion = current.fechaInicio ? ` · editado el ${fmtDate(current.fechaInicio)}` : '';
+        const diffs = DIFF_FIELDS.filter(f => {
+          const oldVal = String(c[f.key] || '').trim();
+          const newVal = String(current[f.key] || '').trim();
+          return oldVal !== newVal;
+        });
+        if (diffs.length) {
+          const diffRows = diffs.map(f => `
+            <tr>
+              <td style="padding:5px 10px;font-size:11px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap">${f.label}</td>
+              <td style="padding:5px 10px;font-size:12px;color:var(--muted);text-decoration:line-through">${escH(f.fmt(c[f.key]))}</td>
+              <td style="padding:5px 4px;color:var(--muted);font-size:11px">→</td>
+              <td style="padding:5px 10px;font-size:12px;color:var(--text);font-weight:500">${escH(f.fmt(current[f.key]))}</td>
+            </tr>`).join('');
+          expandHtml = `<table style="border-collapse:collapse;width:100%">${diffRows}</table>`;
+        } else {
+          expandHtml = `<span style="font-size:12px;color:var(--muted)">Sin diferencias detectadas con la versión actual</span>`;
+        }
+      } else {
+        expandHtml = c.pauta ? `<pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0">${escH(c.pauta)}</pre>` : '';
+      }
+    } else if (c.pauta) {
+      expandHtml = `<pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0">${escH(c.pauta)}</pre>`;
+    }
+
+    const hasExpand = !!expandHtml;
+    const btnLabel = isEditada ? 'ver cambios' : 'ver pauta';
+    const btnColor = isEditada ? 'color:var(--amber);border-color:rgba(245,158,11,0.4)' : '';
+
     return `
       <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
         <td style="padding:10px 12px;font-weight:600;font-size:13px;color:var(--text)">${escH(c.artista)}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.vendedor || '—')}</td>
         <td style="padding:10px 12px">${badge}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaInicio)}</td>
-        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaVencimiento)}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaVencimiento)}${fechaEdicion ? `<span style="color:var(--muted2);font-size:11px;display:block">${escH(fechaEdicion)}</span>` : ''}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--text);font-weight:500">${precio}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.metodo || '—')}</td>
         <td style="padding:10px 12px;text-align:center">
-          ${hasPauta ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('${pautaId}').style.display=document.getElementById('${pautaId}').style.display==='none'?'block':'none'">ver</button>` : '<span style="color:var(--border2)">—</span>'}
+          ${hasExpand ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;${btnColor}" onclick="const el=document.getElementById('${expandId}');el.style.display=el.style.display==='none'?'table-row':'none'">${btnLabel}</button>` : '<span style="color:var(--border2)">—</span>'}
         </td>
       </tr>
-      ${hasPauta ? `<tr id="${pautaId}" style="display:none"><td colspan="8" style="padding:0 12px 14px 24px"><pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0;background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border-left:3px solid var(--border2)">${escH(c.pauta)}</pre></td></tr>` : ''}`;
+      ${hasExpand ? `<tr id="${expandId}" style="display:none"><td colspan="8" style="padding:6px 12px 14px 28px;background:rgba(255,255,255,0.02)">${expandHtml}</td></tr>` : ''}`;
   }).join('');
 
   list.innerHTML = `
