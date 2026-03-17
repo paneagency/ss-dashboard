@@ -3552,8 +3552,12 @@ function smartPautaDetect() {
       const urlIdx = newText.indexOf(url);
       if (urlIdx === -1) continue;
       const before = newText.substring(0, urlIdx);
-      const lastNewline = before.lastIndexOf('\n');
-      const prevLine = before.substring(lastNewline + 1).trim();
+      // Si el URL empieza en su propia línea, `before` termina en \n y substring(lastNewline+1)=""
+      // Recortar el \n final para obtener la línea anterior real
+      const beforeTrimmed = before.endsWith('\n') ? before.slice(0, -1) : before;
+      const prevNewlineIdx = beforeTrimmed.lastIndexOf('\n');
+      const prevLine = beforeTrimmed.substring(prevNewlineIdx + 1).trim();
+      const prevLineStart = prevNewlineIdx + 1; // posición absoluta en newText del inicio de la línea anterior
       const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
       // Normalizar prevLine: quitar *asteriscos* de WhatsApp para comparar
       const prevLineNorm = prevLine.replace(/^\*(.+)\*$/, '$1').trim();
@@ -3564,7 +3568,6 @@ function smartPautaDetect() {
       // Reemplazar prefijo incorrecto (cambio de modo single↔multi)
       const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
       if (prevLineNorm === altPrefix) {
-        const prevLineStart = before.lastIndexOf('\n') + 1;
         newText = newText.substring(0, prevLineStart) + expectedPrefix + '\n' + newText.substring(urlIdx);
       } else {
         newText = newText.substring(0, urlIdx) + expectedPrefix + '\n' + newText.substring(urlIdx);
@@ -4855,15 +4858,16 @@ function smartRenovarDetect() {
       const urlIdx = newText.indexOf(url);
       if (urlIdx === -1) continue;
       const before = newText.substring(0, urlIdx);
-      const lastNewline = before.lastIndexOf('\n');
-      const prevLine = before.substring(lastNewline + 1).trim();
+      const beforeTrimmed = before.endsWith('\n') ? before.slice(0, -1) : before;
+      const prevNewlineIdx = beforeTrimmed.lastIndexOf('\n');
+      const prevLine = beforeTrimmed.substring(prevNewlineIdx + 1).trim();
+      const prevLineStart = prevNewlineIdx + 1;
       const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
       const prevLineNorm = prevLine.replace(/^\*(.+)\*$/, '$1').trim();
       if (_renovarPrefixedUrls.has(url)) continue; // skip pre-existentes y ya procesados
       if (prevLineNorm === expectedPrefix) { _renovarPrefixedUrls.set(url, isMulti); continue; }
       const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;
       if (prevLineNorm === altPrefix) {
-        const prevLineStart = before.lastIndexOf('\n') + 1;
         newText = newText.substring(0, prevLineStart) + expectedPrefix + '\n' + newText.substring(urlIdx);
       } else {
         newText = newText.substring(0, urlIdx) + expectedPrefix + '\n' + newText.substring(urlIdx);
