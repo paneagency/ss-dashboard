@@ -4421,7 +4421,7 @@ function renderCampHistorial() {
   const pills = [
     { key: 'todas',      label: 'Todas (' + countBase.length + ')' },
     { key: 'editada',    label: 'Editadas' },
-    { key: 'finalizada', label: 'Finalizadas' },
+    { key: 'finalizada', label: 'No renovó' },
     { key: 'eliminada',  label: 'Eliminadas' },
   ].map(p => `<span style="${pillStyle(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
 
