@@ -775,14 +775,14 @@ module.exports = async (req, res) => {
         const anchor = campRows.find(r =>
           (r[1] || '').toLowerCase().trim() === vendedor.toLowerCase().trim() &&
           (r[2] || '').trim() === fechaInicio &&
-          ['activa', 'pendiente_pago'].includes(r[7] || '')
+          ['activa', 'pendiente_pago', 'prueba'].includes(r[7] || '')
         );
         if (!anchor) return res.json({ ok: true, skipped: true });
         const sharedMasterId = anchor[5] || '';
         // Marcar como finalizada TODAS las campañas con ese masterEventId
         const toFinalize = campRows
           .map((r, i) => ({ r, i }))
-          .filter(({ r }) => r[5] === sharedMasterId && ['activa', 'pendiente_pago'].includes(r[7] || ''));
+          .filter(({ r }) => r[5] === sharedMasterId && ['activa', 'pendiente_pago', 'prueba'].includes(r[7] || ''));
         if (!toFinalize.length) return res.json({ ok: true, skipped: true });
         // Borrar evento de calendario (solo una vez)
         await deleteCalEvents(cal, vendedor, sharedMasterId, anchor[6] || '');
@@ -816,7 +816,7 @@ module.exports = async (req, res) => {
           const r = campRows[i];
           if ((r[0] || '').toLowerCase().trim() === artista.toLowerCase().trim() &&
               (!vendedor || (r[1] || '').toLowerCase().trim() === vendedor.toLowerCase().trim()) &&
-              (r[7] || '') === 'activa') {
+              ['activa', 'prueba', 'pendiente_pago'].includes(r[7] || '')) {
             match = i;
             break;
           }
