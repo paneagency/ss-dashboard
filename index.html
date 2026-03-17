@@ -4492,7 +4492,10 @@ function renderCampHistorial() {
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaVencimiento)}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--text);font-weight:500">${precio}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(c.metodo || '—')}</td>
-        <td style="padding:10px 12px;font-size:12px;font-weight:700;color:var(--text)">${fmtTs(getTs(c))}</td>
+        <td style="padding:10px 12px">
+          <span style="font-size:12px;font-weight:700;color:var(--text)">${fmtTs(getTs(c))}</span>
+          ${(c._current?.editadoPor || (c.estado !== 'editada' && c.editadoPor)) ? `<br><span style="font-size:11px;color:var(--muted2)">${escH(c._current?.editadoPor || c.editadoPor)}</span>` : ''}
+        </td>
       </tr>
       ${hasExpand ? `<tr id="${expandId}" style="display:none"><td colspan="8" style="padding:8px 16px 16px 28px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border)">${expandHtml}</td></tr>` : ''}`;
   }).join('');
@@ -5178,6 +5181,7 @@ async function submitEditarActual() {
         duracion, fechaVencimiento,
         masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
         precio, gasto, metodo, pauta, notas, gastosRows, genero: camp.genero, representante,
+        editadoPor: window._currentUser?.username || '',
       }),
     });
     const data = await resp.json();
