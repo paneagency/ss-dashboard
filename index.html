@@ -1332,6 +1332,7 @@
       <button class="btn btn-sm camp-view-btn" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
       <button class="btn btn-sm camp-view-btn" data-view="vencidas" onclick="setCampView('vencidas')">⚠️ Vencidas</button>
       <button class="btn btn-sm camp-view-btn" data-view="sinpago" onclick="setCampView('sinpago')" style="color:var(--amber)">💳 Sin Pago</button>
+      <button class="btn btn-sm camp-view-btn" data-view="historial" onclick="setCampView('historial')" style="color:var(--muted)">📋 Historial</button>
     </div>
     <div style="position:relative;margin-bottom:16px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;opacity:0.4;pointer-events:none">🔍</span>
@@ -3994,7 +3995,7 @@ async function submitSale(e) {
           }
         }
         if (artistasList.length > 1) {
-          _campaniasLoaded = false; _campaniasLoading = false; loadCampanias().catch(() => {});
+          _campaniasLoaded = false; _campaniasLoading = false; _historial = null; loadCampanias().catch(() => {});
         }
       } catch (err) { console.warn('Campaign registration failed (non-fatal):', err); }
     })();
@@ -4096,7 +4097,7 @@ async function submitSinPago(e) {
       : 'Campaña registrada (sin pago)';
     showToast(msg, 'success');
     closeModal(true);
-    _campaniasLoaded = false; _campaniasLoading = false;
+    _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
     loadCampanias().catch(() => {});
 
   } catch(err) {
@@ -4140,6 +4141,7 @@ async function cobrarCampania(row) {
     // Recargar campañas
     _campaniasLoaded = false;
     _campaniasLoading = false;
+    _historial = null;
     loadCampanias().catch(() => {});
     // Agregar fila localmente para reflejar la venta sin recargar el CSV
     const today2 = new Date();
@@ -4223,6 +4225,8 @@ let _campaniasLoaded = false;
 let _campaniasLoading = false;
 let _campView = 'calendario';
 let _campCalMonth = new Date();
+let _historial = null;
+let _historialFilter = 'todas';
 
 function setCampView(v) {
   _campView = v;
@@ -4283,6 +4287,12 @@ function renderCampaniasTab() {
     b.classList.toggle('active', b.dataset.view === _campView);
   });
 
+  // Vista historial: flujo separado
+  if (_campView === 'historial') {
+    renderCampHistorial();
+    return;
+  }
+
   const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
   const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
   const searchQ      = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
@@ -4315,6 +4325,115 @@ function renderCampaniasTab() {
     data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
   }
   renderCampList(data, today);
+}
+
+// ── HISTORIAL ────────────────────────────────────────────────
+async function renderCampHistorial() {
+  const list = document.getElementById('campanias-list');
+  if (!list) return;
+
+  // Cargar datos si no están en cache
+  if (!_historial) {
+    list.innerHTML = '<div style="color:var(--muted);padding:24px">Cargando historial...</div>';
+    try {
+      const role   = window._currentUser?.role;
+      const vendor = window._currentUser?.vendorName;
+      const isAdmin = role === 'admin' || role === 'secondary_admin';
+      const param  = isAdmin ? 'all' : (vendor || 'all');
+      const resp = await fetch(`/api/campaign?mode=historial&vendedor=${encodeURIComponent(param)}`);
+      const data = await resp.json();
+      _historial = (data.historial || []).sort((a, b) =>
+        new Date(b.fechaVencimiento || b.fechaInicio || 0) - new Date(a.fechaVencimiento || a.fechaInicio || 0)
+      );
+    } catch(e) {
+      list.innerHTML = `<div style="color:var(--red);padding:24px">Error cargando historial: ${e.message}</div>`;
+      return;
+    }
+  }
+
+  const searchQ = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
+  const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
+  const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
+
+  let data = _historial;
+  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor);
+  if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
+  if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
+  if (_historialFilter !== 'todas') data = data.filter(c => c.estado === _historialFilter);
+
+  const ESTADO_STYLES = {
+    finalizada: { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc', label: 'Finalizada' },
+    eliminada:  { bg: 'rgba(248,81,73,0.15)',  color: 'var(--red)',   label: 'Eliminada' },
+    editada:    { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)', label: 'Editada' },
+    renovada:   { bg: 'rgba(16,185,129,0.12)', color: 'var(--green)', label: 'Renovada' },
+  };
+
+  const pillStyle = (f) => {
+    const active = f === _historialFilter;
+    const base = 'cursor:pointer;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;border:1px solid;transition:all 0.15s;';
+    if (active) return base + 'background:var(--indigo);color:#fff;border-color:var(--indigo)';
+    return base + 'background:transparent;color:var(--muted);border-color:var(--border2)';
+  };
+
+  const pills = [
+    { key: 'todas',      label: `Todas (${_historial.filter(c => (!filterVendor || filterVendor==='all'||c.vendedor===filterVendor)).length})` },
+    { key: 'finalizada', label: 'Finalizadas' },
+    { key: 'eliminada',  label: 'Eliminadas' },
+    { key: 'editada',    label: 'Editadas' },
+    { key: 'renovada',   label: 'Renovadas' },
+  ].map(p => `<span style="${pillStyle(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
+
+  if (!data.length) {
+    list.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${pills}</div>
+      <div class="empty-state"><div class="empty-icon">📋</div><p>No hay registros en el historial</p></div>`;
+    return;
+  }
+
+  const rows = data.map(c => {
+    const st = ESTADO_STYLES[c.estado] || { bg: 'rgba(99,102,241,0.1)', color: 'var(--muted)', label: c.estado };
+    const badge = `<span style="background:${st.bg};color:${st.color};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${st.label}</span>`;
+    const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+    const precio = c.precio ? `$${parseFloat(c.precio).toLocaleString('es-AR', {minimumFractionDigits:0})}` : '—';
+    const pautaId = `hist-pauta-${c.row}`;
+    const hasPauta = !!c.pauta;
+    return `
+      <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+        <td style="padding:10px 12px;font-weight:600;font-size:13px;color:var(--text)">${esc(c.artista)}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${esc(c.vendedor || '—')}</td>
+        <td style="padding:10px 12px">${badge}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaInicio)}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${fmtDate(c.fechaVencimiento)}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--text);font-weight:500">${precio}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${esc(c.metodo || '—')}</td>
+        <td style="padding:10px 12px;text-align:center">
+          ${hasPauta ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('${pautaId}').style.display=document.getElementById('${pautaId}').style.display==='none'?'block':'none'">ver</button>` : '<span style="color:var(--border2)">—</span>'}
+        </td>
+      </tr>
+      ${hasPauta ? `<tr id="${pautaId}" style="display:none"><td colspan="8" style="padding:0 12px 14px 24px"><pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0;background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;border-left:3px solid var(--border2)">${esc(c.pauta)}</pre></td></tr>` : ''}`;
+  }).join('');
+
+  list.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${pills}</div>
+    <div class="table-card" style="overflow:hidden">
+      <div class="table-scroll">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Artista</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Vendedor</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Estado</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Inicio</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Vencimiento</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Precio</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Método</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Pauta</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 function renderCampList(data, today) {

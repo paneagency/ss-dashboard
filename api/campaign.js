@@ -383,6 +383,36 @@ module.exports = async (req, res) => {
         });
       }
 
+      // Historial: finalizadas, eliminadas, editadas, renovadas
+      if (mode === 'historial') {
+        const resp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:T`,
+        });
+        const HIST_STATES = ['finalizada', 'eliminada', 'editada', 'renovada'];
+        let historial = (resp.data.values || []).slice(1)
+          .map((r, i) => ({
+            row: i + 2,
+            artista: r[0], vendedor: r[1],
+            fechaInicio: r[2], fechaVencimiento: r[3],
+            duracion: parseInt(r[4]) || 30,
+            masterEventId: r[5] || '', vendorEventId: r[6] || '',
+            estado: r[7] || '',
+            metodo: r[8] || '', precio: r[9] || '', gasto: r[10] || '',
+            neto: r[11] || '', final: r[13] || '',
+            genero: r[14] || '',
+            detalleGastos: r[15] || '',
+            pauta: r[16] || '',
+            representante: r[17] || '',
+            notas: r[18] || '',
+            campaignId: r[19] || '',
+          }))
+          .filter(c => HIST_STATES.includes(c.estado) && c.artista);
+        if (vendedor && vendedor !== 'all')
+          historial = historial.filter(c => c.vendedor === vendedor);
+        return res.json({ historial });
+      }
+
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
