@@ -4439,35 +4439,54 @@ function renderCampHistorial() {
 
     if (isEditada) {
       const cur = c._current;
+
+      // Diff de pauta línea por línea (sin API externa)
+      const pautaDiff = (oldText, newText) => {
+        if (!oldText && !newText) return '';
+        const oldLines = (oldText || '').split('\n').map(l => l.trim()).filter(Boolean);
+        const newLines = (newText || '').split('\n').map(l => l.trim()).filter(Boolean);
+        const oldSet = new Set(oldLines);
+        const newSet = new Set(newLines);
+        const removed = oldLines.filter(l => !newSet.has(l));
+        const added   = newLines.filter(l => !oldSet.has(l));
+        if (!removed.length && !added.length) return '';
+        return [
+          ...removed.map(l => `<div style="background:rgba(248,81,73,0.1);color:#f85149;padding:2px 6px;border-radius:3px;font-size:12px;margin:2px 0;text-decoration:line-through">− ${escH(l)}</div>`),
+          ...added.map(l =>   `<div style="background:rgba(16,185,129,0.1);color:var(--green);padding:2px 6px;border-radius:3px;font-size:12px;margin:2px 0">+ ${escH(l)}</div>`),
+        ].join('');
+      };
+
+      // Sección 1: pauta anterior
+      const pautaAnteriorHtml = c.pauta ? `
+        <div style="font-size:11px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Pauta anterior</div>
+        <pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0 0 16px;line-height:1.5;background:rgba(255,255,255,0.03);border-radius:6px;padding:10px">${escH(c.pauta)}</pre>` : '';
+
       if (cur) {
-        // Calcular diff
-        const diffs = DIFF_FIELDS.filter(f => String(c[f.key] || '').trim() !== String(cur[f.key] || '').trim());
-        if (diffs.length) {
-          expandHtml = `
-            <div style="font-size:11px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Cambios realizados</div>
-            <table style="border-collapse:collapse">
-              ${diffs.map(f => `
-              <tr>
-                <td style="padding:4px 12px 4px 0;font-size:11px;font-weight:600;color:var(--muted2);white-space:nowrap">${f.label}</td>
-                <td style="padding:4px 12px 4px 0;font-size:12px;color:var(--muted);text-decoration:line-through;max-width:200px">${escH(f.fmt(c[f.key]))}</td>
-                <td style="padding:4px 8px 4px 0;color:var(--muted);font-size:12px">→</td>
-                <td style="padding:4px 0;font-size:12px;color:var(--text);font-weight:500;max-width:200px">${escH(f.fmt(cur[f.key]))}</td>
-              </tr>`).join('')}
-            </table>`;
-        } else {
-          expandHtml = `<span style="font-size:12px;color:var(--muted)">No se detectaron cambios en los campos principales.</span>`;
-        }
-      } else {
-        // Sin campaña activa encontrada: mostrar snapshot de valores anteriores
-        const snap = DIFF_FIELDS.filter(f => c[f.key]);
-        expandHtml = snap.length ? `
-          <div style="font-size:11px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Valores antes de la edición</div>
+        // Sección 2: diff de pauta
+        const diffHtml = pautaDiff(c.pauta, cur.pauta);
+        const pautaDiffHtml = diffHtml ? `
+          <div style="font-size:11px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Cambios en pauta</div>
+          <div style="margin-bottom:16px">${diffHtml}</div>` : '';
+
+        // Sección 3: otros campos (excluye pauta, ya tiene su sección)
+        const OTHER_FIELDS = DIFF_FIELDS.filter(f => f.key !== 'pauta');
+        const fieldDiffs = OTHER_FIELDS.filter(f => String(c[f.key] || '').trim() !== String(cur[f.key] || '').trim());
+        const fieldDiffHtml = fieldDiffs.length ? `
+          <div style="font-size:11px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Otros cambios</div>
           <table style="border-collapse:collapse">
-            ${snap.map(f => `<tr>
+            ${fieldDiffs.map(f => `
+            <tr>
               <td style="padding:4px 12px 4px 0;font-size:11px;font-weight:600;color:var(--muted2);white-space:nowrap">${f.label}</td>
-              <td style="padding:4px 0;font-size:12px;color:var(--muted)">${escH(f.fmt(c[f.key]))}</td>
+              <td style="padding:4px 12px 4px 0;font-size:12px;color:var(--muted);text-decoration:line-through;max-width:200px">${escH(f.fmt(c[f.key]))}</td>
+              <td style="padding:4px 8px 4px 0;color:var(--muted);font-size:12px">→</td>
+              <td style="padding:4px 0;font-size:12px;color:var(--text);font-weight:500;max-width:200px">${escH(f.fmt(cur[f.key]))}</td>
             </tr>`).join('')}
           </table>` : '';
+
+        expandHtml = pautaAnteriorHtml + pautaDiffHtml + fieldDiffHtml;
+        if (!expandHtml.trim()) expandHtml = `<span style="font-size:12px;color:var(--muted)">No se detectaron cambios.</span>`;
+      } else {
+        expandHtml = pautaAnteriorHtml || `<span style="font-size:12px;color:var(--muted)">Sin datos de versión anterior.</span>`;
       }
     } else if (c.pauta) {
       expandHtml = `<pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);font-family:inherit;margin:0;line-height:1.5">${escH(c.pauta)}</pre>`;
