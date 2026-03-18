@@ -34,6 +34,7 @@ async function getAccessTokenFromRefresh(refreshToken) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || 'Spotify token refresh failed');
+  console.log(`Token refresh for owner — scopes: ${data.scope}`);
   return data.access_token;
 }
 
