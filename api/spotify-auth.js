@@ -54,5 +54,32 @@ export default async function handler(req, res) {
     `);
   }
 
+  // Check which account is currently authorized
+  if (action === 'whoami') {
+    const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
+    if (!refreshToken) return res.send('<p style="font-family:monospace;padding:2rem;color:red">SPOTIFY_REFRESH_TOKEN no está configurado en Vercel.</p>');
+    const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) return res.status(500).send(`<p style="font-family:monospace;padding:2rem;color:red">Error al refrescar token: ${tokenData.error_description || tokenData.error}</p>`);
+    const meRes = await fetch('https://api.spotify.com/v1/me', { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
+    const me = await meRes.json();
+    return res.send(`
+      <html><body style="font-family:monospace;padding:2rem;background:#111;color:#eee;max-width:600px;margin:0 auto">
+        <h2 style="color:#1db954">🎵 Cuenta autorizada</h2>
+        <p><strong>Nombre:</strong> ${me.display_name || '—'}</p>
+        <p><strong>Email:</strong> ${me.email || '—'}</p>
+        <p><strong>ID:</strong> ${me.id || '—'}</p>
+        <p><strong>URL:</strong> <a style="color:#1db954" href="${me.external_urls?.spotify}" target="_blank">${me.external_urls?.spotify || '—'}</a></p>
+        <hr style="border-color:#333;margin:1rem 0">
+        <p style="color:#aaa;font-size:12px">Si esta no es la cuenta correcta, volvé a autorizar con <a style="color:#1db954" href="/api/spotify-auth?action=login">?action=login</a> usando la cuenta correcta.</p>
+      </body></html>
+    `);
+  }
+
   return res.status(400).send('<p style="font-family:monospace;padding:2rem">Usá <code>?action=login</code> para iniciar el flujo de autorización.</p>');
 }
