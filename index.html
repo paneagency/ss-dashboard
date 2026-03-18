@@ -5281,10 +5281,11 @@ async function submitEditarActual() {
 
 // Parsea tracks y playlists de una pauta
 function parsePautaSpotify(pauta) {
-  if (!pauta) return { tracks: [], playlists: [] };
-  const lines    = pauta.split('\n');
-  const tracks   = [];
-  const playlists = [];
+  if (!pauta) return { pairs: [] };
+  const lines = pauta.split('\n');
+  const pairs = [];
+  const seenKeys = new Set();
+  let currentTrack = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     const prevLine = () => {
@@ -5295,12 +5296,17 @@ function parsePautaSpotify(pauta) {
       return '';
     };
     const trackMatch = line.match(/spotify\.com(?:\/intl-[^/]+)?\/track\/([A-Za-z0-9]+)/);
-    if (trackMatch) { tracks.push({ id: trackMatch[1], title: prevLine(), url: line }); continue; }
+    if (trackMatch) { currentTrack = { id: trackMatch[1], title: prevLine(), url: line }; continue; }
     const plMatch = line.match(/spotify\.com(?:\/intl-[^/]+)?\/playlist\/([A-Za-z0-9]+)/);
-    if (plMatch && !playlists.some(p => p.id === plMatch[1]))
-      playlists.push({ id: plMatch[1], title: prevLine(), url: line });
+    if (plMatch && currentTrack) {
+      const key = `${currentTrack.id}:${plMatch[1]}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        pairs.push({ track: currentTrack, playlist: { id: plMatch[1], title: prevLine(), url: line } });
+      }
+    }
   }
-  return { tracks, playlists };
+  return { pairs };
 }
 
 let _noRenovaRow = null; // campaña pendiente de archivar
@@ -5310,10 +5316,10 @@ function confirmarNoRenueva(row) {
   if (!camp) return;
   _noRenovaRow = row;
 
-  const { tracks, playlists } = parsePautaSpotify(camp.pauta);
+  const { pairs } = parsePautaSpotify(camp.pauta);
 
-  // Si no hay tracks Y playlists en la pauta, confirmar simple
-  if (!tracks.length || !playlists.length) {
+  // Si no hay pares track+playlist en la pauta, confirmar simple
+  if (!pairs.length) {
     if (!confirm(`¿Marcar "${camp.artista}" como no renovada? Se eliminará del calendario.`)) return;
     executeNoRenueva(false);
     return;
@@ -5323,23 +5329,23 @@ function confirmarNoRenueva(row) {
   document.getElementById('spotify-remove-artista').textContent = `${camp.artista} — ${camp.vendedor}`;
   document.getElementById('spotify-remove-result').style.display = 'none';
 
-  const tracksHtml = `
-    <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Canción${tracks.length > 1 ? 'es' : ''} a eliminar</div>
-    ${tracks.map(t => `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(29,185,84,0.08);border:1px solid rgba(29,185,84,0.2);border-radius:6px;margin-bottom:4px;font-size:13px">
-      <span style="color:#1db954">♪</span>
-      <span style="color:var(--text)">${t.title || t.id}</span>
-    </div>`).join('')}`;
+  const pairsHtml = pairs.map(p => `
+    <div style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(29,185,84,0.08);border:1px solid rgba(29,185,84,0.2);border-radius:6px 6px 0 0;font-size:13px">
+        <span style="color:#1db954">♪</span>
+        <span style="color:var(--text)">${p.track.title || p.track.id}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 10px 5px 22px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-top:none;border-radius:0 0 6px 6px;font-size:12px">
+        <span style="color:var(--indigo)">≡</span>
+        <span style="color:var(--muted)">${p.playlist.title || p.playlist.id}</span>
+      </div>
+    </div>`).join('');
 
-  const playlistsHtml = `
-    <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">De estas playlist${playlists.length > 1 ? 's' : ''}</div>
-    ${playlists.map(p => `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:6px;margin-bottom:4px;font-size:13px">
-      <span style="color:var(--indigo)">≡</span>
-      <span style="color:var(--text)">${p.title || p.id}</span>
-    </div>`).join('')}
-    <div style="font-size:11px;color:var(--muted);margin-top:6px">⚠️ Si alguna playlist no es tuya, te avisaremos qué no se pudo eliminar.</div>`;
-
-  document.getElementById('spotify-remove-tracks').innerHTML    = tracksHtml;
-  document.getElementById('spotify-remove-playlists').innerHTML = playlistsHtml;
+  document.getElementById('spotify-remove-tracks').innerHTML = `
+    <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">A eliminar (${pairs.length} operación${pairs.length > 1 ? 'es' : ''})</div>
+    ${pairsHtml}
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">⚠️ Si alguna playlist no es tuya, te avisaremos qué no se pudo eliminar.</div>`;
+  document.getElementById('spotify-remove-playlists').innerHTML = '';
 
   const execBtn = document.getElementById('btn-spotify-remove-exec');
   const skipBtn = document.getElementById('btn-spotify-remove-skip');
@@ -5352,7 +5358,7 @@ function confirmarNoRenueva(row) {
 async function executeSpotifyRemove() {
   const camp = _campanias.find(c => c.row === _noRenovaRow);
   if (!camp) return;
-  const { tracks, playlists } = parsePautaSpotify(camp.pauta);
+  const { pairs } = parsePautaSpotify(camp.pauta);
 
   const execBtn = document.getElementById('btn-spotify-remove-exec');
   const skipBtn = document.getElementById('btn-spotify-remove-skip');
@@ -5364,8 +5370,7 @@ async function executeSpotifyRemove() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        trackIds:    tracks.map(t => t.id),
-        playlistIds: playlists.map(p => p.id),
+        pairs: pairs.map(p => ({ trackId: p.track.id, playlistId: p.playlist.id })),
       }),
     });
     const data = await resp.json();
@@ -5385,14 +5390,14 @@ async function executeSpotifyRemove() {
 
     // Mostrar resultado antes de archivar
     let resultMsg = '';
-    if (data.success?.length) resultMsg += `✅ Eliminada de ${data.success.length} playlist${data.success.length > 1 ? 's' : ''}. `;
+    if (data.success?.length) resultMsg += `✅ ${data.success.length} operación${data.success.length > 1 ? 'es' : ''} exitosa${data.success.length > 1 ? 's' : ''}. `;
     if (data.failed?.length) {
       const names = data.failed.map(f => {
-        const pl = playlists.find(p => p.id === f.playlistId);
-        const statusHint = f.status === 403 ? ' — no sos dueño de esta playlist' : f.status === 401 ? ' — token inválido' : '';
-        return `"${pl?.title || f.playlistId}" (${f.error}${statusHint})`;
+        const pair = pairs.find(p => p.track.id === f.trackId && p.playlist.id === f.playlistId);
+        const statusHint = f.status === 403 ? ' — no sos dueño' : f.status === 401 ? ' — token inválido' : '';
+        return `"${pair?.track.title || f.trackId}" en "${pair?.playlist.title || f.playlistId}" (${f.error}${statusHint})`;
       }).join('\n');
-      resultMsg += `⚠️ No se pudo eliminar de:\n${names}`;
+      resultMsg += `⚠️ No se pudo eliminar:\n${names}`;
     }
 
     resultEl.style.display    = 'block';
