@@ -72,41 +72,60 @@ export default async function handler(req, res) {
 
   // Step 2: exchange authorization code for tokens + auto-save to KV
   if (code) {
-    const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
-      headers: {
-        Authorization:  `Basic ${creds}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type:   'authorization_code',
-        code,
-        redirect_uri: redirectUri,
-      }),
-    });
-    const data = await tokenRes.json();
-    if (!tokenRes.ok) return res.status(500).json(data);
+    try {
+      const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+      const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: {
+          Authorization:  `Basic ${creds}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type:   'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+        }),
+      });
 
-    // Fetch user profile to get Spotify user ID
-    const meRes = await fetch('https://api.spotify.com/v1/me', {
-      headers: { Authorization: `Bearer ${data.access_token}` },
-    });
-    const me = await meRes.json();
+      const tokenText = await tokenRes.text();
+      console.log('Spotify token response:', tokenText.slice(0, 200));
+      let data;
+      try { data = JSON.parse(tokenText); } catch (e) {
+        return res.status(500).send(`<pre style="padding:2rem">Error parsing Spotify token response:\n${tokenText}</pre>`);
+      }
+      if (!tokenRes.ok) return res.status(500).send(`<pre style="padding:2rem">Spotify token error: ${JSON.stringify(data)}</pre>`);
 
-    // Auto-save refresh token to Upstash KV keyed by Spotify user ID
-    await kvSet(`spotify:owner:${me.id}`, data.refresh_token);
-    console.log(`Saved Spotify token for: ${me.id} (${me.display_name})`);
+      // Fetch user profile to get Spotify user ID
+      const meRes = await fetch('https://api.spotify.com/v1/me', {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+      const meText = await meRes.text();
+      let me;
+      try { me = JSON.parse(meText); } catch (e) {
+        return res.status(500).send(`<pre style="padding:2rem">Error parsing /me response:\n${meText}</pre>`);
+      }
 
-    return res.send(`
-      <html><body style="font-family:monospace;padding:2rem;background:#111;color:#eee;max-width:600px;margin:0 auto">
-        <h2 style="color:#1db954">✅ Autorización exitosa</h2>
-        <p><strong>Cuenta:</strong> ${me.display_name || '—'} (${me.email || '—'})</p>
-        <p><strong>ID Spotify:</strong> <code style="background:#222;padding:2px 6px">${me.id}</code></p>
-        <p style="color:#aaa;margin-top:1.5rem">El token fue guardado automáticamente. Ya podés cerrar esta página.</p>
-        <p style="color:#555;font-size:12px;margin-top:2rem">Ver todos los autorizados: <a style="color:#555" href="/api/spotify-auth?action=owners">/api/spotify-auth?action=owners</a></p>
-      </body></html>
-    `);
+      // Auto-save refresh token to Upstash KV keyed by Spotify user ID
+      try {
+        await kvSet(`spotify:owner:${me.id}`, data.refresh_token);
+        console.log(`Saved Spotify token for: ${me.id} (${me.display_name})`);
+      } catch (kvErr) {
+        console.error('KV save failed (non-fatal):', kvErr.message);
+      }
+
+      return res.send(`
+        <html><body style="font-family:monospace;padding:2rem;background:#111;color:#eee;max-width:600px;margin:0 auto">
+          <h2 style="color:#1db954">✅ Autorización exitosa</h2>
+          <p><strong>Cuenta:</strong> ${me.display_name || '—'} (${me.email || '—'})</p>
+          <p><strong>ID Spotify:</strong> <code style="background:#222;padding:2px 6px">${me.id}</code></p>
+          <p style="color:#aaa;margin-top:1.5rem">El token fue guardado automáticamente. Ya podés cerrar esta página.</p>
+          <p style="color:#555;font-size:12px;margin-top:2rem">Ver todos los autorizados: <a style="color:#555" href="/api/spotify-auth?action=owners">/api/spotify-auth?action=owners</a></p>
+        </body></html>
+      `);
+    } catch (e) {
+      console.error('Auth callback error:', e.message, e.stack);
+      return res.status(500).send(`<pre style="padding:2rem;color:red">Error: ${e.message}</pre>`);
+    }
   }
 
   // List all stored owner tokens
