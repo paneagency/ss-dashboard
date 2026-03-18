@@ -5368,6 +5368,7 @@ async function executeSpotifyRemove() {
       }),
     });
     const data = await resp.json();
+    console.log('[spotify-remove] response:', data);
 
     const resultEl = document.getElementById('spotify-remove-result');
     if (!resp.ok) {
@@ -5387,15 +5388,17 @@ async function executeSpotifyRemove() {
     if (data.failed?.length) {
       const names = data.failed.map(f => {
         const pl = playlists.find(p => p.id === f.playlistId);
-        return `"${pl?.title || f.playlistId}" (${f.error})`;
-      }).join(', ');
-      resultMsg += `⚠️ No se pudo eliminar de: ${names}.`;
+        const statusHint = f.status === 403 ? ' — no sos dueño de esta playlist' : f.status === 401 ? ' — token inválido' : '';
+        return `"${pl?.title || f.playlistId}" (${f.error}${statusHint})`;
+      }).join('\n');
+      resultMsg += `⚠️ No se pudo eliminar de:\n${names}`;
     }
 
     resultEl.style.display    = 'block';
     resultEl.style.background = data.failed?.length ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)';
     resultEl.style.border     = data.failed?.length ? '1px solid rgba(245,158,11,0.3)' : '1px solid rgba(16,185,129,0.3)';
     resultEl.style.color      = data.failed?.length ? 'var(--amber)' : 'var(--green)';
+    resultEl.style.whiteSpace = 'pre-wrap';
     resultEl.textContent      = resultMsg;
 
     // Espera breve para que lea el resultado, luego archiva

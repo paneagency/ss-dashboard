@@ -59,8 +59,13 @@ export default async function handler(req, res) {
       if (r.ok) {
         results.success.push(playlistId);
       } else {
-        const err = await r.json();
-        results.failed.push({ playlistId, error: err.error?.message || `HTTP ${r.status}` });
+        let errMsg = `HTTP ${r.status}`;
+        try {
+          const errBody = await r.json();
+          errMsg = errBody.error?.message || errBody.error_description || errBody.error || errMsg;
+          console.error(`Spotify DELETE playlist ${playlistId} failed ${r.status}:`, JSON.stringify(errBody));
+        } catch (_) { /* response not JSON */ }
+        results.failed.push({ playlistId, status: r.status, error: errMsg });
       }
     } catch (e) {
       results.failed.push({ playlistId, error: e.message });
