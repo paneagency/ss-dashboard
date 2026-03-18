@@ -1,14 +1,25 @@
 // Removes tracks from Spotify playlists using the stored refresh token.
+// Supports multiple playlist owners via Upstash KV (key: spotify:owner:{userId}).
+// Falls back to SPOTIFY_REFRESH_TOKEN env var if no owner-specific token is found.
 // POST body: { trackIds: string[], playlistIds: string[] }
 // Returns:   { success: string[], failed: { playlistId, error }[] }
 
-async function getWriteToken() {
+async function kvGet(key) {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['GET', key]),
+  });
+  const data = await r.json();
+  return data.result || null;
+}
+
+async function getAccessTokenFromRefresh(refreshToken) {
   const clientId     = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-  const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
-
-  if (!refreshToken) throw new Error('SPOTIFY_REFRESH_TOKEN no configurado en Vercel');
-
   const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const res = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
@@ -21,10 +32,15 @@ async function getWriteToken() {
       refresh_token: refreshToken,
     }),
   });
-
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || 'Spotify token refresh failed');
   return data.access_token;
+}
+
+async function getDefaultToken() {
+  const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
+  if (!refreshToken) throw new Error('SPOTIFY_REFRESH_TOKEN no configurado en Vercel');
+  return await getAccessTokenFromRefresh(refreshToken);
 }
 
 export default async function handler(req, res) {
@@ -35,25 +51,51 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'trackIds y playlistIds requeridos' });
   }
 
-  let token;
+  // Get default token (used for metadata fetching and as fallback)
+  let defaultToken;
   try {
-    token = await getWriteToken();
+    defaultToken = await getDefaultToken();
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 
-  const tracks  = trackIds.map(id => ({ uri: `spotify:track:${id}` }));
-  const results = { success: [], failed: [] };
+  const tracks     = trackIds.map(id => ({ uri: `spotify:track:${id}` }));
+  const results    = { success: [], failed: [] };
+  const tokenCache = {}; // ownerId → accessToken (avoid re-fetching per owner)
 
   for (const playlistId of playlistIds) {
     try {
-      // Check playlist metadata for debugging
+      // Get playlist metadata to find owner
       const plMeta = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=collaborative,owner`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${defaultToken}` },
       });
+
+      let token = defaultToken;
+
       if (plMeta.ok) {
-        const meta = await plMeta.json();
-        console.log(`Playlist ${playlistId}: collaborative=${meta.collaborative}, owner=${meta.owner?.id}`);
+        const meta    = await plMeta.json();
+        const ownerId = meta.owner?.id;
+        console.log(`Playlist ${playlistId}: collaborative=${meta.collaborative}, owner=${ownerId}`);
+
+        if (ownerId) {
+          if (tokenCache[ownerId]) {
+            token = tokenCache[ownerId];
+          } else {
+            // Look up owner-specific token in KV
+            const ownerRefresh = await kvGet(`spotify:owner:${ownerId}`);
+            if (ownerRefresh) {
+              try {
+                token = await getAccessTokenFromRefresh(ownerRefresh);
+                tokenCache[ownerId] = token;
+                console.log(`Using KV token for owner: ${ownerId}`);
+              } catch (e) {
+                console.warn(`Failed to refresh token for owner ${ownerId}, using default. Error: ${e.message}`);
+              }
+            } else {
+              console.log(`No KV token for owner ${ownerId}, using default`);
+            }
+          }
+        }
       }
 
       const r = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
