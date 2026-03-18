@@ -2125,12 +2125,29 @@ function renderTodayPanel() {
   const rows = allData.filter(r => r.fecha.toDateString() === targetStr)
                       .sort((a, b) => allData.indexOf(b) - allData.indexOf(a));
 
+  // Regalos del día (desde _campanias, no están en allData)
+  const todayIso = `${target.getFullYear()}-${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')}`;
+  const regalosHoy = (_campanias || []).filter(c => c.estado === 'regalo' && c.fechaInicio === todayIso);
+
   window._todayRows = rows;
   const totalFinal  = sum(rows, r => r.final);
   const totalPrecio = sum(rows, r => r.precio);
 
   const navBtn = (dir, disabled) => `
     <button onclick="_panelDayOffset+=(${dir});renderTodayPanel()" ${disabled?'disabled':''} style="background:none;border:1px solid var(--border2);color:${disabled?'var(--muted2)':'var(--muted)'};border-radius:6px;width:28px;height:28px;cursor:${disabled?'default':'pointer'};font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.15s" ${disabled?'':` onmouseover="this.style.borderColor='var(--indigo)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'"`}>${dir===-1?'←':'→'}</button>`;
+
+  const regalos_html = regalosHoy.map(camp => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="width:36px;height:36px;border-radius:10px;background:rgba(251,191,36,0.15);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🎁</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${camp.artista}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${camp.vendedor} · Regalo 7 días</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-right:4px">
+        <div style="font-size:13px;font-weight:700;color:#f0b429">🎁 Regalo</div>
+      </div>
+      ${canEdit ? `<button onclick="deleteRegalo(${camp.row})" title="Eliminar regalo" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>` : ''}
+    </div>`).join('');
 
   const rows_html = rows.length ? rows.map((r, idx) => {
     // Resolver campaña: primero por campaignId (col L), fallback a match por precio
@@ -2165,7 +2182,7 @@ function renderTodayPanel() {
       ` : ''}
     </div>`;
   }).join('')
-  : `<div class="empty-state" style="padding:28px 0"><div class="empty-icon">🌙</div><div>Sin ventas registradas</div></div>`;
+  : (!regalosHoy.length ? `<div class="empty-state" style="padding:28px 0"><div class="empty-icon">🌙</div><div>Sin ventas registradas</div></div>` : '');
 
   panel.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -2184,7 +2201,7 @@ function renderTodayPanel() {
         </div>
       </div>
     </div>
-    <div style="max-height:280px;overflow-y:auto;margin-top:8px">${rows_html}</div>`;
+    <div style="max-height:280px;overflow-y:auto;margin-top:8px">${regalos_html}${rows_html}</div>`;
 }
 
 function renderMonthsPanel() {
@@ -4203,13 +4220,17 @@ function renderResumenCampaniasHoy() {
     const hasPauta  = !!c.pauta;
     const hasGastos = !!c.detalleGastos;
     const hasNotas  = !!c.notas;
+    const esRegalo  = c.estado === 'regalo';
     const pautaEsc  = hasPauta  ? formatPauta(c.pauta) : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+    const badgeBg   = esRegalo ? 'rgba(251,191,36,0.15)' : 'rgba(245,158,11,0.15)';
+    const badgeColor= esRegalo ? '#f0b429' : 'var(--amber)';
+    const borderColor = esRegalo ? 'rgba(251,191,36,0.45)' : 'rgba(245,158,11,0.4)';
     return `
-    <div class="campania-card" id="camp-card-${idx}" style="border-color:rgba(245,158,11,0.4);${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
-      <div class="campania-badge" style="background:rgba(245,158,11,0.15);color:var(--amber)">
-        Hoy<span class="badge-days-label"></span>
+    <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
+      <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
+        ${esRegalo ? '🎁' : 'Hoy'}<span class="badge-days-label">${esRegalo ? 'regalo' : ''}</span>
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
@@ -5318,6 +5339,27 @@ async function deleteSale(idx) {
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
 
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function deleteRegalo(campRow) {
+  const camp = (_campanias || []).find(c => c.row === campRow);
+  if (!camp) return;
+  if (!confirm(`¿Eliminar el regalo para "${camp.artista}"?\nSe borrará del calendario.`)) return;
+  try {
+    const resp = await fetch('/api/campaign', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, estado: 'eliminada' }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    showToast(`Regalo de "${camp.artista}" eliminado`, 'success');
+    _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
+    await loadCampanias();
+    renderTodayPanel();
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
   }
