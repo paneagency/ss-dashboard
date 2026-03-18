@@ -5297,7 +5297,8 @@ function parsePautaSpotify(pauta) {
     const trackMatch = line.match(/spotify\.com(?:\/intl-[^/]+)?\/track\/([A-Za-z0-9]+)/);
     if (trackMatch) { tracks.push({ id: trackMatch[1], title: prevLine(), url: line }); continue; }
     const plMatch = line.match(/spotify\.com(?:\/intl-[^/]+)?\/playlist\/([A-Za-z0-9]+)/);
-    if (plMatch) playlists.push({ id: plMatch[1], title: prevLine(), url: line });
+    if (plMatch && !playlists.some(p => p.id === plMatch[1]))
+      playlists.push({ id: plMatch[1], title: prevLine(), url: line });
   }
   return { tracks, playlists };
 }
