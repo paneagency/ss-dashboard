@@ -6,8 +6,8 @@
 //   ?action=whoami  → muestra cuenta del SPOTIFY_REFRESH_TOKEN env var (legacy)
 
 async function kvSet(key, value) {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
   if (!url || !token) return;
   await fetch(url, {
     method: 'POST',
@@ -17,8 +17,8 @@ async function kvSet(key, value) {
 }
 
 async function kvGet(key) {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
   if (!url || !token) return null;
   const r = await fetch(url, {
     method: 'POST',
@@ -29,17 +29,23 @@ async function kvGet(key) {
   return data.result || null;
 }
 
-async function kvKeys(pattern) {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+async function kvScan(pattern) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
   if (!url || !token) return [];
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(['KEYS', pattern]),
-  });
-  const data = await r.json();
-  return data.result || [];
+  const keys = [];
+  let cursor = 0;
+  do {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SCAN', cursor, 'MATCH', pattern, 'COUNT', 100]),
+    });
+    const data = await r.json();
+    cursor = parseInt(data.result?.[0] || 0);
+    keys.push(...(data.result?.[1] || []));
+  } while (cursor !== 0);
+  return keys;
 }
 
 export default async function handler(req, res) {
@@ -105,7 +111,7 @@ export default async function handler(req, res) {
 
   // List all stored owner tokens
   if (action === 'owners') {
-    const keys = await kvKeys('spotify:owner:*');
+    const keys = await kvScan('spotify:owner:*');
     if (!keys.length) {
       return res.send(`
         <html><body style="font-family:monospace;padding:2rem;background:#111;color:#eee;max-width:600px;margin:0 auto">
