@@ -833,15 +833,32 @@ module.exports = async (req, res) => {
 
       const calResult = await deleteCalEvents(cal, vendedor, masterEventId, vendorEventId);
 
+      const ts = new Date().toISOString();
+      const updateData = [
+        { range: `${CAMPANAS_SHEET}!H${row}`, values: [[estadoFinal]] },
+        { range: `${CAMPANAS_SHEET}!U${row}`, values: [[ts]] },
+      ];
+
+      // Si hay masterEventId, finalizar también todas las demás filas que lo compartan (campañas grupales)
+      if (masterEventId) {
+        const allResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:H`,
+        });
+        const allRows = (allResp.data.values || []).slice(1);
+        allRows.forEach((r, i) => {
+          const rowNum = i + 2;
+          if (rowNum !== row && (r[5] || '') === masterEventId &&
+              ['activa', 'pendiente_pago', 'prueba', 'regalo'].includes(r[7] || '')) {
+            updateData.push({ range: `${CAMPANAS_SHEET}!H${rowNum}`, values: [[estadoFinal]] });
+            updateData.push({ range: `${CAMPANAS_SHEET}!U${rowNum}`, values: [[ts]] });
+          }
+        });
+      }
+
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
-        requestBody: {
-          valueInputOption: 'USER_ENTERED',
-          data: [
-            { range: `${CAMPANAS_SHEET}!H${row}`, values: [[estadoFinal]] },
-            { range: `${CAMPANAS_SHEET}!U${row}`, values: [[new Date().toISOString()]] },
-          ],
-        },
+        requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
       });
 
       // Actualizar ESTADO en Clientes si no quedan campañas activas para este artista
