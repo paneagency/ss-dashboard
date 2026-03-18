@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id:     clientId,
-      scope:         'playlist-modify-public playlist-modify-private',
+      scope:         'playlist-modify-public playlist-modify-private playlist-read-private playlist-read-collaborative user-read-private user-read-email',
       redirect_uri:  redirectUri,
     });
     return res.redirect(`https://accounts.spotify.com/authorize?${params}`);

@@ -47,6 +47,15 @@ export default async function handler(req, res) {
 
   for (const playlistId of playlistIds) {
     try {
+      // Check playlist metadata for debugging
+      const plMeta = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=collaborative,owner`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (plMeta.ok) {
+        const meta = await plMeta.json();
+        console.log(`Playlist ${playlistId}: collaborative=${meta.collaborative}, owner=${meta.owner?.id}`);
+      }
+
       const r = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
         method: 'DELETE',
         headers: {
