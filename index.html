@@ -2146,7 +2146,10 @@ function renderTodayPanel() {
       <div style="text-align:right;flex-shrink:0;margin-right:4px">
         <div style="font-size:13px;font-weight:700;color:#f0b429">🎁 Regalo</div>
       </div>
-      ${canEdit ? `<button onclick="deleteRegalo(${camp.row})" title="Eliminar regalo" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>` : ''}
+      ${canEdit ? `
+        <button onclick="openEditModal(${camp.row});event.stopPropagation()" title="Editar regalo" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--indigo)';this.style.background='rgba(99,102,241,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">⚙️</button>
+        <button onclick="deleteRegalo(${camp.row})" title="Eliminar regalo" style="background:none;border:none;cursor:pointer;color:var(--muted2);font-size:15px;padding:4px 6px;border-radius:6px;flex-shrink:0;transition:all 0.15s" onmouseover="this.style.color='var(--red)';this.style.background='rgba(248,81,73,0.1)'" onmouseout="this.style.color='var(--muted2)';this.style.background='none'">🗑</button>
+      ` : ''}
     </div>`).join('');
 
   const rows_html = rows.length ? rows.map((r, idx) => {
