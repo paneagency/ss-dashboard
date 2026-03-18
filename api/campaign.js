@@ -223,7 +223,7 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
 
 // ── Helpers: Calendar ──────────────────────────────────────────
 
-function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal) {
+function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal, regalo) {
   const parts = [];
   if (pauta) parts.push(pauta);
   // Solo agregar el link si no está ya incluido en la pauta
@@ -235,8 +235,9 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
   }
   const repTag = representante ? `[${representante}]` : '';
   const displayArtist = grupal ? 'Varios' : artista;
+  const giftPrefix = regalo ? '🎁 ' : '';
   return {
-    summary:     `(${vendedor})${repTag} - ${displayArtist}`,
+    summary:     `${giftPrefix}(${vendedor})${repTag} - ${displayArtist}`,
     description: parts.join('\n'),
     start: { date: fechaVencimiento },
     end:   { date: fechaVencimiento },
@@ -244,8 +245,8 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
   };
 }
 
-async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal) {
-  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal);
+async function createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal, regalo) {
+  const event       = buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metodo, pauta, link, gastosRows, representante, colorId, grupal, regalo);
   const vendorCalId = VENDOR_CALS[vendedor];
   const [masterRes, vendorRes] = await Promise.all([
     cal.events.insert({ calendarId: MASTER_CAL,    requestBody: event }),
@@ -438,7 +439,7 @@ module.exports = async (req, res) => {
           timestamp: r[20] || '',
           editadoPor: r[21] || '',
         }))
-        .filter(c => ['activa', 'pendiente_pago', 'prueba'].includes(c.estado) && c.artista);
+        .filter(c => ['activa', 'pendiente_pago', 'prueba', 'regalo'].includes(c.estado) && c.artista);
 
       if (vendedor && vendedor !== 'all')
         campanias = campanias.filter(c => c.vendedor === vendedor);
@@ -479,16 +480,16 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar, grupal, notas } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar, grupal, notas, regalo } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
 
       const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
       const esPrueba = (artista || '').toLowerCase().trim() === 'campedrinos';
-      const estadoCampana    = esPrueba ? 'prueba' : sinPago ? 'pendiente_pago' : 'activa';
-      // colorId: '6' = tangerine (naranja) para pendiente_pago, '2' = sage (verde) para activa
-      const calColorId = sinPago ? '6' : '2';
+      const estadoCampana    = regalo ? 'regalo' : esPrueba ? 'prueba' : sinPago ? 'pendiente_pago' : 'activa';
+      // colorId: '5' = banana (amarillo) para regalo, '6' = tangerine (naranja) para pendiente_pago, '2' = sage (verde) para activa
+      const calColorId = regalo ? '5' : sinPago ? '6' : '2';
 
       const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '', vendedor, metodo || '');
 
@@ -504,7 +505,7 @@ module.exports = async (req, res) => {
       let vendorEventId = req.body.vendorEventId || '';
       if (!skipCalendar) {
         try {
-          const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '', calColorId, grupal);
+          const ids = await createCalEvents(cal, artista, vendedor, fechaVencimiento, duracion, precio || 0, metodo || '', pauta || '', link || '', gastosRows || [], representante || '', calColorId, grupal, regalo);
           masterEventId = ids.masterEventId;
           vendorEventId = ids.vendorEventId;
         } catch(calErr) {
@@ -775,14 +776,14 @@ module.exports = async (req, res) => {
         const anchor = campRows.find(r =>
           (r[1] || '').toLowerCase().trim() === vendedor.toLowerCase().trim() &&
           (r[2] || '').trim() === fechaInicio &&
-          ['activa', 'pendiente_pago', 'prueba'].includes(r[7] || '')
+          ['activa', 'pendiente_pago', 'prueba', 'regalo'].includes(r[7] || '')
         );
         if (!anchor) return res.json({ ok: true, skipped: true });
         const sharedMasterId = anchor[5] || '';
         // Marcar como finalizada TODAS las campañas con ese masterEventId
         const toFinalize = campRows
           .map((r, i) => ({ r, i }))
-          .filter(({ r }) => r[5] === sharedMasterId && ['activa', 'pendiente_pago', 'prueba'].includes(r[7] || ''));
+          .filter(({ r }) => r[5] === sharedMasterId && ['activa', 'pendiente_pago', 'prueba', 'regalo'].includes(r[7] || ''));
         if (!toFinalize.length) return res.json({ ok: true, skipped: true });
         // Borrar evento de calendario (solo una vez)
         await deleteCalEvents(cal, vendedor, sharedMasterId, anchor[6] || '');
@@ -816,7 +817,7 @@ module.exports = async (req, res) => {
           const r = campRows[i];
           if ((r[0] || '').toLowerCase().trim() === artista.toLowerCase().trim() &&
               (!vendedor || (r[1] || '').toLowerCase().trim() === vendedor.toLowerCase().trim()) &&
-              ['activa', 'prueba', 'pendiente_pago'].includes(r[7] || '')) {
+              ['activa', 'prueba', 'pendiente_pago', 'regalo'].includes(r[7] || '')) {
             match = i;
             break;
           }
