@@ -74,8 +74,10 @@ async function billduRequest(method, path, body, apiKey, apiSecret) {
   const url = `${BILLDU_BASE}${path}?apiKey=${apiKey}&timestamp=${timestamp}&signature=${signature}`;
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body && method !== 'GET') opts.body = JSON.stringify(body);
+  console.log(`[Billdu] ${method} ${path} body=${body ? JSON.stringify(body).slice(0,200) : 'null'}`);
   const r    = await fetch(url, opts);
   const text = await r.text();
+  console.log(`[Billdu] ${method} ${path} → ${r.status}: ${text.slice(0, 500)}`);
   let data;
   try { data = JSON.parse(text); } catch (_) { data = text; }
   return { ok: r.ok, status: r.status, data };
