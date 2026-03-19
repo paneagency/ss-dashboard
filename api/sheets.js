@@ -5,7 +5,7 @@ const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
 const SHEET_GID      = 162664118;
 const SHEET_RANGE    = 'A:M'; // M = BILLDU_ID
 
-const BILLDU_BASE    = 'https://app.billdu.com/api/v3';
+const BILLDU_BASE    = 'https://api.billdu.com/v3';
 const BILLDU_METHODS = ['paypal', 'wise'];
 
 function getSheets() {
