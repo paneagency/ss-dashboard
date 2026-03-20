@@ -234,7 +234,7 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
     gastosRows.forEach(r => parts.push(`(${r.amount})${r.provider ? ' ' + r.provider : ''}`));
   }
   const repTag = representante ? `[${representante}]` : '';
-  const displayArtist = grupal ? 'Varios' : artista;
+  const displayArtist = artista;
   const giftPrefix = regalo ? '🎁 ' : '';
   return {
     summary:     `${giftPrefix}(${vendedor})${repTag} - ${displayArtist}`,
