@@ -812,7 +812,7 @@ module.exports = async (req, res) => {
         const allVals = (allResp.data.values || []).slice(1); // skip header
         siblingRows = allVals
           .map((r, i) => ({ rowNum: i + 2, masterId: r[0] || '', estado: r[2] || '' }))
-          .filter(r => r.masterId === masterEventId && r.estado === 'activa' && r.rowNum !== parseInt(row));
+          .filter(r => r.masterId === masterEventId && ['activa', 'pendiente_pago'].includes(r.estado) && r.rowNum !== parseInt(row));
       }
       const esGrupal = siblingRows.length > 0;
 
