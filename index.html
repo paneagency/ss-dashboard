@@ -3770,7 +3770,9 @@ function agruparPorEvento(camps) {
     seen.add(c.masterEventId);
     const group = camps.filter(x => x.masterEventId === c.masterEventId);
     if (group.length > 1) {
-      result.push({ ...c, artista: 'Varios', _grupalArtistas: group.map(x => x.artista) });
+      const uniqueArtistas = [...new Set(group.map(x => x.artista))];
+      const grupalArtista = uniqueArtistas.length === 1 ? uniqueArtistas[0] : 'Varios';
+      result.push({ ...c, artista: grupalArtista, _grupalArtistas: group.map(x => x.artista) });
     } else {
       result.push(c);
     }

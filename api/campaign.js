@@ -851,16 +851,20 @@ module.exports = async (req, res) => {
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '']] },
         });
-        // Actualizar masterEventId/vendorEventId en todos los siblings del grupo
+        // Actualizar masterEventId/vendorEventId (y artista si cambió) en todos los siblings del grupo
         if (siblingRows.length && newMasterId) {
-          await Promise.all(siblingRows.map(sib =>
-            sheets.spreadsheets.values.update({
+          const oldArtista = (oldRow[0] || '').trim();
+          const artistaCambio = artista && artista !== oldArtista;
+          await Promise.all(siblingRows.map(sib => {
+            const updates = [
+              { range: `${CAMPANAS_SHEET}!F${sib.rowNum}:G${sib.rowNum}`, values: [[newMasterId, newVendorId]] },
+              ...(artistaCambio ? [{ range: `${CAMPANAS_SHEET}!A${sib.rowNum}`, values: [[artista]] }] : []),
+            ];
+            return sheets.spreadsheets.values.batchUpdate({
               spreadsheetId: SPREADSHEET_ID,
-              range: `${CAMPANAS_SHEET}!F${sib.rowNum}:G${sib.rowNum}`,
-              valueInputOption: 'USER_ENTERED',
-              requestBody: { values: [[newMasterId, newVendorId]] },
-            })
-          ));
+              requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
+            });
+          }));
         }
       } else {
         // Marcar fila vieja como historial ('editada' o 'renovada') y agregar nueva fila activa
