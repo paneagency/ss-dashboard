@@ -1459,7 +1459,11 @@
         <button class="modal-close" onclick="maybeCloseRenovarModal()">✕</button>
       </div>
       <div class="modal-body">
-        <p id="renovar-artista-label" style="font-size:15px;font-weight:600;margin-bottom:14px;color:var(--text)"></p>
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:5px">Artista</label>
+          <input class="form-input" id="renovar-artista" type="text" placeholder="Nombre del artista">
+          <div id="renovar-vendedor-label" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+        </div>
 
         <!-- ── PAUTA — campo principal ───────────────────────── -->
         <div style="margin-bottom:12px">
@@ -5383,7 +5387,8 @@ function openRenovarModal(row) {
     c.masterEventId === camp.masterEventId && c.row !== camp.row && c.estado === 'activa'
   );
   const artistaLabel = esGrupalModal ? 'Varios' : camp.artista;
-  document.getElementById('renovar-artista-label').textContent = `${artistaLabel} — ${camp.vendedor}`;
+  document.getElementById('renovar-artista').value = artistaLabel;
+  document.getElementById('renovar-vendedor-label').textContent = camp.vendedor;
   document.getElementById('renovar-duracion').value = camp.duracion || 30;
   document.getElementById('renovar-fechavenc').value = camp.fechaVencimiento || '';
   document.getElementById('renovar-fecha').value = localDateStr(new Date());
@@ -5609,12 +5614,13 @@ async function submitEditarActual() {
       provider: r.querySelector('.gasto-provider').value.trim(),
     })).filter(r => r.amount > 0);
 
+    const artistaEdit = document.getElementById('renovar-artista').value.trim() || camp.artista;
     const resp = await fetch('/api/campaign', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         esEdicion: true,
-        row: camp.row, artista: camp.artista, vendedor: camp.vendedor,
+        row: camp.row, artista: artistaEdit, vendedor: camp.vendedor,
         duracion, fechaVencimiento,
         masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
         precio, gasto, metodo, pauta, notas, gastosRows, genero: camp.genero, representante,
@@ -5625,7 +5631,7 @@ async function submitEditarActual() {
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
 
     closeRenovarModal();
-    showToast(`✅ ${camp.artista} actualizada`, 'success');
+    showToast(`✅ ${artistaEdit} actualizada`, 'success');
     await loadCampanias();
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
