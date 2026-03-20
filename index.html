@@ -3794,10 +3794,12 @@ let _artistaDebounces = new WeakMap();
 
 function toggleMultiArtista() {
   _isMultiArtista = !_isMultiArtista;
-  const singleGroup = document.getElementById('single-artista-group');
-  const fArtista    = document.getElementById('f-artista');
-  singleGroup.style.display = _isMultiArtista ? 'none' : '';
-  fArtista.required = !_isMultiArtista;
+  const fArtista = document.getElementById('f-artista');
+  if (_isMultiArtista) {
+    fArtista.value = 'Varios';
+  } else {
+    fArtista.value = '';
+  }
 }
 
 function addArtistaRow(nombre, link) {
@@ -4043,10 +4045,7 @@ async function submitSale(e) {
     const _pautaLinkMatch = pauta.match(/https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/[A-Za-z0-9]+(?:\?[^\s]*)?/);
     const link     = _pautaLinkMatch ? _pautaLinkMatch[0] : '';
 
-    // Artista: modo single vs multi (para multi usa primer artista de la pauta)
-    const artista = _isMultiArtista
-      ? (parseArtistasFromPauta(pauta)[0]?.nombre || '')
-      : document.getElementById('f-artista').value.trim();
+    const artista = document.getElementById('f-artista').value.trim();
 
     if (!artista) { showToast('Ingresá el artista', 'error'); return; }
     if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
@@ -4055,8 +4054,8 @@ async function submitSale(e) {
     // El pago siempre se registra con la fecha de hoy (independientemente de la fecha de inicio de campaña)
     const todayPago = new Date();
     const fechaFmt = `${String(todayPago.getDate()).padStart(2,'0')}/${String(todayPago.getMonth()+1).padStart(2,'0')}/${todayPago.getFullYear()}`;
-    const esGrupal = _isMultiArtista && parseArtistasFromPauta(pauta).length > 1;
-    const sheetArtista = esGrupal ? 'Varios' : artista;
+    const esGrupal = _isMultiArtista && artista === 'Varios' && parseArtistasFromPauta(pauta).length > 1;
+    const sheetArtista = artista;
 
     // Leer duracion ANTES de POST para detectar regalo
     const duracionVal  = document.getElementById('f-duracion').value;
@@ -4185,9 +4184,7 @@ async function submitSinPago(e) {
     const spotifyArtistId  = window._spotifyArtistId || null;
     const spotifyImageUrl  = window._spotifyImageUrl  || null;
 
-    const artista = _isMultiArtista
-      ? (parseArtistasFromPauta(pauta)[0]?.nombre || '')
-      : document.getElementById('f-artista').value.trim();
+    const artista = document.getElementById('f-artista').value.trim();
 
     if (!artista) { showToast('Ingresá el artista', 'error'); return; }
     if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
@@ -4199,7 +4196,7 @@ async function submitSinPago(e) {
       provider: r.querySelector('.gasto-provider').value.trim(),
     })).filter(r => r.amount > 0);
 
-    const esGrupal = _isMultiArtista && parseArtistasFromPauta(pauta).length > 1;
+    const esGrupal = _isMultiArtista && artista === 'Varios' && parseArtistasFromPauta(pauta).length > 1;
     const artistasBase = esGrupal ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }];
     const artistasList = artistasBase.map(a => ({
       ...a,
