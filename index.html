@@ -5127,7 +5127,10 @@ function showCampCalDetail(evt, row) {
   // Si es parte de un grupo, construir objeto agrupado (igual que agruparPorEvento)
   if (c.masterEventId) {
     const group = _campanias.filter(x => x.masterEventId === c.masterEventId);
-    if (group.length > 1) c = { ...c, artista: 'Varios', _grupalArtistas: group.map(x => x.artista) };
+    if (group.length > 1) {
+      const uniqueArtistas = [...new Set(group.map(x => x.artista))];
+      c = { ...c, artista: uniqueArtistas.length === 1 ? uniqueArtistas[0] : 'Varios', _grupalArtistas: group.map(x => x.artista) };
+    }
   }
 
   const today = new Date(); today.setHours(0,0,0,0);
