@@ -713,7 +713,7 @@ module.exports = async (req, res) => {
         if (matchIdx !== -1) {
           const sheetRow = matchIdx + 1;
           const updateData = [
-            { range: `C${sheetRow}:D${sheetRow}`, values: [[metodo || '', nuevaComision]] },
+            { range: `C${sheetRow}:I${sheetRow}`, values: [[metodo || '', nuevaComision, precio || '', gasto || '', neto || '', margen || '', final || '']] },
             { range: `L${sheetRow}`, values: [[campaignId]] },
           ];
           await sheets.spreadsheets.values.batchUpdate({
