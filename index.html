@@ -5632,6 +5632,7 @@ async function submitEditarActual() {
 
     closeRenovarModal();
     showToast(`✅ ${artistaEdit} actualizada`, 'success');
+    _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
     await loadCampanias();
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';

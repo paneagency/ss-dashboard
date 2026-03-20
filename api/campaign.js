@@ -908,7 +908,9 @@ module.exports = async (req, res) => {
         }
         if (matchIdx !== -1) {
           const sheetRow = matchIdx + 1;
+          const oldArtista = (ventasRows[matchIdx][0] || '').trim();
           const updateData = [
+            ...(artista && artista !== oldArtista ? [{ range: `A${sheetRow}`, values: [[artista]] }] : []),
             { range: `C${sheetRow}:F${sheetRow}`, values: [[metodo || '', nuevaComision, precio || '', gasto || '']] },
             { range: `G${sheetRow}:I${sheetRow}`, values: [[`=(E${sheetRow} - F${sheetRow}) * (1 - D${sheetRow} / 100)`, `=BUSCARV(B${sheetRow}, Vendedores!A:B, 2, FALSO)`, `=G${sheetRow} * (1 - H${sheetRow} / 100)`]] },
             { range: `L${sheetRow}`, values: [[campaignId]] },
