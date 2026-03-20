@@ -4382,8 +4382,8 @@ function updateCobrarTotal() {
   const neto = (totalPrecio - totalGasto) * (1 - comisionPct / 100);
   const fmt$ = v => '$' + v.toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:2});
   document.getElementById('cobrar-total-display').innerHTML = `
-    <div style="font-size:22px;font-weight:800;color:var(--green)">${fmt$(neto)}</div>
-    <div style="font-size:12px;color:var(--muted)">${fmt$(totalPrecio)} bruto · gasto ${fmt$(totalGasto)} · ${checks.length} período${checks.length !== 1 ? 's' : ''}</div>`;
+    <div style="font-size:26px;font-weight:800;color:var(--text)">${fmt$(totalPrecio)}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">Final ${fmt$(neto)} · gasto ${fmt$(totalGasto)} · ${checks.length} período${checks.length !== 1 ? 's' : ''}</div>`;
   document.getElementById('cobrar-seleccion-btn').disabled = checks.length === 0;
 }
 
