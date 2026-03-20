@@ -4445,7 +4445,11 @@ function renderCampHistorial() {
   if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor);
   if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
-  if (_historialFilter !== 'todas') data = data.filter(c => c.estado === _historialFilter);
+  if (_historialFilter !== 'todas') data = data.filter(c =>
+    _historialFilter === 'finalizada'
+      ? (c.estado === 'finalizada' || c.estado === 'finalizada_regalo')
+      : c.estado === _historialFilter
+  );
 
   // Timestamp real para display (sin fallback a fechaVencimiento — evita mostrar fecha incorrecta)
   const getTs     = c => c.estado === 'editada'
@@ -4458,10 +4462,11 @@ function renderCampHistorial() {
   data = [...data].sort((a, b) => getSortTs(b).localeCompare(getSortTs(a)));
 
   const ESTADO_STYLES = {
-    finalizada: { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada' },
-    eliminada:  { bg: 'rgba(248,81,73,0.15)',  color: 'var(--red)',    label: 'Eliminada'  },
-    editada:    { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)',  label: 'Editada'    },
-    renovada:   { bg: 'rgba(16,185,129,0.12)', color: 'var(--green)', label: 'Renovada'   },
+    finalizada:         { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada'    },
+    finalizada_regalo:  { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada 🎁' },
+    eliminada:          { bg: 'rgba(248,81,73,0.15)',  color: 'var(--red)',    label: 'Eliminada'     },
+    editada:            { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)',  label: 'Editada'       },
+    renovada:           { bg: 'rgba(16,185,129,0.12)', color: 'var(--green)', label: 'Renovada'      },
   };
 
   const pillStyle = f => {
@@ -4476,7 +4481,7 @@ function renderCampHistorial() {
   const pills = [
     { key: 'todas',      label: 'Todas (' + countBase.length + ')' },
     { key: 'editada',    label: 'Editadas' },
-    { key: 'finalizada', label: 'No renovó' },
+    { key: 'finalizada', label: 'No renovó' },  // incluye finalizada_regalo al filtrar
     { key: 'eliminada',  label: 'Eliminadas' },
   ].map(p => `<span style="${pillStyle(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
 
@@ -5430,7 +5435,7 @@ async function executeNoRenueva(closeModal = false) {
     const resp = await fetch('/api/campaign', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor }),
+      body: JSON.stringify({ row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, ...(camp.estado === 'regalo' ? { estado: 'finalizada_regalo' } : {}) }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);

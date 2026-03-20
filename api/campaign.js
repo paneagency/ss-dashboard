@@ -390,7 +390,7 @@ module.exports = async (req, res) => {
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A:V`,
         });
-        const HIST_STATES = ['finalizada', 'eliminada', 'editada', 'renovada'];
+        const HIST_STATES = ['finalizada', 'finalizada_regalo', 'eliminada', 'editada', 'renovada'];
         let historial = (resp.data.values || []).slice(1)
           .map((r, i) => ({
             row: i + 2,
