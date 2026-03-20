@@ -1372,6 +1372,85 @@
     </div>
   </div>
 
+  <!-- Modal: Extender campaña sin pago -->
+  <div id="modal-extender" class="modal-overlay" style="display:none" onclick="if(event.target===this)document.getElementById('modal-extender').style.display='none'">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">↗ Extender período</span>
+        <button class="modal-close" onclick="document.getElementById('modal-extender').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="ext-artista-label" style="font-size:15px;font-weight:600;margin-bottom:14px;color:var(--text)"></p>
+
+        <div style="margin-bottom:12px">
+          <label style="font-size:13px;font-weight:700;color:var(--text);display:block;margin-bottom:6px">Pauta <span style="color:var(--muted);font-weight:400;font-size:12px">/ Promoción</span></label>
+          <textarea class="form-input" id="ext-pauta" rows="5" placeholder="Pauta del nuevo período..." style="resize:vertical;border-color:rgba(14,165,233,0.4);background:rgba(14,165,233,0.03);padding:12px 14px"></textarea>
+        </div>
+
+        <div style="margin-bottom:18px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:0.4px;display:block;margin-bottom:5px">Notas</label>
+          <textarea class="form-input" id="ext-notas" rows="2" placeholder="Anotaciones internas..." style="resize:vertical;line-height:1.4;font-size:12px"></textarea>
+        </div>
+
+        <div class="nv-grid">
+          <div class="nv-dates">
+            <div class="form-group">
+              <label class="form-label">Duración<span>*</span></label>
+              <select class="form-input" id="ext-duracion" onchange="updateExtVencimiento()">
+                <option value="7">7 días</option>
+                <option value="14">14 días</option>
+                <option value="30" selected>30 días</option>
+                <option value="60">60 días</option>
+                <option value="90">90 días</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vence el</label>
+              <input class="form-input" id="ext-fechavenc" type="date">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Precio bruto</label>
+            <input class="form-input" id="ext-precio" type="number" step="0.01" min="0" placeholder="0.00">
+          </div>
+
+          <div class="form-group full">
+            <label class="form-label">Gasto / Proveedores</label>
+            <div id="ext-gasto-rows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addExtGastoRow()" style="margin-top:6px;font-size:12px">+ Agregar proveedor</button>
+            <input type="hidden" id="ext-gasto" value="0">
+          </div>
+        </div>
+
+        <div id="ext-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-extender').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" id="extender-submit-btn" onclick="submitExtender()" style="background:rgba(14,165,233,0.2);border-color:rgba(14,165,233,0.5);color:#38bdf8">Extender período</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Seleccionar períodos a cobrar -->
+  <div id="modal-cobrar-seleccion" class="modal-overlay" style="display:none" onclick="if(event.target===this)document.getElementById('modal-cobrar-seleccion').style.display='none'">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <span class="modal-title">💳 Seleccionar períodos a cobrar</span>
+        <button class="modal-close" onclick="document.getElementById('modal-cobrar-seleccion').style.display='none'">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="cobrar-artista-label" style="font-size:15px;font-weight:600;margin-bottom:14px;color:var(--text)"></p>
+        <div id="cobrar-periodos-list" style="margin-bottom:16px"></div>
+        <div id="cobrar-total-display" style="text-align:center;padding:12px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-cobrar-seleccion').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" id="cobrar-seleccion-btn" onclick="submitCobrarConSeleccion()" style="background:rgba(16,185,129,0.2);border-color:rgba(16,185,129,0.5);color:var(--green)">Registrar cobro</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Renovar campaña -->
   <div id="renovar-modal" class="modal-overlay" onclick="if(event.target===this)maybeCloseRenovarModal()">
     <div class="modal">
@@ -4164,46 +4243,62 @@ async function submitSinPago(e) {
 async function cobrarCampania(row) {
   const c = _campanias.find(c => c.row === row);
   if (!c) return;
-  if (!confirm(`¿Registrar el cobro de ${c.artista}?\n\nSe creará la venta por $${c.precio} (${c.metodo}) y la campaña pasará a activa.`)) return;
 
+  // Fetch extendidas for this masterEventId
+  let extendidas = [];
+  if (c.masterEventId) {
+    try {
+      const r = await fetch(`/api/campaign?mode=extendidas&masterEventId=${encodeURIComponent(c.masterEventId)}`);
+      const d = await r.json();
+      extendidas = d.extendidas || [];
+    } catch(e) {}
+  }
+
+  if (extendidas.length > 0) {
+    // Show selection modal
+    openCobrarSeleccionModal(c, extendidas);
+  } else {
+    // Simple cobrar (existing flow)
+    if (!confirm(`¿Registrar el cobro de ${c.artista}?\n\nSe creará la venta por $${c.precio} (${c.metodo}) y la campaña pasará a activa.`)) return;
+    await executeCobrar(c, [], parseFloat(c.precio) || 0, parseFloat(c.gasto) || 0);
+  }
+}
+
+async function executeCobrar(camp, extraRows, totalPrecio, totalGasto) {
   try {
-    // 1. Marcar como cobrada en campaign
+    // 1. Marcar como cobrada en campaign (y marcar extendidas)
     const r1 = await fetch('/api/campaign', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'cobrar', row, masterEventId: c.masterEventId, vendorEventId: c.vendorEventId, vendedor: c.vendedor }),
+      body: JSON.stringify({ mode: 'cobrar', row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, extraRows }),
     });
     if (!r1.ok) throw new Error('Error actualizando campaña');
 
-    // 2. Registrar venta en sheet principal
-    const comisionPct = (({ 'PayPal':11,'Wise':5.2,'Mercado Pago':11,'Transferencia Ars':1,'Sin Comision':0 })[c.metodo] ?? 0);
-    const precio = parseFloat(c.precio) || 0;
-    const gasto  = parseFloat(c.gasto)  || 0;
-    const neto   = (precio - gasto) * (1 - comisionPct / 100);
-    const today  = new Date();
+    // 2. Registrar venta en sheet principal con totales acumulados
+    const comisionPct = (({ 'PayPal':11,'Wise':5.2,'Mercado Pago':11,'Transferencia Ars':1,'Sin Comision':0 })[camp.metodo] ?? 0);
+    const neto = (totalPrecio - totalGasto) * (1 - comisionPct / 100);
+    const today = new Date();
     const fechaFmt = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
-    const sheetRow = [c.artista, c.vendedor, c.metodo, comisionPct, precio, gasto, +neto.toFixed(2), '', '', fechaFmt, c.genero || 'Sin género'];
+    const sheetRow = [camp.artista, camp.vendedor, camp.metodo, comisionPct, totalPrecio, totalGasto, +neto.toFixed(2), '', '', fechaFmt, camp.genero || 'Sin género'];
     const r2 = await fetch('/api/sheets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: sheetRow }),
+      body: JSON.stringify({ values: sheetRow, campaignId: camp.campaignId }),
     });
     if (!r2.ok) throw new Error('Error registrando venta');
 
-    showToast(`Cobro registrado para ${c.artista}`, 'success');
-    // Recargar campañas
-    _campaniasLoaded = false;
-    _campaniasLoading = false;
-    _historial = null;
+    const periodsCount = extraRows.length + 1;
+    showToast(`Cobro registrado para ${camp.artista}${periodsCount > 1 ? ` (${periodsCount} períodos)` : ''}`, 'success');
+
+    _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
     loadCampanias().catch(() => {});
-    // Agregar fila localmente para reflejar la venta sin recargar el CSV
-    const today2 = new Date();
-    const fecha2 = new Date(today2.getFullYear(), today2.getMonth(), today2.getDate());
+
+    // Agregar fila local
+    const fecha2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const newRow = {
-      artista: c.artista, venta: c.vendedor, metodo: c.metodo || '',
-      genero: c.genero || 'Sin género',
-      comision: 0, precio: parseFloat(c.precio) || 0,
-      gasto: parseFloat(c.gasto) || 0, neto: +neto.toFixed(2),
+      artista: camp.artista, venta: camp.vendedor, metodo: camp.metodo || '',
+      genero: camp.genero || 'Sin género',
+      comision: 0, precio: totalPrecio, gasto: totalGasto, neto: +neto.toFixed(2),
       margen: 0, final: +neto.toFixed(2),
       fecha: fecha2, monthKey: monthKey(fecha2), _addedAt: Date.now(),
     };
@@ -4212,9 +4307,225 @@ async function cobrarCampania(row) {
     window._localSales.push(newRow);
     document.getElementById('badge-text').textContent = `${allData.length} registros`;
     applyFilters();
-
   } catch(err) {
     showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// ── Cobrar con selección de períodos ──────────────────────
+let _cobrarCamp = null;
+let _cobrarExtendidas = [];
+
+function openCobrarSeleccionModal(camp, extendidas) {
+  _cobrarCamp = camp;
+  _cobrarExtendidas = extendidas;
+
+  const fmtDate = s => s ? s.split('-').reverse().join('/') : '—';
+  const fmt$ = v => '$' + (parseFloat(v)||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:2});
+
+  // All periods: extendidas (oldest first) + current pendiente_pago
+  const allPeriods = [...extendidas.sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||'')), camp];
+
+  const listHtml = allPeriods.map((p, i) => {
+    const isLast = p.row === camp.row;
+    const label = isLast ? 'Período actual' : `Período ${i + 1}`;
+    const precio = parseFloat(p.precio) || 0;
+    const gasto = parseFloat(p.gasto) || 0;
+    return `
+    <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:6px;transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+      <input type="checkbox" class="cobrar-periodo-check" data-row="${p.row}" data-precio="${precio}" data-gasto="${gasto}" checked onchange="updateCobrarTotal()" style="margin-top:3px;accent-color:var(--indigo);width:16px;height:16px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${label} · ${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaVencimiento)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmt$(precio)} bruto · gasto ${fmt$(gasto)}</div>
+        ${p.pauta ? `<div style="font-size:11px;color:var(--muted2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(p.pauta.split('\n')[0]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
+      </div>
+    </label>`;
+  }).join('');
+
+  document.getElementById('cobrar-periodos-list').innerHTML = listHtml;
+  document.getElementById('cobrar-artista-label').textContent = camp.artista + ' — ' + camp.vendedor;
+  updateCobrarTotal();
+  document.getElementById('modal-cobrar-seleccion').style.display = 'flex';
+}
+
+function updateCobrarTotal() {
+  const checks = [...document.querySelectorAll('.cobrar-periodo-check:checked')];
+  const totalPrecio = checks.reduce((s, c) => s + parseFloat(c.dataset.precio || 0), 0);
+  const totalGasto  = checks.reduce((s, c) => s + parseFloat(c.dataset.gasto  || 0), 0);
+  const metodo = _cobrarCamp?.metodo || '';
+  const comisionPct = (({ 'PayPal':11,'Wise':5.2,'Mercado Pago':11,'Transferencia Ars':1,'Sin Comision':0 })[metodo] ?? 0);
+  const neto = (totalPrecio - totalGasto) * (1 - comisionPct / 100);
+  const fmt$ = v => '$' + v.toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:2});
+  document.getElementById('cobrar-total-display').innerHTML = `
+    <div style="font-size:22px;font-weight:800;color:var(--green)">${fmt$(neto)}</div>
+    <div style="font-size:12px;color:var(--muted)">${fmt$(totalPrecio)} bruto · gasto ${fmt$(totalGasto)} · ${checks.length} período${checks.length !== 1 ? 's' : ''}</div>`;
+  document.getElementById('cobrar-seleccion-btn').disabled = checks.length === 0;
+}
+
+async function submitCobrarConSeleccion() {
+  const camp = _cobrarCamp;
+  if (!camp) return;
+  const btn = document.getElementById('cobrar-seleccion-btn');
+  btn.disabled = true; btn.textContent = 'Registrando...';
+
+  try {
+    const checks = [...document.querySelectorAll('.cobrar-periodo-check:checked')];
+    const selectedRows = checks.map(c => parseInt(c.dataset.row));
+
+    const currentSelected = selectedRows.includes(camp.row);
+    const extraRows = selectedRows.filter(r => r !== camp.row);
+
+    if (!currentSelected && extraRows.length === 0) return;
+
+    const totalPrecio = checks.reduce((s, c) => s + parseFloat(c.dataset.precio || 0), 0);
+    const totalGasto  = checks.reduce((s, c) => s + parseFloat(c.dataset.gasto  || 0), 0);
+
+    document.getElementById('modal-cobrar-seleccion').style.display = 'none';
+
+    if (currentSelected) {
+      await executeCobrar(camp, extraRows, totalPrecio, totalGasto);
+    } else {
+      // Only marking extendidas as cobrada, not the current period
+      await fetch('/api/campaign', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'cobrar_extendidas_only', rows: extraRows }),
+      });
+      // Register sale for the selected extendidas
+      const comisionPct = (({ 'PayPal':11,'Wise':5.2,'Mercado Pago':11,'Transferencia Ars':1,'Sin Comision':0 })[camp.metodo] ?? 0);
+      const neto = (totalPrecio - totalGasto) * (1 - comisionPct / 100);
+      const today = new Date();
+      const fechaFmt = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+      const sheetRow = [camp.artista, camp.vendedor, camp.metodo, comisionPct, totalPrecio, totalGasto, +neto.toFixed(2), '', '', fechaFmt, camp.genero || 'Sin género'];
+      await fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values: sheetRow }) });
+
+      showToast(`Cobro parcial registrado para ${camp.artista} (${extraRows.length} períodos)`, 'success');
+      _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
+      loadCampanias().catch(() => {});
+
+      const fecha2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const newRow = { artista: camp.artista, venta: camp.vendedor, metodo: camp.metodo || '', genero: camp.genero || 'Sin género', comision: 0, precio: totalPrecio, gasto: totalGasto, neto: +neto.toFixed(2), margen: 0, final: +neto.toFixed(2), fecha: fecha2, monthKey: monthKey(fecha2), _addedAt: Date.now() };
+      allData.push(newRow); window._localSales = window._localSales || []; window._localSales.push(newRow);
+      document.getElementById('badge-text').textContent = `${allData.length} registros`;
+      applyFilters();
+    }
+  } catch(err) {
+    showToast('Error: ' + err.message, 'error');
+    btn.disabled = false; btn.textContent = 'Registrar cobro';
+  }
+}
+
+// ── Extender modal ─────────────────────────────────────────
+let _extenderRow = null;
+
+function openExtenderModal(row) {
+  const camp = _campanias.find(c => c.row === row);
+  if (!camp) return;
+  _extenderRow = row;
+
+  document.getElementById('ext-artista-label').textContent = camp.artista + ' — ' + camp.vendedor;
+  document.getElementById('ext-precio').value = camp.precio || '';
+  document.getElementById('ext-pauta').value = camp.pauta || '';
+  document.getElementById('ext-notas').value = camp.notas || '';
+
+  const durSelect = document.getElementById('ext-duracion');
+  durSelect.value = camp.duracion || 30;
+
+  updateExtVencimiento();
+
+  const gastosContainer = document.getElementById('ext-gasto-rows');
+  gastosContainer.innerHTML = '';
+  if (camp.detalleGastos) {
+    camp.detalleGastos.split('\n').filter(Boolean).forEach(line => {
+      const m = line.match(/^\(([0-9.]+)\)\s*(.*)/);
+      if (m) addExtGastoRow(parseFloat(m[1]), m[2].trim());
+    });
+  }
+  if (!gastosContainer.children.length) addExtGastoRow();
+  recalcularExtGasto();
+
+  document.getElementById('ext-error').style.display = 'none';
+  document.getElementById('extender-submit-btn').disabled = false;
+  document.getElementById('extender-submit-btn').textContent = 'Extender período';
+  document.getElementById('modal-extender').style.display = 'flex';
+}
+
+function updateExtVencimiento() {
+  const camp = _campanias.find(c => c.row === _extenderRow);
+  if (!camp) return;
+  const baseVenc = camp.fechaVencimiento; // YYYY-MM-DD
+  if (!baseVenc) return;
+  const durVal = document.getElementById('ext-duracion').value;
+  const dur = parseInt(durVal) || 30;
+  const [y, m, d] = baseVenc.split('-').map(Number);
+  let newDate;
+  if (dur <= 21) {
+    newDate = new Date(y, m - 1, d + dur);
+  } else {
+    const months = Math.round(dur / 30);
+    newDate = new Date(y, m - 1 + months, d);
+  }
+  document.getElementById('ext-fechavenc').value = localDateStr(newDate);
+}
+
+function addExtGastoRow(amount = '', provider = '') {
+  const container = document.getElementById('ext-gasto-rows');
+  const div = document.createElement('div');
+  div.className = 'gasto-row';
+  div.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
+  div.innerHTML = `
+    <span style="color:var(--muted);font-size:13px">$</span>
+    <input type="number" class="form-input gasto-amount" placeholder="Monto" value="${amount}" style="width:90px" oninput="recalcularExtGasto()">
+    <input type="text" class="form-input gasto-provider" list="list-proveedores" placeholder="Proveedor" value="${provider}" style="flex:1">
+    <button type="button" onclick="this.parentElement.remove();recalcularExtGasto()" style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:16px;padding:0 4px">✕</button>`;
+  container.appendChild(div);
+}
+
+function recalcularExtGasto() {
+  const total = [...document.querySelectorAll('#ext-gasto-rows .gasto-amount')]
+    .reduce((s, i) => s + (parseFloat(i.value) || 0), 0);
+  document.getElementById('ext-gasto').value = total || '';
+}
+
+async function submitExtender() {
+  const camp = _campanias.find(c => c.row === _extenderRow);
+  if (!camp) return;
+  const btn = document.getElementById('extender-submit-btn');
+  const errEl = document.getElementById('ext-error');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  errEl.style.display = 'none';
+  try {
+    const precio  = document.getElementById('ext-precio').value.trim();
+    const gasto   = document.getElementById('ext-gasto').value || '0';
+    const pauta   = document.getElementById('ext-pauta').value.trim();
+    const notas   = document.getElementById('ext-notas').value.trim();
+    const duracion = parseInt(document.getElementById('ext-duracion').value) || 30;
+    const fechaVencimiento = document.getElementById('ext-fechavenc').value;
+    const gastosRows = [...document.querySelectorAll('#ext-gasto-rows .gasto-row')].map(r => ({
+      amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
+      provider: r.querySelector('.gasto-provider').value.trim(),
+    })).filter(r => r.amount > 0);
+
+    const resp = await fetch('/api/campaign', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        esExtension: true,
+        row: camp.row, precio, gasto, pauta, notas, duracion, fechaVencimiento,
+        metodo: camp.metodo, gastosRows,
+        editadoPor: window._currentUser?.username || '',
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+
+    document.getElementById('modal-extender').style.display = 'none';
+    showToast(`↗ ${camp.artista} extendida al próximo período`, 'success');
+    await loadCampanias();
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Extender período';
   }
 }
 
@@ -4246,27 +4557,30 @@ function renderResumenCampaniasHoy() {
     const hasGastos = !!c.detalleGastos;
     const hasNotas  = !!c.notas;
     const esRegalo  = c.estado === 'regalo';
+    const sinPagoHoy = c.estado === 'pendiente_pago';
     const pautaEsc  = hasPauta  ? formatPauta(c.pauta) : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
-    const badgeBg   = esRegalo ? 'rgba(251,191,36,0.15)' : 'rgba(245,158,11,0.15)';
+    const badgeBg   = esRegalo ? 'rgba(251,191,36,0.15)' : sinPagoHoy ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.15)';
     const badgeColor= esRegalo ? '#f0b429' : 'var(--amber)';
-    const borderColor = esRegalo ? 'rgba(251,191,36,0.45)' : 'rgba(245,158,11,0.4)';
+    const borderColor = esRegalo ? 'rgba(251,191,36,0.45)' : sinPagoHoy ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.4)';
     return `
-    <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
+    <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor};${sinPagoHoy ? 'border-style:dashed;' : ''}${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
-        ${esRegalo ? '🎁' : 'Hoy'}<span class="badge-days-label">${esRegalo ? 'regalo' : ''}</span>
+        ${esRegalo ? '🎁' : sinPagoHoy ? '💳' : 'Hoy'}<span class="badge-days-label">${esRegalo ? 'regalo' : sinPagoHoy ? 'sin pago' : ''}</span>
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
         <div class="campania-meta">${c.vendedor} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
       </div>
       <div class="campania-actions" onclick="event.stopPropagation()">
+        ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
+        ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender período">↗ Extender</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
         <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
-        ${!esRegalo ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
+        ${!esRegalo && !sinPagoHoy ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
         <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
@@ -4450,7 +4764,9 @@ function renderCampHistorial() {
   if (_historialFilter !== 'todas') data = data.filter(c =>
     _historialFilter === 'finalizada'
       ? (c.estado === 'finalizada' || c.estado === 'finalizada_regalo')
-      : c.estado === _historialFilter
+      : _historialFilter === 'extendida'
+        ? (c.estado === 'extendida' || c.estado === 'cobrada')
+        : c.estado === _historialFilter
   );
 
   // Timestamp real para display (sin fallback a fechaVencimiento — evita mostrar fecha incorrecta)
@@ -4469,6 +4785,8 @@ function renderCampHistorial() {
     eliminada:          { bg: 'rgba(248,81,73,0.15)',  color: 'var(--red)',    label: 'Eliminada'     },
     editada:            { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)',  label: 'Editada'       },
     renovada:           { bg: 'rgba(16,185,129,0.12)', color: 'var(--green)', label: 'Renovada'      },
+    extendida:          { bg: 'rgba(14,165,233,0.15)', color: '#38bdf8',       label: 'Extendida 🔄'  },
+    cobrada:            { bg: 'rgba(16,185,129,0.12)', color: 'var(--green)', label: 'Cobrada ✅'    },
   };
 
   const pillStyle = f => {
@@ -4485,6 +4803,7 @@ function renderCampHistorial() {
     { key: 'editada',    label: 'Editadas' },
     { key: 'finalizada', label: 'No renovó' },  // incluye finalizada_regalo al filtrar
     { key: 'eliminada',  label: 'Eliminadas' },
+    { key: 'extendida',  label: 'Extendidas' },  // incluye cobrada al filtrar
   ].map(p => `<span style="${pillStyle(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
 
   if (!data.length) {
@@ -4662,6 +4981,7 @@ function renderCampList(data, today) {
       </div>
       <div class="campania-actions" onclick="event.stopPropagation()">
         ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
+        ${sinPago ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender período">↗ Extender</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
@@ -4811,6 +5131,7 @@ function showCampCalDetail(evt, row) {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${hasPauta||hasGastos?'10px':'0'}">
       ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${row});closeCampCalPopover()">💳 Cobrado</button>` : ''}
+      ${sinPago ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${row});closeCampCalPopover()">↗ Extender</button>` : ''}
       ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})">📋 Copiar pauta</button>` : ''}
       ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">💰 Gastos</button><div class="campania-expand" style="width:100%;margin-top:6px">${gastosEsc}</div>` : ''}
       ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">📝 Notas</button><div class="campania-expand" style="width:100%;margin-top:6px">${notasEsc}</div>` : ''}

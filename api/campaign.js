@@ -390,7 +390,7 @@ module.exports = async (req, res) => {
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A:V`,
         });
-        const HIST_STATES = ['finalizada', 'finalizada_regalo', 'eliminada', 'editada', 'renovada'];
+        const HIST_STATES = ['finalizada', 'finalizada_regalo', 'eliminada', 'editada', 'renovada', 'extendida', 'cobrada'];
         let historial = (resp.data.values || []).slice(1)
           .map((r, i) => ({
             row: i + 2,
@@ -414,6 +414,31 @@ module.exports = async (req, res) => {
         if (vendedor && vendedor !== 'all')
           historial = historial.filter(c => c.vendedor === vendedor);
         return res.json({ historial });
+      }
+
+      // Extendidas: períodos extendidos sin pago para un masterEventId
+      if (mode === 'extendidas') {
+        const masterEventId = req.query.masterEventId;
+        if (!masterEventId) return res.json({ extendidas: [] });
+        const resp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:V`,
+        });
+        const extendidas = (resp.data.values || []).slice(1)
+          .map((r, i) => ({
+            row: i + 2,
+            artista: r[0], vendedor: r[1],
+            fechaInicio: r[2], fechaVencimiento: r[3],
+            duracion: parseInt(r[4]) || 30,
+            masterEventId: r[5] || '',
+            estado: r[7] || '',
+            metodo: r[8] || '', precio: r[9] || '', gasto: r[10] || '',
+            detalleGastos: r[15] || '',
+            pauta: r[16] || '',
+            campaignId: r[19] || '',
+          }))
+          .filter(c => c.masterEventId === masterEventId && c.estado === 'extendida' && c.artista);
+        return res.json({ extendidas });
       }
 
       // Default: campañas activas
@@ -550,17 +575,102 @@ module.exports = async (req, res) => {
       return res.json({ ok: true });
     }
 
-    // ── PUT: cobrar campaña pendiente ─────────────────────────
-    if (req.method === 'PUT' && req.body.mode === 'cobrar') {
-      const { row, masterEventId, vendorEventId, vendedor } = req.body;
+    // ── PUT: extender campaña sin pago ───────────────────────
+    if (req.method === 'PUT' && req.body.esExtension) {
+      const { row, precio, gasto, metodo, pauta, gastosRows, duracion: duracionBody, fechaVencimiento: fechaVencBody, notas: notasBody, editadoPor } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
-      // Actualizar estado a 'activa' en sheet
-      await sheets.spreadsheets.values.update({
+      // Leer fila actual completa
+      const campResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!H${row}`,
+        range: `${CAMPANAS_SHEET}!A${row}:V${row}`,
+      });
+      const oldRow = campResp.data.values?.[0] || [];
+      const artista       = oldRow[0] || '';
+      const vendedor      = oldRow[1] || '';
+      const masterEventId = oldRow[5] || '';
+      const vendorEventId = oldRow[6] || '';
+      const genero        = oldRow[14] || '';
+      const representante = oldRow[17] || '';
+      const notas         = notasBody !== undefined ? notasBody : (oldRow[18] || '');
+      const duracion      = duracionBody || parseInt(oldRow[4]) || 30;
+
+      // Fecha vencimiento del período actual (base para el nuevo)
+      const baseVenc = oldRow[3] || new Date().toISOString().split('T')[0];
+      const nuevaFechaVenc = fechaVencBody || addDays(baseVenc, duracion);
+      // Fecha inicio del nuevo período = fecha vencimiento del anterior
+      const nuevaFechaInicio = baseVenc;
+
+      const ts = new Date().toISOString();
+      const campaignId = 'CP_' + Date.now();
+
+      const detalleGastos = (gastosRows || [])
+        .filter(r => r.amount > 0)
+        .map(r => `(${r.amount})${r.provider ? ' ' + r.provider : ''}`)
+        .join('\n');
+
+      const { neto, final, margen } = calcFinancials(precio, gasto, metodo || oldRow[8], vendedor);
+
+      // 1. Marcar fila actual como 'extendida'
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: [
+            { range: `${CAMPANAS_SHEET}!H${row}`, values: [['extendida']] },
+            { range: `${CAMPANAS_SHEET}!U${row}`, values: [[ts]] },
+            { range: `${CAMPANAS_SHEET}!V${row}`, values: [[editadoPor || '']] },
+          ],
+        },
+      });
+
+      // 2. Actualizar fecha de vencimiento en calendario (reusar masterEventId)
+      try {
+        const patchBody = { end: { date: nuevaFechaVenc } };
+        await Promise.allSettled([
+          masterEventId ? cal.events.patch({ calendarId: MASTER_CAL, eventId: masterEventId, requestBody: patchBody }) : null,
+          (vendorEventId && VENDOR_CALS[vendedor]) ? cal.events.patch({ calendarId: VENDOR_CALS[vendedor], eventId: vendorEventId, requestBody: patchBody }) : null,
+        ].filter(Boolean));
+      } catch(calErr) {
+        console.error('Calendar patch error (non-fatal):', calErr.message);
+      }
+
+      // 3. Agregar nueva fila pendiente_pago con el mismo masterEventId/vendorEventId
+      const appendResp = await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CAMPANAS_SHEET}!A:V`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [['activa']] },
+        requestBody: { values: [[artista, vendedor, nuevaFechaInicio, nuevaFechaVenc, duracion, masterEventId, vendorEventId, 'pendiente_pago', metodo || oldRow[8] || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts, editadoPor || '']] },
+      });
+      const updatedRange = appendResp.data?.updates?.updatedRange || '';
+      const rowMatch = updatedRange.match(/(\d+)$/);
+      const newCampaignRow = rowMatch ? parseInt(rowMatch[1]) : null;
+
+      return res.json({ ok: true, newCampaignRow, nuevaFechaVenc, campaignId });
+    }
+
+    // ── PUT: cobrar campaña pendiente ─────────────────────────
+    if (req.method === 'PUT' && req.body.mode === 'cobrar') {
+      const { row, masterEventId, vendorEventId, vendedor, extraRows } = req.body;
+      if (!row) return res.status(400).json({ error: 'row requerido' });
+
+      const ts = new Date().toISOString();
+      const updateData = [
+        { range: `${CAMPANAS_SHEET}!H${row}`, values: [['activa']] },
+        { range: `${CAMPANAS_SHEET}!U${row}`, values: [[ts]] },
+      ];
+
+      // Marcar extendidas seleccionadas como 'cobrada'
+      if (extraRows && extraRows.length) {
+        extraRows.forEach(r => {
+          updateData.push({ range: `${CAMPANAS_SHEET}!H${r}`, values: [['cobrada']] });
+          updateData.push({ range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] });
+        });
+      }
+
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
       });
 
       // Actualizar color del evento de calendario a verde (colorId '2')
@@ -577,6 +687,22 @@ module.exports = async (req, res) => {
         ].filter(Boolean));
       }
 
+      return res.json({ ok: true });
+    }
+
+    // ── PUT: cobrar extendidas solamente (sin tocar período activo) ──
+    if (req.method === 'PUT' && req.body.mode === 'cobrar_extendidas_only') {
+      const { rows } = req.body;
+      if (!rows?.length) return res.json({ ok: true });
+      const ts = new Date().toISOString();
+      const updateData = rows.flatMap(r => [
+        { range: `${CAMPANAS_SHEET}!H${r}`, values: [['cobrada']] },
+        { range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] },
+      ]);
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
+      });
       return res.json({ ok: true });
     }
 
