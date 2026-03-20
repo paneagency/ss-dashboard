@@ -714,6 +714,7 @@ module.exports = async (req, res) => {
           const sheetRow = matchIdx + 1;
           const updateData = [
             { range: `C${sheetRow}:F${sheetRow}`, values: [[metodo || '', nuevaComision, precio || '', gasto || '']] },
+            { range: `G${sheetRow}:I${sheetRow}`, values: [[`=(E${sheetRow} - F${sheetRow}) * (1 - D${sheetRow} / 100)`, `=BUSCARV(B${sheetRow}, Vendedores!A:B, 2, FALSO)`, `=G${sheetRow} * (1 - H${sheetRow} / 100)`]] },
             { range: `L${sheetRow}`, values: [[campaignId]] },
           ];
           await sheets.spreadsheets.values.batchUpdate({
