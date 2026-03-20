@@ -4192,6 +4192,8 @@ async function submitSinPago(e) {
     if (!artista) { showToast('Ingresá el artista', 'error'); return; }
     if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
 
+    const duracion = parseInt(document.getElementById('f-duracion').value) || 30;
+
     const gastosRows = [...document.querySelectorAll('#gasto-rows .gasto-row')].map(r => ({
       amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
       provider: r.querySelector('.gasto-provider').value.trim(),
