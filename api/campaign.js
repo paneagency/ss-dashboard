@@ -446,10 +446,11 @@ module.exports = async (req, res) => {
           ? rows.filter(c => c.masterEventId === masterEventId && c.estado === 'extendida' && c.artista)
           : [];
 
-        // finalizada_sin_cobrar: mismo artista O mismo representante (si existe), mismo vendedor
+        // finalizada_sin_cobrar + pendiente_pago (distinto masterEventId): mismo artista O representante, mismo vendedor
         const sinCobrar = rows.filter(c => {
-          if (c.estado !== 'finalizada_sin_cobrar') return false;
+          if (!['finalizada_sin_cobrar', 'pendiente_pago'].includes(c.estado)) return false;
           if (c.vendedor !== vendedor) return false;
+          if (c.masterEventId && c.masterEventId === masterEventId) return false; // ya está en extendidas o es la campaña actual
           const mismoArtista = artista && c.artista.toLowerCase().trim() === artista.toLowerCase().trim();
           const mismoRep = representante && c.representante && c.representante.toLowerCase().trim() === representante.toLowerCase().trim();
           return mismoArtista || mismoRep;
@@ -717,6 +718,13 @@ module.exports = async (req, res) => {
           updateData.push({ range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] });
         });
       }
+      // Marcar pendiente_pago de otras campañas como 'activa'
+      if (req.body.otrosPendientesRows && req.body.otrosPendientesRows.length) {
+        req.body.otrosPendientesRows.forEach(r => {
+          updateData.push({ range: `${CAMPANAS_SHEET}!H${r}`, values: [['activa']] });
+          updateData.push({ range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] });
+        });
+      }
 
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
@@ -751,6 +759,12 @@ module.exports = async (req, res) => {
       if (sinCobrarRows?.length) {
         sinCobrarRows.forEach(r => {
           updateData.push({ range: `${CAMPANAS_SHEET}!H${r}`, values: [['cobrada']] });
+          updateData.push({ range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] });
+        });
+      }
+      if (req.body.otrosPendientesRows?.length) {
+        req.body.otrosPendientesRows.forEach(r => {
+          updateData.push({ range: `${CAMPANAS_SHEET}!H${r}`, values: [['activa']] });
           updateData.push({ range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] });
         });
       }

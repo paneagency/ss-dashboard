@@ -4271,13 +4271,13 @@ async function cobrarCampania(row) {
   }
 }
 
-async function executeCobrar(camp, extraRows, totalPrecio, totalGasto, sinCobrarRows = []) {
+async function executeCobrar(camp, extraRows, totalPrecio, totalGasto, sinCobrarRows = [], otrosPendientesRows = []) {
   try {
-    // 1. Marcar como cobrada en campaign (y marcar extendidas + sinCobrar)
+    // 1. Marcar como cobrada en campaign (y marcar extendidas + sinCobrar + otrosPendientes)
     const r1 = await fetch('/api/campaign', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'cobrar', row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, extraRows, sinCobrarRows }),
+      body: JSON.stringify({ mode: 'cobrar', row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, extraRows, sinCobrarRows, otrosPendientesRows }),
     });
     if (!r1.ok) throw new Error('Error actualizando campaña');
 
@@ -4358,7 +4358,7 @@ function openCobrarSeleccionModal(camp, extendidas, sinCobrar = []) {
     const borderColor = isSinCobrar ? 'rgba(245,158,11,0.35)' : 'var(--border)';
     return `
     <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid ${borderColor};border-radius:8px;cursor:pointer;margin-bottom:6px;transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-      <input type="checkbox" class="cobrar-periodo-check" data-row="${p.row}" data-precio="${precio}" data-gasto="${gasto}" ${isSinCobrar ? 'data-sin-cobrar="1"' : ''} checked onchange="updateCobrarTotal()" style="margin-top:3px;accent-color:${isSinCobrar ? 'var(--amber)' : 'var(--indigo)'};width:16px;height:16px;flex-shrink:0">
+      <input type="checkbox" class="cobrar-periodo-check" data-row="${p.row}" data-precio="${precio}" data-gasto="${gasto}" data-estado="${p.estado || ''}" ${isSinCobrar ? 'data-sin-cobrar="1"' : ''} checked onchange="updateCobrarTotal()" style="margin-top:3px;accent-color:${isSinCobrar ? 'var(--amber)' : 'var(--indigo)'};width:16px;height:16px;flex-shrink:0">
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;${labelStyle}">${isLast ? `${label} · ${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaVencimiento)}` : label}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmt$(precio)} bruto · gasto ${fmt$(gasto)}${isSinCobrar ? ' · <span style="color:var(--amber)">cobro pendiente</span>' : ''}</div>
@@ -4398,12 +4398,13 @@ async function submitCobrarConSeleccion() {
     const selectedRows = checks.map(c => parseInt(c.dataset.row));
 
     const currentSelected = selectedRows.includes(camp.row);
-    // Separate extraRows (extendidas) from sinCobrarRows (finalizada_sin_cobrar)
+    // Separate extraRows (extendidas), sinCobrarRows (finalizada_sin_cobrar), otrosPendientesRows (pendiente_pago otros)
     const sinCobrarRowSet = new Set(_cobrarSinCobrar.map(p => p.row));
     const extraRows = selectedRows.filter(r => r !== camp.row && !sinCobrarRowSet.has(r));
-    const sinCobrarRows = selectedRows.filter(r => sinCobrarRowSet.has(r));
+    const sinCobrarRows = checks.filter(c => sinCobrarRowSet.has(parseInt(c.dataset.row)) && c.dataset.estado === 'finalizada_sin_cobrar').map(c => parseInt(c.dataset.row));
+    const otrosPendientesRows = checks.filter(c => sinCobrarRowSet.has(parseInt(c.dataset.row)) && c.dataset.estado === 'pendiente_pago').map(c => parseInt(c.dataset.row));
 
-    if (!currentSelected && extraRows.length === 0 && sinCobrarRows.length === 0) return;
+    if (!currentSelected && extraRows.length === 0 && sinCobrarRows.length === 0 && otrosPendientesRows.length === 0) return;
 
     const totalPrecio = checks.reduce((s, c) => s + parseFloat(c.dataset.precio || 0), 0);
     const totalGasto  = checks.reduce((s, c) => s + parseFloat(c.dataset.gasto  || 0), 0);
@@ -4411,13 +4412,13 @@ async function submitCobrarConSeleccion() {
     document.getElementById('modal-cobrar-seleccion').style.display = 'none';
 
     if (currentSelected) {
-      await executeCobrar(camp, extraRows, totalPrecio, totalGasto, sinCobrarRows);
+      await executeCobrar(camp, extraRows, totalPrecio, totalGasto, sinCobrarRows, otrosPendientesRows);
     } else {
       // Only marking extendidas/sinCobrar as cobrada, not the current period
       await fetch('/api/campaign', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'cobrar_extendidas_only', rows: extraRows, sinCobrarRows }),
+        body: JSON.stringify({ mode: 'cobrar_extendidas_only', rows: extraRows, sinCobrarRows, otrosPendientesRows }),
       });
       // Register sale for the selected extendidas
       const comisionPct = (({ 'PayPal':11,'Wise':5.2,'Mercado Pago':11,'Transferencia Ars':1,'Sin Comision':0 })[camp.metodo] ?? 0);
@@ -4427,7 +4428,7 @@ async function submitCobrarConSeleccion() {
       const sheetRow = [camp.artista, camp.vendedor, camp.metodo, comisionPct, totalPrecio, totalGasto, +neto.toFixed(2), '', '', fechaFmt, camp.genero || 'Sin género'];
       await fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values: sheetRow }) });
 
-      showToast(`Cobro parcial registrado para ${camp.artista} (${extraRows.length + sinCobrarRows.length} períodos)`, 'success');
+      showToast(`Cobro parcial registrado para ${camp.artista} (${extraRows.length + sinCobrarRows.length + otrosPendientesRows.length} períodos)`, 'success');
       _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
       loadCampanias().catch(() => {});
 
