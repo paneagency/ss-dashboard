@@ -3973,7 +3973,9 @@ async function submitSale(e) {
     if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
 
     const [fy, fm, fd] = fechaRaw.split('-');
-    const fechaFmt = `${fd}/${fm}/${fy}`;
+    // El pago siempre se registra con la fecha de hoy (independientemente de la fecha de inicio de campaña)
+    const todayPago = new Date();
+    const fechaFmt = `${String(todayPago.getDate()).padStart(2,'0')}/${String(todayPago.getMonth()+1).padStart(2,'0')}/${todayPago.getFullYear()}`;
     const esGrupal = _isMultiArtista && parseArtistasFromPauta(pauta).length > 1;
     const sheetArtista = esGrupal ? 'Varios' : artista;
 
@@ -4051,7 +4053,7 @@ async function submitSale(e) {
     })();
 
     if (!esRegalo) {
-      const fecha = new Date(+fy, +fm - 1, +fd);
+      const fecha = new Date(todayPago.getFullYear(), todayPago.getMonth(), todayPago.getDate());
       const newRow = {
         artista:  sheetArtista || 'Sin artista',
         venta:    venta   || 'Sin vendedor',
