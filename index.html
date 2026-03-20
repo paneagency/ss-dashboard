@@ -4246,19 +4246,24 @@ async function cobrarCampania(row) {
   const c = _campanias.find(c => c.row === row);
   if (!c) return;
 
-  // Fetch extendidas for this masterEventId
+  // Fetch extendidas + finalizada_sin_cobrar para este cliente
   let extendidas = [];
-  if (c.masterEventId) {
-    try {
-      const r = await fetch(`/api/campaign?mode=extendidas&masterEventId=${encodeURIComponent(c.masterEventId)}`);
-      const d = await r.json();
-      extendidas = d.extendidas || [];
-    } catch(e) {}
-  }
+  let sinCobrar = [];
+  try {
+    const params = new URLSearchParams({ mode: 'pendientes_cobro' });
+    if (c.masterEventId) params.set('masterEventId', c.masterEventId);
+    params.set('artista', c.artista);
+    params.set('vendedor', c.vendedor);
+    if (c.representante) params.set('representante', c.representante);
+    const r = await fetch(`/api/campaign?${params}`);
+    const d = await r.json();
+    extendidas = d.extendidas || [];
+    sinCobrar = d.sinCobrar || [];
+  } catch(e) {}
 
-  if (extendidas.length > 0) {
+  if (extendidas.length > 0 || sinCobrar.length > 0) {
     // Show selection modal
-    openCobrarSeleccionModal(c, extendidas);
+    openCobrarSeleccionModal(c, extendidas, sinCobrar);
   } else {
     // Simple cobrar (existing flow)
     if (!confirm(`¿Registrar el cobro de ${c.artista}?\n\nSe creará la venta por $${c.precio} (${c.metodo}) y la campaña pasará a activa.`)) return;
@@ -4266,13 +4271,13 @@ async function cobrarCampania(row) {
   }
 }
 
-async function executeCobrar(camp, extraRows, totalPrecio, totalGasto) {
+async function executeCobrar(camp, extraRows, totalPrecio, totalGasto, sinCobrarRows = []) {
   try {
-    // 1. Marcar como cobrada en campaign (y marcar extendidas)
+    // 1. Marcar como cobrada en campaign (y marcar extendidas + sinCobrar)
     const r1 = await fetch('/api/campaign', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'cobrar', row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, extraRows }),
+      body: JSON.stringify({ mode: 'cobrar', row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, extraRows, sinCobrarRows }),
     });
     if (!r1.ok) throw new Error('Error actualizando campaña');
 
@@ -4289,7 +4294,7 @@ async function executeCobrar(camp, extraRows, totalPrecio, totalGasto) {
     });
     if (!r2.ok) throw new Error('Error registrando venta');
 
-    const periodsCount = extraRows.length + 1;
+    const periodsCount = extraRows.length + sinCobrarRows.length + 1;
     showToast(`Cobro registrado para ${camp.artista}${periodsCount > 1 ? ` (${periodsCount} períodos)` : ''}`, 'success');
 
     _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
@@ -4317,28 +4322,46 @@ async function executeCobrar(camp, extraRows, totalPrecio, totalGasto) {
 // ── Cobrar con selección de períodos ──────────────────────
 let _cobrarCamp = null;
 let _cobrarExtendidas = [];
+let _cobrarSinCobrar = [];
 
-function openCobrarSeleccionModal(camp, extendidas) {
+function openCobrarSeleccionModal(camp, extendidas, sinCobrar = []) {
   _cobrarCamp = camp;
   _cobrarExtendidas = extendidas;
+  _cobrarSinCobrar = sinCobrar;
 
   const fmtDate = s => s ? s.split('-').reverse().join('/') : '—';
   const fmt$ = v => '$' + (parseFloat(v)||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:2});
 
-  // All periods: extendidas (oldest first) + current pendiente_pago
-  const allPeriods = [...extendidas.sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||'')), camp];
+  // All periods: extendidas (oldest first) + sinCobrar (oldest first) + current pendiente_pago
+  const extSorted = [...extendidas].sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||''));
+  const sinCobrarSorted = [...sinCobrar].sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||''));
+  const allPeriods = [...extSorted, ...sinCobrarSorted, camp];
+
+  const sinCobrarRowSet = new Set(sinCobrar.map(p => p.row));
 
   const listHtml = allPeriods.map((p, i) => {
     const isLast = p.row === camp.row;
-    const label = isLast ? 'Período actual' : `Período ${i + 1}`;
+    const isSinCobrar = sinCobrarRowSet.has(p.row);
+    let label, labelStyle;
+    if (isLast) {
+      label = 'Período actual';
+      labelStyle = 'color:var(--text)';
+    } else if (isSinCobrar) {
+      label = `Finalizada · ${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaVencimiento)}`;
+      labelStyle = 'color:var(--amber)';
+    } else {
+      label = `Período ${i + 1}`;
+      labelStyle = 'color:var(--text)';
+    }
     const precio = parseFloat(p.precio) || 0;
     const gasto = parseFloat(p.gasto) || 0;
+    const borderColor = isSinCobrar ? 'rgba(245,158,11,0.35)' : 'var(--border)';
     return `
-    <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:6px;transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-      <input type="checkbox" class="cobrar-periodo-check" data-row="${p.row}" data-precio="${precio}" data-gasto="${gasto}" checked onchange="updateCobrarTotal()" style="margin-top:3px;accent-color:var(--indigo);width:16px;height:16px;flex-shrink:0">
+    <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid ${borderColor};border-radius:8px;cursor:pointer;margin-bottom:6px;transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+      <input type="checkbox" class="cobrar-periodo-check" data-row="${p.row}" data-precio="${precio}" data-gasto="${gasto}" ${isSinCobrar ? 'data-sin-cobrar="1"' : ''} checked onchange="updateCobrarTotal()" style="margin-top:3px;accent-color:${isSinCobrar ? 'var(--amber)' : 'var(--indigo)'};width:16px;height:16px;flex-shrink:0">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${label} · ${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaVencimiento)}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmt$(precio)} bruto · gasto ${fmt$(gasto)}</div>
+        <div style="font-size:13px;font-weight:600;${labelStyle}">${isLast ? `${label} · ${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaVencimiento)}` : label}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmt$(precio)} bruto · gasto ${fmt$(gasto)}${isSinCobrar ? ' · <span style="color:var(--amber)">cobro pendiente</span>' : ''}</div>
         ${p.pauta ? `<div style="font-size:11px;color:var(--muted2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(p.pauta.split('\n')[0]||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
       </div>
     </label>`;
@@ -4375,9 +4398,12 @@ async function submitCobrarConSeleccion() {
     const selectedRows = checks.map(c => parseInt(c.dataset.row));
 
     const currentSelected = selectedRows.includes(camp.row);
-    const extraRows = selectedRows.filter(r => r !== camp.row);
+    // Separate extraRows (extendidas) from sinCobrarRows (finalizada_sin_cobrar)
+    const sinCobrarRowSet = new Set(_cobrarSinCobrar.map(p => p.row));
+    const extraRows = selectedRows.filter(r => r !== camp.row && !sinCobrarRowSet.has(r));
+    const sinCobrarRows = selectedRows.filter(r => sinCobrarRowSet.has(r));
 
-    if (!currentSelected && extraRows.length === 0) return;
+    if (!currentSelected && extraRows.length === 0 && sinCobrarRows.length === 0) return;
 
     const totalPrecio = checks.reduce((s, c) => s + parseFloat(c.dataset.precio || 0), 0);
     const totalGasto  = checks.reduce((s, c) => s + parseFloat(c.dataset.gasto  || 0), 0);
@@ -4385,13 +4411,13 @@ async function submitCobrarConSeleccion() {
     document.getElementById('modal-cobrar-seleccion').style.display = 'none';
 
     if (currentSelected) {
-      await executeCobrar(camp, extraRows, totalPrecio, totalGasto);
+      await executeCobrar(camp, extraRows, totalPrecio, totalGasto, sinCobrarRows);
     } else {
-      // Only marking extendidas as cobrada, not the current period
+      // Only marking extendidas/sinCobrar as cobrada, not the current period
       await fetch('/api/campaign', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'cobrar_extendidas_only', rows: extraRows }),
+        body: JSON.stringify({ mode: 'cobrar_extendidas_only', rows: extraRows, sinCobrarRows }),
       });
       // Register sale for the selected extendidas
       const comisionPct = (({ 'PayPal':11,'Wise':5.2,'Mercado Pago':11,'Transferencia Ars':1,'Sin Comision':0 })[camp.metodo] ?? 0);
@@ -4401,7 +4427,7 @@ async function submitCobrarConSeleccion() {
       const sheetRow = [camp.artista, camp.vendedor, camp.metodo, comisionPct, totalPrecio, totalGasto, +neto.toFixed(2), '', '', fechaFmt, camp.genero || 'Sin género'];
       await fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values: sheetRow }) });
 
-      showToast(`Cobro parcial registrado para ${camp.artista} (${extraRows.length} períodos)`, 'success');
+      showToast(`Cobro parcial registrado para ${camp.artista} (${extraRows.length + sinCobrarRows.length} períodos)`, 'success');
       _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
       loadCampanias().catch(() => {});
 
@@ -4765,7 +4791,7 @@ function renderCampHistorial() {
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
   if (_historialFilter !== 'todas') data = data.filter(c =>
     _historialFilter === 'finalizada'
-      ? (c.estado === 'finalizada' || c.estado === 'finalizada_regalo')
+      ? (c.estado === 'finalizada' || c.estado === 'finalizada_regalo' || c.estado === 'finalizada_sin_cobrar')
       : _historialFilter === 'extendida'
         ? (c.estado === 'extendida' || c.estado === 'cobrada')
         : c.estado === _historialFilter
@@ -4782,8 +4808,9 @@ function renderCampHistorial() {
   data = [...data].sort((a, b) => getSortTs(b).localeCompare(getSortTs(a)));
 
   const ESTADO_STYLES = {
-    finalizada:         { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada'    },
-    finalizada_regalo:  { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada 🎁' },
+    finalizada:              { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada'           },
+    finalizada_regalo:       { bg: 'rgba(99,102,241,0.15)', color: '#a5b4fc',       label: 'Finalizada 🎁'        },
+    finalizada_sin_cobrar:   { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)',   label: 'Fin. sin cobrar 💰'   },
     eliminada:          { bg: 'rgba(248,81,73,0.15)',  color: 'var(--red)',    label: 'Eliminada'     },
     editada:            { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)',  label: 'Editada'       },
     renovada:           { bg: 'rgba(16,185,129,0.12)', color: 'var(--green)', label: 'Renovada'      },
@@ -5640,6 +5667,7 @@ function parsePautaSpotify(pauta) {
 }
 
 let _noRenovaRow = null; // campaña pendiente de archivar
+let _noRenovaSinCobrar = false;
 
 function confirmarNoRenueva(row) {
   const camp = _campanias.find(c => c.row === row);
@@ -5650,12 +5678,19 @@ function confirmarNoRenueva(row) {
 
   // Si no hay pares track+playlist en la pauta, confirmar simple
   if (!pairs.length) {
-    if (!confirm(`¿Marcar "${camp.artista}" como no renovada? Se eliminará del calendario.`)) return;
+    if (camp.estado === 'pendiente_pago') {
+      if (!confirm(`¿Marcar "${camp.artista}" como no renovada?\n\nSe eliminará del calendario.`)) return;
+      _noRenovaSinCobrar = !confirm(`¿Esta campaña ya fue cobrada?\n\nOK = Sí, ya fue cobrada\nCancelar = No, cobro pendiente`);
+    } else {
+      if (!confirm(`¿Marcar "${camp.artista}" como no renovada? Se eliminará del calendario.`)) return;
+      _noRenovaSinCobrar = false;
+    }
     executeNoRenueva(false);
     return;
   }
 
-  // Mostrar modal con info de Spotify
+  // Mostrar modal con info de Spotify (cuando hay pairs, siempre finaliza normal, no sin cobrar)
+  _noRenovaSinCobrar = false;
   document.getElementById('spotify-remove-artista').textContent = `${camp.artista} — ${camp.vendedor}`;
   document.getElementById('spotify-remove-result').style.display = 'none';
 
@@ -5760,12 +5795,15 @@ async function executeNoRenueva(closeModal = false) {
     const resp = await fetch('/api/campaign', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, ...(camp.estado === 'regalo' ? { estado: 'finalizada_regalo' } : {}) }),
+      body: JSON.stringify({
+        row: camp.row, masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId, vendedor: camp.vendedor, artista: camp.artista,
+        ...(camp.estado === 'regalo' ? { estado: 'finalizada_regalo' } : _noRenovaSinCobrar ? { estado: 'finalizada_sin_cobrar' } : {}),
+      }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
     document.getElementById('modal-spotify-remove').style.display = 'none';
-    showToast(`${camp.artista} marcada como finalizada`, 'success');
+    showToast(`${camp.artista} marcada como ${_noRenovaSinCobrar ? 'finalizada (cobro pendiente)' : 'finalizada'}`, 'success');
     await loadCampanias();
   } catch(e) {
     showToast('Error: ' + e.message, 'error');

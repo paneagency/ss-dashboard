@@ -390,7 +390,7 @@ module.exports = async (req, res) => {
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A:V`,
         });
-        const HIST_STATES = ['finalizada', 'finalizada_regalo', 'eliminada', 'editada', 'renovada', 'extendida', 'cobrada'];
+        const HIST_STATES = ['finalizada', 'finalizada_regalo', 'finalizada_sin_cobrar', 'eliminada', 'editada', 'renovada', 'extendida', 'cobrada'];
         let historial = (resp.data.values || []).slice(1)
           .map((r, i) => ({
             row: i + 2,
@@ -416,7 +416,49 @@ module.exports = async (req, res) => {
         return res.json({ historial });
       }
 
-      // Extendidas: períodos extendidos sin pago para un masterEventId
+      // Pendientes de cobro: extendidas + finalizadas sin cobrar para el mismo cliente
+      if (mode === 'pendientes_cobro') {
+        const masterEventId = req.query.masterEventId;
+        const artista       = req.query.artista || '';
+        const vendedor      = req.query.vendedor || '';
+        const representante = req.query.representante || '';
+
+        const resp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:V`,
+        });
+        const rows = (resp.data.values || []).slice(1).map((r, i) => ({
+          row: i + 2,
+          artista: r[0] || '', vendedor: r[1] || '',
+          fechaInicio: r[2] || '', fechaVencimiento: r[3] || '',
+          duracion: parseInt(r[4]) || 30,
+          masterEventId: r[5] || '', vendorEventId: r[6] || '',
+          estado: r[7] || '',
+          metodo: r[8] || '', precio: r[9] || '', gasto: r[10] || '',
+          detalleGastos: r[15] || '',
+          pauta: r[16] || '',
+          representante: r[17] || '',
+          campaignId: r[19] || '',
+        }));
+
+        // extendidas: mismo masterEventId
+        const extendidas = masterEventId
+          ? rows.filter(c => c.masterEventId === masterEventId && c.estado === 'extendida' && c.artista)
+          : [];
+
+        // finalizada_sin_cobrar: mismo artista O mismo representante (si existe), mismo vendedor
+        const sinCobrar = rows.filter(c => {
+          if (c.estado !== 'finalizada_sin_cobrar') return false;
+          if (c.vendedor !== vendedor) return false;
+          const mismoArtista = artista && c.artista.toLowerCase().trim() === artista.toLowerCase().trim();
+          const mismoRep = representante && c.representante && c.representante.toLowerCase().trim() === representante.toLowerCase().trim();
+          return mismoArtista || mismoRep;
+        });
+
+        return res.json({ extendidas, sinCobrar });
+      }
+
+      // Extendidas legacy (kept for backward compatibility)
       if (mode === 'extendidas') {
         const masterEventId = req.query.masterEventId;
         if (!masterEventId) return res.json({ extendidas: [] });
@@ -668,6 +710,14 @@ module.exports = async (req, res) => {
         });
       }
 
+      // Marcar finalizada_sin_cobrar seleccionadas como 'cobrada'
+      if (req.body.sinCobrarRows && req.body.sinCobrarRows.length) {
+        req.body.sinCobrarRows.forEach(r => {
+          updateData.push({ range: `${CAMPANAS_SHEET}!H${r}`, values: [['cobrada']] });
+          updateData.push({ range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] });
+        });
+      }
+
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
@@ -692,13 +742,19 @@ module.exports = async (req, res) => {
 
     // ── PUT: cobrar extendidas solamente (sin tocar período activo) ──
     if (req.method === 'PUT' && req.body.mode === 'cobrar_extendidas_only') {
-      const { rows } = req.body;
-      if (!rows?.length) return res.json({ ok: true });
+      const { rows, sinCobrarRows } = req.body;
       const ts = new Date().toISOString();
-      const updateData = rows.flatMap(r => [
+      const updateData = (rows || []).flatMap(r => [
         { range: `${CAMPANAS_SHEET}!H${r}`, values: [['cobrada']] },
         { range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] },
       ]);
+      if (sinCobrarRows?.length) {
+        sinCobrarRows.forEach(r => {
+          updateData.push({ range: `${CAMPANAS_SHEET}!H${r}`, values: [['cobrada']] });
+          updateData.push({ range: `${CAMPANAS_SHEET}!U${r}`, values: [[ts]] });
+        });
+      }
+      if (!updateData.length) return res.json({ ok: true });
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
