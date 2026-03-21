@@ -507,12 +507,18 @@ module.exports = async (req, res) => {
         editadoPor: r[21] || '',
       }));
 
-      // Índice de extendidas por masterEventId para calcular acumulado
+      // Índice de extendidas por masterEventId y por artista+vendedor (fallback)
       const extendidasByMaster = {};
+      const extendidasByArtVend = {};
       for (const r of allRows) {
-        if (r.estado === 'extendida' && r.masterEventId) {
-          if (!extendidasByMaster[r.masterEventId]) extendidasByMaster[r.masterEventId] = [];
-          extendidasByMaster[r.masterEventId].push(r);
+        if (r.estado === 'extendida' && r.artista) {
+          if (r.masterEventId) {
+            if (!extendidasByMaster[r.masterEventId]) extendidasByMaster[r.masterEventId] = [];
+            extendidasByMaster[r.masterEventId].push(r);
+          }
+          const avKey = `${r.artista}||${r.vendedor}`;
+          if (!extendidasByArtVend[avKey]) extendidasByArtVend[avKey] = [];
+          extendidasByArtVend[avKey].push(r);
         }
       }
 
@@ -520,8 +526,12 @@ module.exports = async (req, res) => {
         .filter(c => ['activa', 'pendiente_pago', 'prueba', 'regalo', 'pendiente_inicio'].includes(c.estado) && c.artista)
         .map(c => {
           // Para pendiente_pago: adjuntar datos de períodos extendidos acumulados
-          if (c.estado === 'pendiente_pago' && c.masterEventId) {
-            const extRows = extendidasByMaster[c.masterEventId] || [];
+          if (c.estado === 'pendiente_pago') {
+            // Primero buscar por masterEventId, fallback por artista+vendedor
+            let extRows = (c.masterEventId && extendidasByMaster[c.masterEventId]) || [];
+            if (!extRows.length && c.artista && c.vendedor) {
+              extRows = extendidasByArtVend[`${c.artista}||${c.vendedor}`] || [];
+            }
             // Agrupar por fechaInicio|fechaVencimiento: hermanas grupal del mismo período comparten fechas
             const seenPeriod = new Set();
             let sumPrecio = parseFloat(c.precio) || 0; // período actual
