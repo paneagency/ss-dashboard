@@ -3669,7 +3669,7 @@ function smartPautaDetect() {
     }
 
     const uniqueArtists = [...artistsMap.values()];
-    const isMulti = urls.length > 1;
+    const isMulti = uniqueArtists.length > 1;
 
     // Insertar prefijo encima de cada URL según modo
     let newText = fPauta.value;
@@ -3787,7 +3787,7 @@ function parseArtistasFromPauta(pauta) {
   for (const m of pauta.matchAll(re)) {
     const nombre = m[1].trim();
     const link   = m[2].trim();
-    if (!seen.has(link)) { seen.add(link); result.push({ nombre, link }); }
+    if (!seen.has(nombre)) { seen.add(nombre); result.push({ nombre, link }); }
   }
   return result;
 }
