@@ -4572,18 +4572,28 @@ function renderResumenCampaniasHoy() {
     return;
   }
   const today = new Date(); today.setHours(0,0,0,0);
+
+  // Campañas pendiente_inicio que inician hoy
+  const iniciandoHoy = (_campanias || []).filter(c => {
+    if (c.estado !== 'pendiente_inicio') return false;
+    const ini = new Date(c.fechaInicio + 'T12:00:00');
+    return Math.floor((ini - today) / 86400000) === 0;
+  });
+
   const hoy = agruparPorEvento((_campanias || []).filter(c => {
     const venc = new Date(c.fechaVencimiento + 'T12:00:00');
     return Math.floor((venc - today) / 86400000) === 0;
   }));
-  if (!hoy.length) {
+
+  if (!iniciandoHoy.length && !hoy.length) {
     el.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px">
       <span style="font-size:28px">✅</span>
       <span>Sin campañas venciendo hoy</span>
     </div>`;
     return;
   }
-  el.innerHTML = hoy.map(c => {
+
+  const renderCard = (c, isInicio) => {
     const idx       = c.row;
     const hasPauta  = !!c.pauta;
     const hasGastos = !!c.detalleGastos;
@@ -4593,33 +4603,75 @@ function renderResumenCampaniasHoy() {
     const pautaEsc  = hasPauta  ? formatPauta(c.pauta) : '';
     const gastosEsc = hasGastos ? c.detalleGastos.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
     const notasEsc  = hasNotas  ? c.notas.replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
-    const badgeBg   = esRegalo ? 'rgba(251,191,36,0.15)' : sinPagoHoy ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.15)';
-    const badgeColor= esRegalo ? '#f0b429' : 'var(--amber)';
-    const borderColor = esRegalo ? 'rgba(251,191,36,0.45)' : sinPagoHoy ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.4)';
+    let badgeBg, badgeColor, borderColor, badgeIcon, badgeLabel, metaExtra;
+    if (isInicio) {
+      badgeBg = 'rgba(16,185,129,0.18)'; badgeColor = 'var(--green)';
+      borderColor = 'rgba(16,185,129,0.5)'; badgeIcon = '🎵'; badgeLabel = 'inicia hoy';
+      metaExtra = `Vence ${c.fechaVencimiento} · `;
+    } else {
+      badgeBg   = esRegalo ? 'rgba(251,191,36,0.15)' : sinPagoHoy ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.15)';
+      badgeColor= esRegalo ? '#f0b429' : 'var(--amber)';
+      borderColor = esRegalo ? 'rgba(251,191,36,0.45)' : sinPagoHoy ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.4)';
+      badgeIcon = esRegalo ? '🎁' : sinPagoHoy ? '💳' : 'Hoy';
+      badgeLabel = esRegalo ? 'regalo' : sinPagoHoy ? 'sin pago' : '';
+      metaExtra = '';
+    }
     return `
     <div class="campania-card" id="camp-card-${idx}" style="border-color:${borderColor};${sinPagoHoy ? 'border-style:dashed;' : ''}${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
-        ${esRegalo ? '🎁' : sinPagoHoy ? '💳' : 'Hoy'}<span class="badge-days-label">${esRegalo ? 'regalo' : sinPagoHoy ? 'sin pago' : ''}</span>
+        ${badgeIcon}<span class="badge-days-label">${badgeLabel}</span>
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
-        <div class="campania-meta">${c.vendedor} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
+        <div class="campania-meta">${c.vendedor} · ${metaExtra}${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
       </div>
       <div class="campania-actions" onclick="event.stopPropagation()">
+        ${isInicio ? `<button class="btn btn-sm" style="background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.4);font-weight:600" onclick="activarCampania(${idx})" title="Activar campaña">✓ Activar</button>` : ''}
         ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
         ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender período">↗ Extender</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
         <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
-        ${!esRegalo && !sinPagoHoy ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
-        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
+        ${!esRegalo && !sinPagoHoy && !isInicio ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
+        ${!isInicio ? `<button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>` : ''}
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
       ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}
       ${hasNotas  ? `<div class="campania-expand" id="camp-expand-notas-${idx}">${notasEsc}</div>` : ''}
     </div>`;
-  }).join('');
+  };
+
+  const iniciandoHtml = iniciandoHoy.map(c => renderCard(c, true)).join('');
+  const venciendoHtml = hoy.map(c => renderCard(c, false)).join('');
+  el.innerHTML = iniciandoHtml + venciendoHtml;
+}
+
+async function activarCampania(idx) {
+  const c = _campanias.find(x => x.row === idx);
+  if (!c) return;
+  const btn = document.querySelector(`#camp-card-${idx} button[onclick="activarCampania(${idx})"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const res = await fetch('/api/campaign', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        row: c.row,
+        artista: c.artista,
+        vendedor: c.vendedor,
+        masterEventId: c.masterEventId,
+        vendorEventId: c.vendorEventId,
+        esActivar: true,
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
+    await loadCampanias();
+  } catch(e) {
+    alert('Error al activar: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Activar'; }
+  }
 }
 
 // ── CAMPAÑAS ───────────────────────────────────────────────
@@ -4981,17 +5033,26 @@ function renderCampList(data, today) {
     const days    = Math.floor(diffMs / 86400000);
     const daysLbl    = days < 0 ? `${Math.abs(days)}d` : days === 0 ? 'Hoy' : `${days}d`;
     const daysSubLbl = days < 0 ? 'vencida' : days === 0 ? '' : 'restantes';
-    const sinPago  = c.estado === 'pendiente_pago';
-    const esRegalo = c.estado === 'regalo';
+    const sinPago        = c.estado === 'pendiente_pago';
+    const esRegalo       = c.estado === 'regalo';
+    const pendienteInicio = c.estado === 'pendiente_inicio';
+
+    // Para pendiente_inicio calcular días hasta fechaInicio
+    const inicioDate = pendienteInicio ? new Date(c.fechaInicio + 'T12:00:00') : null;
+    const diasInicio = inicioDate ? Math.floor((inicioDate - today) / 86400000) : null;
+    const iniciHoy   = diasInicio === 0;
 
     let badgeBg, badgeColor, borderColor;
-    if (esRegalo)      { badgeBg = 'rgba(251,191,36,0.15)';  badgeColor = '#f0b429';        borderColor = 'rgba(251,191,36,0.45)'; }
-    else if (sinPago)  { badgeBg = 'rgba(245,158,11,0.18)';  badgeColor = 'var(--amber)';   borderColor = 'rgba(245,158,11,0.5)'; }
-    else if (days < 0) { badgeBg = 'rgba(248,81,73,0.15)';   badgeColor = 'var(--red)';     borderColor = 'rgba(248,81,73,0.4)'; }
-    else if (days === 0){ badgeBg = 'rgba(245,158,11,0.15)'; badgeColor = 'var(--amber)';   borderColor = 'rgba(245,158,11,0.4)'; }
-    else               { badgeBg = 'rgba(16,185,129,0.12)';  badgeColor = 'var(--green)';   borderColor = 'rgba(16,185,129,0.25)'; }
+    if (esRegalo)          { badgeBg = 'rgba(251,191,36,0.15)';  badgeColor = '#f0b429';        borderColor = 'rgba(251,191,36,0.45)'; }
+    else if (sinPago)      { badgeBg = 'rgba(245,158,11,0.18)';  badgeColor = 'var(--amber)';   borderColor = 'rgba(245,158,11,0.5)'; }
+    else if (pendienteInicio && iniciHoy) { badgeBg = 'rgba(16,185,129,0.18)'; badgeColor = 'var(--green)'; borderColor = 'rgba(16,185,129,0.5)'; }
+    else if (pendienteInicio) { badgeBg = 'rgba(99,102,241,0.15)'; badgeColor = 'var(--indigo)'; borderColor = 'rgba(99,102,241,0.35)'; }
+    else if (days < 0)    { badgeBg = 'rgba(248,81,73,0.15)';   badgeColor = 'var(--red)';     borderColor = 'rgba(248,81,73,0.4)'; }
+    else if (days === 0)  { badgeBg = 'rgba(245,158,11,0.15)';  badgeColor = 'var(--amber)';   borderColor = 'rgba(245,158,11,0.4)'; }
+    else                  { badgeBg = 'rgba(16,185,129,0.12)';  badgeColor = 'var(--green)';   borderColor = 'rgba(16,185,129,0.25)'; }
 
-    const vencFmt = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const vencFmt  = venc.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const inicioFmt = inicioDate ? inicioDate.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : '';
 
     const idx = c.row;
     const hasPauta  = !!c.pauta;
@@ -5005,22 +5066,23 @@ function renderCampList(data, today) {
     return `
     <div class="campania-card" id="camp-card-${idx}" style="${borderStyle};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
-        ${esRegalo ? '🎁' : sinPago ? '💳' : daysLbl}
-        <span class="badge-days-label">${esRegalo ? daysLbl : sinPago ? 'sin pago' : daysSubLbl}</span>
+        ${esRegalo ? '🎁' : sinPago ? '💳' : pendienteInicio ? '🎵' : daysLbl}
+        <span class="badge-days-label">${esRegalo ? daysLbl : sinPago ? 'sin pago' : pendienteInicio ? (iniciHoy ? 'inicia hoy' : `inicia ${inicioFmt}`) : daysSubLbl}</span>
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
-        <div class="campania-meta">${c.vendedor} · Vence ${vencFmt} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
+        <div class="campania-meta">${c.vendedor} · ${pendienteInicio ? `Inicia ${inicioFmt} · Vence ${vencFmt}` : `Vence ${vencFmt}`} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
       </div>
       <div class="campania-actions" onclick="event.stopPropagation()">
+        ${pendienteInicio ? `<button class="btn btn-sm" style="background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.4);font-weight:600" onclick="activarCampania(${idx})" title="Activar campaña">✓ Activar</button>` : ''}
         ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
         ${sinPago ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender período">↗ Extender</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
         <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
-        ${!sinPago && !esRegalo ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
-        <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>
+        ${!sinPago && !esRegalo && !pendienteInicio ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
+        ${!pendienteInicio ? `<button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>` : ''}
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
       ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}

@@ -507,7 +507,7 @@ module.exports = async (req, res) => {
           timestamp: r[20] || '',
           editadoPor: r[21] || '',
         }))
-        .filter(c => ['activa', 'pendiente_pago', 'prueba', 'regalo'].includes(c.estado) && c.artista);
+        .filter(c => ['activa', 'pendiente_pago', 'prueba', 'regalo', 'pendiente_inicio'].includes(c.estado) && c.artista);
 
       if (vendedor && vendedor !== 'all')
         campanias = campanias.filter(c => c.vendedor === vendedor);
@@ -555,9 +555,11 @@ module.exports = async (req, res) => {
 
       const fechaVencimiento = fechaVencBody || addDays(fechaInicio, duracion);
       const esPrueba = (artista || '').toLowerCase().trim() === 'campedrinos';
-      const estadoCampana    = regalo ? 'regalo' : esPrueba ? 'prueba' : sinPago ? 'pendiente_pago' : 'activa';
-      // colorId: '5' = banana (amarillo) para regalo, '6' = tangerine (naranja) para pendiente_pago, '2' = sage (verde) para activa
-      const calColorId = regalo ? '5' : sinPago ? '6' : '2';
+      const hoyIso = new Date().toISOString().split('T')[0];
+      const esFuturo = fechaInicio > hoyIso;
+      const estadoCampana    = regalo ? 'regalo' : esPrueba ? 'prueba' : sinPago ? 'pendiente_pago' : esFuturo ? 'pendiente_inicio' : 'activa';
+      // colorId: '5' = banana (amarillo) para regalo, '6' = tangerine (naranja) para pendiente_pago, '7' = peacock (azul) para pendiente_inicio, '2' = sage (verde) para activa
+      const calColorId = regalo ? '5' : sinPago ? '6' : esFuturo ? '7' : '2';
 
       const clientId = await getOrCreateClient(sheets, artista, genero, fechaInicio, representante || '', vendedor, metodo || '');
 
@@ -778,8 +780,26 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar/renovar campaña ───────────────────────────
     if (req.method === 'PUT') {
-      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody, editadoPor } = req.body;
+      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody, editadoPor, esActivar } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
+
+      // ── Activar campaña pendiente_inicio → activa ──────────
+      if (esActivar) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!H${row}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [['activa']] },
+        });
+        try {
+          const patchColor = { colorId: '2' }; // sage = verde
+          await Promise.allSettled([
+            masterEventId ? cal.events.patch({ calendarId: MASTER_CAL, eventId: masterEventId, requestBody: patchColor }) : null,
+            (vendorEventId && VENDOR_CALS[vendedor]) ? cal.events.patch({ calendarId: VENDOR_CALS[vendedor], eventId: vendorEventId, requestBody: patchColor }) : null,
+          ].filter(Boolean));
+        } catch(calErr) { console.error('Calendar patch error (non-fatal):', calErr.message); }
+        return res.json({ ok: true });
+      }
 
       // Leer fila completa actual para obtener fechaInicio, vencimiento base y campaignId
       const campResp = await sheets.spreadsheets.values.get({
