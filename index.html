@@ -3455,7 +3455,12 @@ function formatPauta(text) {
   const lines = esc.split('\n');
   return lines.map((line, i) => {
     const next = lines[i + 1] || '';
-    return /open\.spotify\.com\/track\//i.test(next) ? `<strong>${line}</strong>` : line;
+    if (/open\.spotify\.com\/track\//i.test(next)) {
+      // Eliminar markdown *...* o **...** del título antes de poner en negrita
+      const clean = line.replace(/^\*{1,2}(.*?)\*{1,2}$/, '$1').trim();
+      return `<strong>${clean || line}</strong>`;
+    }
+    return line;
   }).join('\n');
 }
 
@@ -5604,7 +5609,7 @@ function smartRenovarDetect() {
       const prevLine = beforeTrimmed.substring(prevNewlineIdx + 1).trim();
       const prevLineStart = prevNewlineIdx + 1;
       const expectedPrefix = isMulti ? `(${data.artist}) ${data.track}` : data.track;
-      const prevLineNorm = prevLine.replace(/^\*(.+)\*$/, '$1').trim();
+      const prevLineNorm = prevLine.replace(/^\*{1,2}(.*?)\*{1,2}$/, '$1').trim(); // strip * y **
       if (_renovarPrefixedUrls.has(url)) continue; // skip pre-existentes y ya procesados
       if (prevLineNorm === expectedPrefix) { _renovarPrefixedUrls.set(url, isMulti); continue; }
       const altPrefix = isMulti ? data.track : `(${data.artist}) ${data.track}`;

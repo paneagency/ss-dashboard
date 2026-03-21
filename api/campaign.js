@@ -877,6 +877,7 @@ module.exports = async (req, res) => {
       const oldRow        = campResp.data.values?.[0] || [];
       const fechaInicio   = oldRow[2] || new Date().toISOString().split('T')[0];
       const baseDate      = oldRow[3] || new Date().toISOString().split('T')[0];
+      const oldEstado     = oldRow[7] || 'activa'; // preservar estado original (pendiente_pago, regalo, etc.)
       const genero        = generoBody || oldRow[14] || '';
       const representante = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
       const notas         = notasBody !== undefined ? notasBody : (oldRow[18] || '');
@@ -937,7 +938,7 @@ module.exports = async (req, res) => {
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A${row}:V${row}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '']] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, oldEstado, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '']] },
         });
         // Actualizar masterEventId/vendorEventId y artista en todos los siblings del grupo
         if (siblingRows.length && newMasterId) {
@@ -953,6 +954,26 @@ module.exports = async (req, res) => {
               },
             })
           ));
+        }
+        // Actualizar masterEventId en filas extendidas (historial) del mismo evento para que _acumulado las siga encontrando
+        if (masterEventId && newMasterId && masterEventId !== newMasterId) {
+          const extAllResp = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${CAMPANAS_SHEET}!F:H`,
+          });
+          const extRows = (extAllResp.data.values || []).slice(1);
+          const extUpdates = [];
+          extRows.forEach((r, i) => {
+            if ((r[0] || '') === masterEventId && (r[2] || '') === 'extendida') {
+              extUpdates.push({ range: `${CAMPANAS_SHEET}!F${i + 2}`, values: [[newMasterId]] });
+            }
+          });
+          if (extUpdates.length) {
+            await sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId: SPREADSHEET_ID,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: extUpdates },
+            });
+          }
         }
       } else {
         // Marcar fila vieja como historial ('editada' o 'renovada') y agregar nueva fila activa
