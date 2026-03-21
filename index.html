@@ -5035,6 +5035,7 @@ function renderCampList(data, today) {
     const sinPago        = c.estado === 'pendiente_pago';
     const esRegalo       = c.estado === 'regalo';
     const pendienteInicio = c.estado === 'pendiente_inicio';
+    const esVencida      = days < 0 && !sinPago && !esRegalo && !pendienteInicio;
 
     // Para pendiente_inicio calcular días hasta fechaInicio
     const inicioDate = pendienteInicio ? new Date(c.fechaInicio + 'T12:00:00') : null;
@@ -5075,7 +5076,7 @@ function renderCampList(data, today) {
       <div class="campania-actions" onclick="event.stopPropagation()">
         ${pendienteInicio ? `<button class="btn btn-sm" style="background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.4);font-weight:600" onclick="activarCampania(${idx})" title="Activar campaña">✓ Activar</button>` : ''}
         ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
-        ${sinPago ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender período">↗ Extender</button>` : ''}
+        ${(sinPago || esVencida) ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender sin cobrar">↗ Extender</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
@@ -5228,7 +5229,7 @@ function showCampCalDetail(evt, row) {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${hasPauta||hasGastos?'10px':'0'}">
       ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${row});closeCampCalPopover()">💳 Cobrado</button>` : ''}
-      ${sinPago ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${row});closeCampCalPopover()">↗ Extender</button>` : ''}
+      ${(sinPago || (days < 0 && c.estado !== 'regalo' && c.estado !== 'pendiente_inicio')) ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${row});closeCampCalPopover()">↗ Extender</button>` : ''}
       ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})">📋 Copiar pauta</button>` : ''}
       ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">💰 Gastos</button><div class="campania-expand" style="width:100%;margin-top:6px">${gastosEsc}</div>` : ''}
       ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">📝 Notas</button><div class="campania-expand" style="width:100%;margin-top:6px">${notasEsc}</div>` : ''}
