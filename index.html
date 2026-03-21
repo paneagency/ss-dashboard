@@ -3669,7 +3669,7 @@ function smartPautaDetect() {
     }
 
     const uniqueArtists = [...artistsMap.values()];
-    const isMulti = uniqueArtists.length > 1;
+    const isMulti = urls.length > 1;
 
     // Insertar prefijo encima de cada URL según modo
     let newText = fPauta.value;
@@ -3770,9 +3770,7 @@ function agruparPorEvento(camps) {
     seen.add(c.masterEventId);
     const group = camps.filter(x => x.masterEventId === c.masterEventId);
     if (group.length > 1) {
-      const uniqueArtistas = [...new Set(group.map(x => x.artista))];
-      const grupalArtista = uniqueArtistas.length === 1 ? uniqueArtistas[0] : 'Varios';
-      result.push({ ...c, artista: grupalArtista, _grupalArtistas: group.map(x => x.artista) });
+      result.push({ ...c, artista: 'Varios', _grupalArtistas: group.map(x => x.artista) });
     } else {
       result.push(c);
     }
@@ -3789,7 +3787,7 @@ function parseArtistasFromPauta(pauta) {
   for (const m of pauta.matchAll(re)) {
     const nombre = m[1].trim();
     const link   = m[2].trim();
-    if (!seen.has(nombre)) { seen.add(nombre); result.push({ nombre, link }); }
+    if (!seen.has(link)) { seen.add(link); result.push({ nombre, link }); }
   }
   return result;
 }
@@ -5192,8 +5190,7 @@ function showCampCalDetail(evt, row) {
   if (c.masterEventId) {
     const group = _campanias.filter(x => x.masterEventId === c.masterEventId);
     if (group.length > 1) {
-      const uniqueArtistas = [...new Set(group.map(x => x.artista))];
-      c = { ...c, artista: uniqueArtistas.length === 1 ? uniqueArtistas[0] : 'Varios', _grupalArtistas: group.map(x => x.artista) };
+      c = { ...c, artista: 'Varios', _grupalArtistas: group.map(x => x.artista) };
     }
   }
 
