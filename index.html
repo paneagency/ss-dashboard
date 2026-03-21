@@ -5146,11 +5146,12 @@ function renderCampCalendario(data, today) {
       const days  = Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000);
       const sinPago  = c.estado === 'pendiente_pago';
       const esRegalo = c.estado === 'regalo';
-      const color = esRegalo ? '#f0b429' : sinPago ? 'var(--amber)' : days < 0 ? 'var(--red)' : days === 0 ? 'var(--amber)' : 'var(--green)';
-      const bg    = esRegalo ? 'rgba(251,191,36,0.15)' : sinPago ? 'rgba(245,158,11,0.18)' : days < 0 ? 'rgba(248,81,73,0.15)' : days === 0 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
-      const border= sinPago ? 'border:1px dashed rgba(245,158,11,0.6);' : '';
-      const suffix = esRegalo ? ' 🎁' : sinPago ? ' 💳' : '';
-      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};${border}cursor:pointer" onclick="showCampCalDetail(event,${c.row})" title="${c.artista} — ${c.vendedor}${sinPago ? ' (sin pago)' : esRegalo ? ' (regalo)' : ''}">${c.artista}${suffix}</div>`;
+      const pendInicio = c.estado === 'pendiente_inicio';
+      const color = esRegalo ? '#f0b429' : sinPago ? 'var(--amber)' : pendInicio ? 'var(--indigo)' : days < 0 ? 'var(--red)' : days === 0 ? 'var(--amber)' : 'var(--green)';
+      const bg    = esRegalo ? 'rgba(251,191,36,0.15)' : sinPago ? 'rgba(245,158,11,0.18)' : pendInicio ? 'rgba(99,102,241,0.15)' : days < 0 ? 'rgba(248,81,73,0.15)' : days === 0 ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.12)';
+      const border= sinPago ? 'border:1px dashed rgba(245,158,11,0.6);' : pendInicio ? 'border:1px dashed rgba(99,102,241,0.4);' : '';
+      const suffix = esRegalo ? ' 🎁' : sinPago ? ' 💳' : pendInicio ? ' 🎵' : '';
+      return `<div class="camp-cal-day-chip" style="background:${bg};color:${color};${border}cursor:pointer" onclick="showCampCalDetail(event,${c.row})" title="${c.artista} — ${c.vendedor}${sinPago ? ' (sin pago)' : esRegalo ? ' (regalo)' : pendInicio ? ' (pendiente inicio)' : ''}">${c.artista}${suffix}</div>`;
     }).join('');
 
     html += `<div class="camp-cal-day${isToday ? ' today' : ''}">
