@@ -5071,7 +5071,7 @@ function renderCampList(data, today) {
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
-        <div class="campania-meta">${c.vendedor} · ${pendienteInicio ? `Inicia ${inicioFmt} · Vence ${vencFmt}` : `Vence ${vencFmt}`} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}</div>
+        <div class="campania-meta">${c.vendedor} · ${pendienteInicio ? `Inicia ${inicioFmt} · Vence ${vencFmt}` : `Vence ${vencFmt}`} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}${sinPago && c._acumulado ? ` · <span style="color:var(--amber);font-weight:600">💰 $${(c._acumulado.totalPrecio||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:2})} (${c._acumulado.periodos} períodos)</span>` : ''}</div>
       </div>
       <div class="campania-actions" onclick="event.stopPropagation()">
         ${pendienteInicio ? `<button class="btn btn-sm" style="background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.4);font-weight:600" onclick="activarCampania(${idx})" title="Activar campaña">✓ Activar</button>` : ''}

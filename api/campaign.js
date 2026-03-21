@@ -489,25 +489,61 @@ module.exports = async (req, res) => {
         spreadsheetId: SPREADSHEET_ID,
         range: `${CAMPANAS_SHEET}!A:V`,
       });
-      let campanias = (resp.data.values || []).slice(1)
-        .map((r, i) => ({
-          row: i + 2,
-          artista: r[0], vendedor: r[1],
-          fechaInicio: r[2], fechaVencimiento: r[3],
-          duracion: parseInt(r[4]) || 30,
-          masterEventId: r[5] || '', vendorEventId: r[6] || '',
-          estado: r[7] || '',
-          metodo: r[8] || '', precio: r[9] || '', gasto: r[10] || '',
-          genero: r[14] || '',
-          detalleGastos: r[15] || '',
-          pauta: r[16] || '',
-          representante: r[17] || '',
-          notas: r[18] || '',
-          campaignId: r[19] || '',
-          timestamp: r[20] || '',
-          editadoPor: r[21] || '',
-        }))
-        .filter(c => ['activa', 'pendiente_pago', 'prueba', 'regalo', 'pendiente_inicio'].includes(c.estado) && c.artista);
+      const allRows = (resp.data.values || []).slice(1).map((r, i) => ({
+        row: i + 2,
+        artista: r[0], vendedor: r[1],
+        fechaInicio: r[2], fechaVencimiento: r[3],
+        duracion: parseInt(r[4]) || 30,
+        masterEventId: r[5] || '', vendorEventId: r[6] || '',
+        estado: r[7] || '',
+        metodo: r[8] || '', precio: r[9] || '', gasto: r[10] || '',
+        genero: r[14] || '',
+        detalleGastos: r[15] || '',
+        pauta: r[16] || '',
+        representante: r[17] || '',
+        notas: r[18] || '',
+        campaignId: r[19] || '',
+        timestamp: r[20] || '',
+        editadoPor: r[21] || '',
+      }));
+
+      // Índice de extendidas por masterEventId para calcular acumulado
+      const extendidasByMaster = {};
+      for (const r of allRows) {
+        if (r.estado === 'extendida' && r.masterEventId) {
+          if (!extendidasByMaster[r.masterEventId]) extendidasByMaster[r.masterEventId] = [];
+          extendidasByMaster[r.masterEventId].push(r);
+        }
+      }
+
+      let campanias = allRows
+        .filter(c => ['activa', 'pendiente_pago', 'prueba', 'regalo', 'pendiente_inicio'].includes(c.estado) && c.artista)
+        .map(c => {
+          // Para pendiente_pago: adjuntar datos de períodos extendidos acumulados
+          if (c.estado === 'pendiente_pago' && c.masterEventId) {
+            const extRows = extendidasByMaster[c.masterEventId] || [];
+            // Deduplicar artistas únicos (para grupal solo contar 1 por período)
+            // Agrupar extendidas por campaignId para contar períodos reales
+            const periodIds = new Set(extRows.map(e => e.campaignId || e.row));
+            const periodCount = periodIds.size;
+            if (periodCount > 0) {
+              // Sumar precio/gasto del primer artista de cada campaignId (evitar doble conteo grupal)
+              const seenPeriod = new Set();
+              let sumPrecio = parseFloat(c.precio) || 0;
+              let sumGasto  = parseFloat(c.gasto)  || 0;
+              for (const e of extRows) {
+                const pid = e.campaignId || e.row;
+                if (!seenPeriod.has(pid)) {
+                  seenPeriod.add(pid);
+                  sumPrecio += parseFloat(e.precio) || 0;
+                  sumGasto  += parseFloat(e.gasto)  || 0;
+                }
+              }
+              c._acumulado = { periodos: periodCount + 1, totalPrecio: +sumPrecio.toFixed(2), totalGasto: +sumGasto.toFixed(2) };
+            }
+          }
+          return c;
+        });
 
       if (vendedor && vendedor !== 'all')
         campanias = campanias.filter(c => c.vendedor === vendedor);
