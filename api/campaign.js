@@ -522,23 +522,21 @@ module.exports = async (req, res) => {
           // Para pendiente_pago: adjuntar datos de períodos extendidos acumulados
           if (c.estado === 'pendiente_pago' && c.masterEventId) {
             const extRows = extendidasByMaster[c.masterEventId] || [];
-            // Deduplicar artistas únicos (para grupal solo contar 1 por período)
-            // Agrupar extendidas por campaignId para contar períodos reales
-            const periodIds = new Set(extRows.map(e => e.campaignId || e.row));
-            const periodCount = periodIds.size;
-            if (periodCount > 0) {
-              // Sumar precio/gasto del primer artista de cada campaignId (evitar doble conteo grupal)
-              const seenPeriod = new Set();
-              let sumPrecio = parseFloat(c.precio) || 0;
-              let sumGasto  = parseFloat(c.gasto)  || 0;
-              for (const e of extRows) {
-                const pid = e.campaignId || e.row;
-                if (!seenPeriod.has(pid)) {
-                  seenPeriod.add(pid);
-                  sumPrecio += parseFloat(e.precio) || 0;
-                  sumGasto  += parseFloat(e.gasto)  || 0;
-                }
+            // Agrupar por fechaInicio|fechaVencimiento: hermanas grupal del mismo período comparten fechas
+            const seenPeriod = new Set();
+            let sumPrecio = parseFloat(c.precio) || 0; // período actual
+            let sumGasto  = parseFloat(c.gasto)  || 0;
+            let periodCount = 0;
+            for (const e of extRows) {
+              const pid = `${e.fechaInicio}|${e.fechaVencimiento}`;
+              if (!seenPeriod.has(pid)) {
+                seenPeriod.add(pid);
+                periodCount++;
+                sumPrecio += parseFloat(e.precio) || 0;
+                sumGasto  += parseFloat(e.gasto)  || 0;
               }
+            }
+            if (periodCount > 0) {
               c._acumulado = { periodos: periodCount + 1, totalPrecio: +sumPrecio.toFixed(2), totalGasto: +sumGasto.toFixed(2) };
             }
           }
