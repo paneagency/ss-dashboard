@@ -4607,7 +4607,8 @@ function renderResumenCampaniasHoy() {
     if (isInicio) {
       badgeBg = 'rgba(16,185,129,0.18)'; badgeColor = 'var(--green)';
       borderColor = 'rgba(16,185,129,0.5)'; badgeIcon = '🎵'; badgeLabel = 'inicia hoy';
-      metaExtra = `Vence ${c.fechaVencimiento} · `;
+      const vencFmtI = new Date(c.fechaVencimiento + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+      metaExtra = `Vence ${vencFmtI} · `;
     } else {
       badgeBg   = esRegalo ? 'rgba(251,191,36,0.15)' : sinPagoHoy ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.15)';
       badgeColor= esRegalo ? '#f0b429' : 'var(--amber)';
