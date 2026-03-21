@@ -656,17 +656,38 @@ module.exports = async (req, res) => {
 
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo || oldRow[8], vendedor);
 
-      // 1. Marcar fila actual como 'extendida'
+      // Buscar filas hermanas (misma campaña grupal) si hay masterEventId
+      let siblingRows = [{ rowNum: row, rowData: oldRow }]; // default: solo la fila clickeada
+      if (masterEventId) {
+        const allRowsResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:V`,
+        });
+        const allRows = allRowsResp.data.values || [];
+        const SIBLING_STATES = new Set(['activa', 'pendiente_pago', 'pendiente_inicio', 'regalo', 'prueba']);
+        // header is row index 0 = sheet row 1; data starts at index 1 = sheet row 2
+        const candidates = [];
+        for (let i = 1; i < allRows.length; i++) {
+          const r = allRows[i];
+          const rMaster = r[5] || '';
+          const rEstado = r[7] || '';
+          if (rMaster === masterEventId && SIBLING_STATES.has(rEstado)) {
+            candidates.push({ rowNum: i + 1, rowData: r }); // sheet row = array index + 1
+          }
+        }
+        if (candidates.length > 1) siblingRows = candidates;
+      }
+
+      // 1. Marcar TODAS las filas hermanas como 'extendida'
+      const extendData = [];
+      for (const sib of siblingRows) {
+        extendData.push({ range: `${CAMPANAS_SHEET}!H${sib.rowNum}`, values: [['extendida']] });
+        extendData.push({ range: `${CAMPANAS_SHEET}!U${sib.rowNum}`, values: [[ts]] });
+        extendData.push({ range: `${CAMPANAS_SHEET}!V${sib.rowNum}`, values: [[editadoPor || '']] });
+      }
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
-        requestBody: {
-          valueInputOption: 'USER_ENTERED',
-          data: [
-            { range: `${CAMPANAS_SHEET}!H${row}`, values: [['extendida']] },
-            { range: `${CAMPANAS_SHEET}!U${row}`, values: [[ts]] },
-            { range: `${CAMPANAS_SHEET}!V${row}`, values: [[editadoPor || '']] },
-          ],
-        },
+        requestBody: { valueInputOption: 'USER_ENTERED', data: extendData },
       });
 
       // 2. Actualizar fecha de vencimiento en calendario (reusar masterEventId)
@@ -680,12 +701,25 @@ module.exports = async (req, res) => {
         console.error('Calendar patch error (non-fatal):', calErr.message);
       }
 
-      // 3. Agregar nueva fila pendiente_pago con el mismo masterEventId/vendorEventId
+      // 3. Agregar nueva fila pendiente_pago por cada hermana (misma masterEventId)
+      const newRowValues = siblingRows.map(sib => {
+        const r = sib.rowData;
+        const sibArtista = r[0] || artista;
+        const sibVendedor = r[1] || vendedor;
+        const sibVendorEventId = r[6] || vendorEventId;
+        const sibGenero = r[14] || genero;
+        const sibRep = r[17] || representante;
+        const sibNotas = notasBody !== undefined ? notasBody : (r[18] || '');
+        const sibMetodo = metodo || r[8] || '';
+        const { neto: sibNeto, final: sibFinal, margen: sibMargen } = calcFinancials(precio, gasto, sibMetodo, sibVendedor);
+        return [sibArtista, sibVendedor, nuevaFechaInicio, nuevaFechaVenc, duracion, masterEventId, sibVendorEventId, 'pendiente_pago', sibMetodo, precio || '', gasto || '', sibNeto || '', sibMargen || '', sibFinal || '', sibGenero, detalleGastos, pauta || '', sibRep, sibNotas, campaignId, ts, editadoPor || ''];
+      });
+
       const appendResp = await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
         range: `${CAMPANAS_SHEET}!A:V`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, nuevaFechaInicio, nuevaFechaVenc, duracion, masterEventId, vendorEventId, 'pendiente_pago', metodo || oldRow[8] || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts, editadoPor || '']] },
+        requestBody: { values: newRowValues },
       });
       const updatedRange = appendResp.data?.updates?.updatedRange || '';
       const rowMatch = updatedRange.match(/(\d+)$/);
