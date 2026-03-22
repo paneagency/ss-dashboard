@@ -527,17 +527,22 @@ module.exports = async (req, res) => {
         .map(c => {
           // Para pendiente_pago: adjuntar datos de períodos extendidos acumulados
           if (c.estado === 'pendiente_pago') {
-            // Primero buscar por masterEventId, fallback por artista+vendedor
-            let extRows = (c.masterEventId && extendidasByMaster[c.masterEventId]) || [];
-            if (!extRows.length && c.artista && c.vendedor) {
-              extRows = extendidasByArtVend[`${c.artista}||${c.vendedor}`] || [];
+            // Combinar extendidas por masterEventId Y por artista+vendedor (union sin duplicados por row).
+            // Necesario porque ediciones previas pueden cambiar el masterEventId,
+            // dejando extendidas antiguas con IDs distintos al actual.
+            const byMaster  = (c.masterEventId ? extendidasByMaster[c.masterEventId] : null) || [];
+            const byArtVend = (c.artista && c.vendedor ? extendidasByArtVend[`${c.artista}||${c.vendedor}`] : null) || [];
+            const seenRows  = new Set();
+            const allExtRows = [];
+            for (const e of [...byMaster, ...byArtVend]) {
+              if (!seenRows.has(e.row)) { seenRows.add(e.row); allExtRows.push(e); }
             }
             // Agrupar por fechaInicio|fechaVencimiento: hermanas grupal del mismo período comparten fechas
             const seenPeriod = new Set();
             let sumPrecio = parseFloat(c.precio) || 0; // período actual
             let sumGasto  = parseFloat(c.gasto)  || 0;
             let periodCount = 0;
-            for (const e of extRows) {
+            for (const e of allExtRows) {
               const pid = `${e.fechaInicio}|${e.fechaVencimiento}`;
               if (!seenPeriod.has(pid)) {
                 seenPeriod.add(pid);
