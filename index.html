@@ -4248,6 +4248,35 @@ async function submitSinPago(e) {
   }
 }
 
+async function copiarDeuda(row) {
+  const c = _campanias.find(c => c.row === row);
+  if (!c) return;
+  const fmtDate = s => s ? s.split('-').reverse().join('/') : '—';
+  const fmt$ = v => '$' + (parseFloat(v)||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:2});
+  let extendidas = [];
+  try {
+    const params = new URLSearchParams({ mode: 'pendientes_cobro' });
+    if (c.masterEventId) params.set('masterEventId', c.masterEventId);
+    params.set('artista', c.artista);
+    params.set('vendedor', c.vendedor);
+    const r = await fetch(`/api/campaign?${params}`);
+    const d = await r.json();
+    extendidas = (d.extendidas || []).sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||''));
+  } catch(e) {}
+  const allPeriods = [...extendidas, c];
+  const lines = [`Deuda pendiente — ${c.artista}`];
+  allPeriods.forEach((p, i) => {
+    const isLast = i === allPeriods.length - 1;
+    lines.push(`Período ${i + 1}: ${fmtDate(p.fechaInicio)} al ${fmtDate(p.fechaVencimiento)} — ${fmt$(p.precio)}${isLast ? ' (período actual)' : ''}`);
+  });
+  const total = allPeriods.reduce((s, p) => s + (parseFloat(p.precio) || 0), 0);
+  lines.push(`Total: ${fmt$(total)} (${allPeriods.length} período${allPeriods.length !== 1 ? 's' : ''})`);
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    showToast('Resumen de deuda copiado', 'success');
+  } catch(e) { showToast('Error al copiar', 'error'); }
+}
+
 async function cobrarCampania(row) {
   const c = _campanias.find(c => c.row === row);
   if (!c) return;
@@ -4632,7 +4661,8 @@ function renderResumenCampaniasHoy() {
       <div class="campania-actions" onclick="event.stopPropagation()">
         ${isInicio ? `<button class="btn btn-sm" style="background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.4);font-weight:600" onclick="activarCampania(${idx})" title="Activar campaña">✓ Activar</button>` : ''}
         ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
-        ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender período">↗ Extender</button>` : ''}
+        ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.08);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="copiarDeuda(${idx})" title="Copiar resumen de deuda">📤</button>` : ''}
+        ${sinPagoHoy ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender período">↗</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
@@ -5110,7 +5140,8 @@ function renderCampList(data, today) {
       <div class="campania-actions" onclick="event.stopPropagation()">
         ${pendienteInicio ? `<button class="btn btn-sm" style="background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.4);font-weight:600" onclick="activarCampania(${idx})" title="Activar campaña">✓ Activar</button>` : ''}
         ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${idx})" title="Registrar cobro">💳 Cobrado</button>` : ''}
-        ${(sinPago || esVencida) ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender sin cobrar">↗ Extender</button>` : ''}
+        ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.08);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="copiarDeuda(${idx})" title="Copiar resumen de deuda">📤</button>` : ''}
+        ${(sinPago || esVencida) ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${idx})" title="Extender sin cobrar">↗</button>` : ''}
         ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${idx})" title="Copiar pauta">📋</button>` : ''}
         ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="toggleCampExpand(${idx},'gastos')" title="Ver gastos">💰</button>` : ''}
         ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="toggleCampExpand(${idx},'notas')" title="Ver notas">📝</button>` : ''}
@@ -5263,7 +5294,8 @@ function showCampCalDetail(evt, row) {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:${hasPauta||hasGastos?'10px':'0'}">
       ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.18);color:var(--amber);border:1px solid rgba(245,158,11,0.5);font-weight:600" onclick="cobrarCampania(${row});closeCampCalPopover()">💳 Cobrado</button>` : ''}
-      ${(sinPago || (days < 0 && c.estado !== 'regalo' && c.estado !== 'pendiente_inicio')) ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${row});closeCampCalPopover()">↗ Extender</button>` : ''}
+      ${sinPago ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.08);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="copiarDeuda(${row});closeCampCalPopover()" title="Copiar resumen de deuda">📤</button>` : ''}
+      ${(sinPago || (days < 0 && c.estado !== 'regalo' && c.estado !== 'pendiente_inicio')) ? `<button class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);font-weight:600" onclick="openExtenderModal(${row});closeCampCalPopover()">↗</button>` : ''}
       ${hasPauta  ? `<button class="btn btn-sm" style="background:rgba(99,102,241,0.08);color:var(--indigo);border:1px solid rgba(99,102,241,0.2)" onclick="copiarPauta(${row})">📋 Copiar pauta</button>` : ''}
       ${hasGastos ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">💰 Gastos</button><div class="campania-expand" style="width:100%;margin-top:6px">${gastosEsc}</div>` : ''}
       ${hasNotas  ? `<button class="btn btn-sm" style="background:rgba(139,92,246,0.1);color:#a78bfa;border:1px solid rgba(139,92,246,0.3)" onclick="this.nextElementSibling.classList.toggle('open')">📝 Notas</button><div class="campania-expand" style="width:100%;margin-top:6px">${notasEsc}</div>` : ''}
