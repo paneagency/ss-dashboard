@@ -912,7 +912,7 @@ module.exports = async (req, res) => {
         const allVals = (allResp.data.values || []).slice(1); // skip header
         siblingRows = allVals
           .map((r, i) => ({ rowNum: i + 2, masterId: r[0] || '', estado: r[2] || '' }))
-          .filter(r => r.masterId === masterEventId && ['activa', 'pendiente_pago'].includes(r.estado) && r.rowNum !== parseInt(row));
+          .filter(r => r.masterId === masterEventId && ['activa', 'pendiente_pago', 'pendiente_inicio', 'regalo', 'prueba'].includes(r.estado) && r.rowNum !== parseInt(row));
       }
       const esGrupal = siblingRows.length > 0;
 
@@ -1005,6 +1005,27 @@ module.exports = async (req, res) => {
         const updatedRange = appendResp.data?.updates?.updatedRange || '';
         const rowMatch = updatedRange.match(/(\d+)$/);
         if (rowMatch) newCampaignRow = parseInt(rowMatch[1]);
+
+        // Actualizar masterEventId en filas extendidas del mismo evento (igual que enPeriodoGracia)
+        if (masterEventId && newMasterId && masterEventId !== newMasterId) {
+          const extAllResp = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${CAMPANAS_SHEET}!F:H`,
+          });
+          const extRows = (extAllResp.data.values || []).slice(1);
+          const extUpdates = [];
+          extRows.forEach((r, i) => {
+            if ((r[0] || '') === masterEventId && (r[2] || '') === 'extendida') {
+              extUpdates.push({ range: `${CAMPANAS_SHEET}!F${i + 2}`, values: [[newMasterId]] });
+            }
+          });
+          if (extUpdates.length) {
+            await sheets.spreadsheets.values.batchUpdate({
+              spreadsheetId: SPREADSHEET_ID,
+              requestBody: { valueInputOption: 'USER_ENTERED', data: extUpdates },
+            });
+          }
+        }
       }
 
       // Actualizar METODO, COMISION_PCT y CAMPAIGN_ID en la hoja de ventas principal
