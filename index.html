@@ -4401,7 +4401,8 @@ async function submitSale(e) {
           const id = await ir.json();
           if (id.ok) {
             window._lastInvoice = { ...id, artista: sheetArtista, vendedor: venta, representante: repName, monto: precio };
-            showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar por email</a>`, 'success', 8000);
+            const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
+            showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar</a>${pdfLink}`, 'success', 8000);
           }
         } catch(e) { console.warn('Invoice generation failed (non-fatal):', e); }
       })();

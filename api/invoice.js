@@ -1,6 +1,6 @@
 const { google } = require('googleapis');
+const { Storage } = require('@google-cloud/storage');
 const PDFDocument = require('pdfkit');
-const { Readable } = require('stream');
 const nodemailer = require('nodemailer');
 
 const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
@@ -27,22 +27,18 @@ function getAuth() {
   });
 }
 
-async function getOrCreateFolder(drive, name, parentId) {
-  const safeName = name.replace(/'/g, "\\'");
-  const q = `name='${safeName}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
-  const res = await drive.files.list({ q, fields: 'files(id)', spaces: 'drive' });
-  if (res.data.files.length > 0) return res.data.files[0].id;
-  const f = await drive.files.create({
-    requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
-    fields: 'id',
-  });
-  return f.data.id;
+function getStorage() {
+  const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+  return new Storage({ credentials: creds });
 }
 
-async function getRootFolderId() {
-  // Primero: env var DRIVE_ROOT_FOLDER_ID (carpeta del usuario compartida con la service account)
-  if (process.env.DRIVE_ROOT_FOLDER_ID) return process.env.DRIVE_ROOT_FOLDER_ID;
-  throw new Error('DRIVE_ROOT_FOLDER_ID no configurada. Creá una carpeta en Google Drive, compartila con la service account y agregá el ID como variable de entorno en Vercel.');
+async function uploadToGCS(pdfBuffer, fileName) {
+  const bucketName = process.env.GCS_BUCKET_NAME;
+  if (!bucketName) throw new Error('GCS_BUCKET_NAME no configurado en Vercel');
+  const storage = getStorage();
+  const file = storage.bucket(bucketName).file(fileName);
+  await file.save(pdfBuffer, { contentType: 'application/pdf', public: true, resumable: false });
+  return `https://storage.googleapis.com/${bucketName}/${encodeURIComponent(fileName)}`;
 }
 
 async function ensureSheets(sheetsClient) {
@@ -176,7 +172,6 @@ module.exports = async (req, res) => {
   try {
     const auth = getAuth();
     const sheetsClient = google.sheets({ version: 'v4', auth });
-    const drive = google.drive({ version: 'v3', auth });
 
     // ── GENERATE INVOICE ─────────────────────────────────────────
     if (req.method === 'POST' && (!req.body.mode || req.body.mode === 'generate')) {
@@ -189,43 +184,45 @@ module.exports = async (req, res) => {
       const issueDate = fecha || `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
       const monto = parseFloat(precio) || 0;
 
-      // Log in Facturas sheet (PDF se genera al enviar, no se almacena)
+      // Generar PDF y subir a GCS
+      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto });
+      const gcsUrl = await uploadToGCS(pdfBuffer, `${invoiceNum} - ${artista}.pdf`);
+
+      // Log en hoja Facturas (cols A:N para guardar datos completos para reenvío)
       await sheetsClient.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${FACTURAS_SHEET}!A:K`,
+        range: `${FACTURAS_SHEET}!A:N`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', 'Generada', '', '', '']] },
+        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', 'Generada', gcsUrl, '', '', clienteDireccion || '', clientePais || '', clienteTaxId || '']] },
       });
 
-      return res.json({ ok: true, invoiceNum, artista, vendedor, representante, precio: monto, metodo, issueDate, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '' });
+      return res.json({ ok: true, invoiceNum, gcsUrl, artista, vendedor, representante, precio: monto, metodo, issueDate, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '' });
     }
 
-    // ── SEND INVOICE BY EMAIL (genera PDF fresco y lo adjunta) ────
+    // ── SEND INVOICE BY EMAIL ─────────────────────────────────────
     if (req.method === 'POST' && req.body.mode === 'send') {
-      const { invoiceNum, to, artista, vendedor, representante, precio, issueDate, clienteDireccion, clientePais, clienteTaxId } = req.body;
+      const { invoiceNum, to, artista, vendedor, representante, precio, issueDate, clienteDireccion, clientePais, clienteTaxId, gcsUrl } = req.body;
       if (!to || !to.length) return res.status(400).json({ error: 'destinatario requerido' });
       const gmailUser = process.env.GMAIL_USER;
       const gmailPass = process.env.GMAIL_PASS;
       if (!gmailUser || !gmailPass) return res.status(500).json({ error: 'GMAIL_USER y GMAIL_PASS no configurados en Vercel' });
 
-      // Regenerar PDF con los datos originales
+      // Regenerar PDF (o usar GCS si está disponible)
       const monto = parseFloat(precio) || 0;
-      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion, clientePais, clienteTaxId, monto });
+      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto });
 
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: gmailUser, pass: gmailPass },
-      });
+      const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
+      const gcsLine = gcsUrl ? `<p><a href="${gcsUrl}" style="color:#6366f1">Ver factura online</a></p>` : '';
 
       await transporter.sendMail({
         from: `Pane Agency <${gmailUser}>`,
         to: Array.isArray(to) ? to.join(', ') : to,
         subject: `Factura ${invoiceNum} - Pane Agency`,
-        html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency LLC</h2><p>Hola,</p><p>Te enviamos tu factura <strong>${invoiceNum}</strong> adjunta a este email.</p><hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
+        html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency LLC</h2><p>Hola,</p><p>Te enviamos tu factura <strong>${invoiceNum}</strong> adjunta a este email.</p>${gcsLine}<hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
         attachments: [{ filename: `${invoiceNum} - ${artista || 'Factura'}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }],
       });
 
-      // Update Facturas sheet log
+      // Actualizar hoja Facturas
       try {
         const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:A` });
         const rows = resp.data.values || [];
@@ -236,6 +233,7 @@ module.exports = async (req, res) => {
           await sheetsClient.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
             requestBody: { valueInputOption: 'USER_ENTERED', data: [
+              { range: `${FACTURAS_SHEET}!H${rowIdx + 1}`, values: [['Enviada']] },
               { range: `${FACTURAS_SHEET}!J${rowIdx + 1}`, values: [[dateStr]] },
               { range: `${FACTURAS_SHEET}!K${rowIdx + 1}`, values: [[(Array.isArray(to) ? to : [to]).join(', ')]] },
             ]},
@@ -249,9 +247,9 @@ module.exports = async (req, res) => {
     // ── LIST INVOICES ─────────────────────────────────────────────
     if (req.method === 'GET') {
       try {
-        const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:K` });
+        const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:N` });
         const rows = (resp.data.values || []).slice(1);
-        return res.json({ facturas: rows.map(r => ({ invoiceNum: r[0], fecha: r[1], artista: r[2], vendedor: r[3], representante: r[4], monto: r[5], metodo: r[6], estado: r[7], driveUrl: r[8], emailEnviado: r[9], para: r[10] })) });
+        return res.json({ facturas: rows.map(r => ({ invoiceNum: r[0], fecha: r[1], artista: r[2], vendedor: r[3], representante: r[4], monto: r[5], metodo: r[6], estado: r[7], gcsUrl: r[8], emailEnviado: r[9], para: r[10], clienteDireccion: r[11]||'', clientePais: r[12]||'', clienteTaxId: r[13]||'' })) });
       } catch(e) { return res.json({ facturas: [] }); }
     }
 
