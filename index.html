@@ -1290,6 +1290,7 @@
         <input type="hidden" id="rep-row">
         <div class="detalle-grid" style="margin-bottom:16px">
           <div class="detalle-field full"><div class="detalle-field-label">Nombre *</div><input id="rep-nombre" class="dd-input" placeholder="Nombre del representante"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal</div><input id="rep-nombre-fiscal" class="dd-input" placeholder="Ej: Melboss Music S.L"></div>
           <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="rep-email" class="dd-input" type="email" placeholder="email@ejemplo.com"></div>
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="rep-taxid" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="rep-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
@@ -1311,6 +1312,7 @@
         <input type="hidden" id="vend-nombre">
         <div class="detalle-grid" style="margin-bottom:16px">
           <div class="detalle-field"><div class="detalle-field-label">Comisión %</div><input id="vend-commission" class="dd-input" type="number" step="0.01" placeholder="0"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal</div><input id="vend-nombre-fiscal" class="dd-input" placeholder="Ej: Melboss Music S.L"></div>
           <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="vend-email" class="dd-input" type="email" placeholder="email@ejemplo.com"></div>
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="vend-taxid" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="vend-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
@@ -3125,6 +3127,7 @@ function openRepModal(row) {
   document.getElementById('rep-modal-title').textContent = isNew ? 'Nuevo Representante' : 'Editar Representante';
   document.getElementById('rep-row').value = row || '';
   document.getElementById('rep-nombre').value = rep?.nombre || '';
+  document.getElementById('rep-nombre-fiscal').value = rep?.nombreFiscal || '';
   document.getElementById('rep-email').value = rep?.email || '';
   document.getElementById('rep-taxid').value = rep?.taxId || '';
   document.getElementById('rep-direccion').value = rep?.direccion || '';
@@ -3145,7 +3148,7 @@ async function saveRep() {
   if (!nombre) { showToast('El nombre es requerido', true); return; }
   const rowVal = document.getElementById('rep-row').value;
   const row = rowVal ? parseInt(rowVal) : null;
-  const payload = { mode: 'representante', nombre, email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), ...(row ? { row } : {}) };
+  const payload = { mode: 'representante', nombre, nombreFiscal: document.getElementById('rep-nombre-fiscal').value.trim(), email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), ...(row ? { row } : {}) };
   try {
     const r = await fetch('/api/campaign', { method: row ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const d = await r.json();
@@ -3204,6 +3207,7 @@ function openVendedorModal(nombre) {
   document.getElementById('vend-modal-title').textContent = nombre;
   document.getElementById('vend-nombre').value = nombre;
   document.getElementById('vend-commission').value = v.commission ? +(v.commission * 100).toFixed(2) : '';
+  document.getElementById('vend-nombre-fiscal').value = v.nombreFiscal || '';
   document.getElementById('vend-email').value = v.email || '';
   document.getElementById('vend-taxid').value = v.taxId || '';
   document.getElementById('vend-direccion').value = v.direccion || '';
@@ -3224,6 +3228,7 @@ async function saveVendedor() {
         mode: 'vendedor',
         nombre,
         commission: commissionPct / 100,
+        nombreFiscal: document.getElementById('vend-nombre-fiscal').value.trim(),
         email: document.getElementById('vend-email').value.trim(),
         taxId: document.getElementById('vend-taxid').value.trim(),
         direccion: document.getElementById('vend-direccion').value.trim(),
