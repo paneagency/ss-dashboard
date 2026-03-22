@@ -6452,12 +6452,14 @@ async function deleteRegalo(campRow) {
   }
 }
 
+let _toastTimer = null;
 function showToast(msg, type = 'success', duration = 4000) {
   const t = document.getElementById('toast');
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
   t.innerHTML = msg;
   t.className = `toast ${type}`;
   setTimeout(() => t.classList.add('show'), 10);
-  setTimeout(() => t.classList.remove('show'), duration);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
 // ============================================================
