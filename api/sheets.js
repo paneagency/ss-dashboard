@@ -56,14 +56,14 @@ module.exports = async (req, res) => {
     // ── LISTA DE VENDEDORES ────────────────────────────────────
     if (req.method === 'GET') {
       const [vendResp, provResp] = await Promise.all([
-        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:B' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:F' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Proveedores!A:A' }).catch(() => ({ data: { values: [] } })),
       ]);
       const vendRows = vendResp.data.values || [];
       const vendStart = /^(nombre|vendedor|name|vendor)/i.test(vendRows[0]?.[0] || '') ? 1 : 0;
       const vendors = vendRows.slice(vendStart)
         .filter(r => r[0]?.trim())
-        .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0 }));
+        .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0, email: r[2]?.trim() || '', direccion: r[3]?.trim() || '', taxId: r[4]?.trim() || '', notas: r[5]?.trim() || '' }));
       const providers = (provResp.data.values || []).slice(1)
         .map(r => r[0]?.trim()).filter(Boolean);
       return res.json({ vendors, providers });

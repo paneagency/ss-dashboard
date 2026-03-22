@@ -1127,6 +1127,7 @@
     <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn btn-sm camp-view-btn active" data-clview="directorio" onclick="setClientesView('directorio')">📋 Directorio</button>
       <button class="btn btn-sm camp-view-btn" data-clview="analisis" onclick="setClientesView('analisis')">📊 Análisis</button>
+      <button class="btn btn-sm camp-view-btn" data-clview="representantes" onclick="setClientesView('representantes')">👥 Representantes</button>
     </div>
 
     <!-- Vista: Análisis -->
@@ -1159,6 +1160,17 @@
       <div class="table-card">
         <div class="table-header-bar"><span class="table-title">Ranking de Clientes</span></div>
         <div class="table-scroll"><table id="table-clients"></table></div>
+      </div>
+    </div>
+
+    <!-- Vista: Representantes -->
+    <div id="clientes-view-representantes" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="section-title" style="font-size:16px">Directorio de Representantes</div>
+        <button class="btn btn-primary btn-sm" id="btn-nuevo-rep" onclick="openRepModal(null)" style="display:none">+ Nuevo Representante</button>
+      </div>
+      <div class="table-card">
+        <div class="table-scroll"><table id="table-representantes"></table></div>
       </div>
     </div>
 
@@ -1218,6 +1230,18 @@
           <div class="detalle-field full"><div class="detalle-field-label">Spotify</div><input id="dd-spotify" class="dd-input" placeholder="—"></div>
         </div>
 
+        <div class="detalle-section-title">Facturación</div>
+        <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field"><div class="detalle-field-label">Tipo</div>
+            <select id="dd-tipo" class="dd-input" style="cursor:pointer">
+              <option value="Artista">Artista</option>
+              <option value="Representante">Representante</option>
+            </select>
+          </div>
+          <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="dd-taxid" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="dd-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+        </div>
+
         <div class="detalle-section-title">Comercial</div>
         <div class="detalle-grid" style="margin-bottom:8px">
           <div class="detalle-field"><div class="detalle-field-label">Representante</div><input id="dd-representante" class="dd-input" list="list-representantes" placeholder="—"></div>
@@ -1243,6 +1267,28 @@
       </div>
     </div>
   </div>
+
+  <!-- MODAL: REPRESENTANTE -->
+  <div id="modal-rep" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRepModal()">
+    <div class="modal-box" style="max-width:480px;padding:0;overflow:hidden">
+      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:20px 24px 16px;position:relative">
+        <button class="modal-close" onclick="closeRepModal()" style="position:absolute;top:12px;right:12px">✕</button>
+        <div class="section-title" style="font-size:17px" id="rep-modal-title">Representante</div>
+      </div>
+      <div style="padding:20px 24px">
+        <input type="hidden" id="rep-row">
+        <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field full"><div class="detalle-field-label">Nombre *</div><input id="rep-nombre" class="dd-input" placeholder="Nombre del representante"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="rep-email" class="dd-input" type="email" placeholder="email@ejemplo.com"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="rep-taxid" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="rep-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Notas</div><input id="rep-notas" class="dd-input" placeholder="—"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)" id="rep-footer"></div>
+    </div>
+  </div>
+
   </section>
 
 
@@ -1822,6 +1868,8 @@ async function init() {
       fetch('/api/sheets').then(r => r.json()).then(d => {
         if (d.vendors) {
           window._vendors = d.vendors.map(v => v.name);
+          window._vendorsMap = {};
+          d.vendors.forEach(v => { window._vendorsMap[v.name] = v; });
           fillSelect('f-vendor', window._vendors);
           fillDatalist('list-ventas', window._vendors);
         }
@@ -1850,6 +1898,7 @@ async function init() {
           }
         }
       }).catch(() => {});
+      loadRepresentantes().catch(() => {});
       return;
     } catch(e) {
       lastError = e;
@@ -2720,9 +2769,15 @@ function renderGeneros() {
 // ── Sub-vistas de Clientes ────────────────────────────────────
 function setClientesView(view) {
   document.querySelectorAll('[data-clview]').forEach(b => b.classList.toggle('active', b.dataset.clview === view));
-  document.getElementById('clientes-view-analisis').style.display = view === 'analisis' ? '' : 'none';
   document.getElementById('clientes-view-directorio').style.display = view === 'directorio' ? '' : 'none';
-  if (view === 'directorio') renderDirectorio();
+  document.getElementById('clientes-view-analisis').style.display = view === 'analisis' ? '' : 'none';
+  document.getElementById('clientes-view-representantes').style.display = view === 'representantes' ? '' : 'none';
+  const role = window._currentUser?.role;
+  const canEdit = ['admin', 'secondary_admin'].includes(role);
+  if (view === 'representantes') {
+    document.getElementById('btn-nuevo-rep').style.display = canEdit ? '' : 'none';
+    renderRepresentantes();
+  } else if (view === 'directorio') renderDirectorio();
   else if (view === 'analisis') renderClientes();
 }
 
@@ -2846,6 +2901,11 @@ function openClientDetail(row) {
   setVal('dd-telefono', c.telefono);
   setVal('dd-email', c.email);
   setVal('dd-spotify', c.spotify);
+  setVal('dd-taxid', c.taxId);
+  setVal('dd-direccion', c.direccion);
+  const tipoEl = document.getElementById('dd-tipo');
+  tipoEl.value = c.tipo || 'Artista';
+  tipoEl.disabled = readonly;
 
   // Imagen actual (para preservarla o sobreescribirla si viene nueva de Spotify)
   window._ddSpotifyImage = c.imagen || null;
@@ -2932,6 +2992,9 @@ async function saveClientDetail() {
     vendedor: document.getElementById('dd-vendedor').value,
     metodoPago: document.getElementById('dd-metodo').value,
     estado: document.getElementById('dd-estado').value,
+    tipo: document.getElementById('dd-tipo').value,
+    taxId: document.getElementById('dd-taxid').value.trim(),
+    direccion: document.getElementById('dd-direccion').value.trim(),
   };
   try {
     const r = await fetch('/api/campaign', {
@@ -2950,6 +3013,102 @@ async function saveClientDetail() {
 function closeClientDetail() {
   document.getElementById('modal-detalle-cliente').style.display = 'none';
   window._ddSpotifyImage = null;
+}
+
+// ── REPRESENTANTES ──────────────────────────────────────────────
+let _representantes = [];
+
+function _escRep(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function loadRepresentantes() {
+  try {
+    const r = await fetch('/api/campaign?mode=representantes');
+    const d = await r.json();
+    _representantes = d.representantes || [];
+    window._representantesMap = {};
+    _representantes.forEach(r => { window._representantesMap[r.nombre] = r; });
+  } catch(e) { _representantes = []; }
+}
+
+function renderRepresentantes() {
+  const tbl = document.getElementById('table-representantes');
+  if (!tbl) return;
+  const role = window._currentUser?.role;
+  const canEdit = ['admin', 'secondary_admin'].includes(role);
+  const data = _representantes;
+  if (!data.length) {
+    tbl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No hay representantes registrados</td></tr>';
+    return;
+  }
+  const headers = ['Nombre', 'Email', 'Dirección', 'Tax ID', 'Notas'];
+  if (canEdit) headers.push('');
+  tbl.innerHTML = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>`;
+  const tbody = document.createElement('tbody');
+  data.forEach(rep => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = canEdit ? 'pointer' : '';
+    tr.innerHTML = `
+      <td><strong>${_escRep(rep.nombre)}</strong></td>
+      <td>${_escRep(rep.email || '—')}</td>
+      <td>${_escRep(rep.direccion || '—')}</td>
+      <td>${_escRep(rep.taxId || '—')}</td>
+      <td>${_escRep(rep.notas || '—')}</td>
+      ${canEdit ? `<td><button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="event.stopPropagation();deleteRep(${rep.row},'${_escRep(rep.nombre)}')">🗑️</button></td>` : ''}
+    `;
+    if (canEdit) tr.onclick = () => openRepModal(rep.row);
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+}
+
+function openRepModal(row) {
+  const rep = row ? _representantes.find(r => r.row === row) : null;
+  const isNew = !rep;
+  document.getElementById('rep-modal-title').textContent = isNew ? 'Nuevo Representante' : 'Editar Representante';
+  document.getElementById('rep-row').value = row || '';
+  document.getElementById('rep-nombre').value = rep?.nombre || '';
+  document.getElementById('rep-email').value = rep?.email || '';
+  document.getElementById('rep-taxid').value = rep?.taxId || '';
+  document.getElementById('rep-direccion').value = rep?.direccion || '';
+  document.getElementById('rep-notas').value = rep?.notas || '';
+  const footer = document.getElementById('rep-footer');
+  if (isNew) {
+    footer.innerHTML = `<button class="btn btn-ghost" onclick="closeRepModal()">Cancelar</button><button class="btn btn-primary" onclick="saveRep()">Crear</button>`;
+  } else {
+    footer.innerHTML = `<button class="btn btn-ghost" style="color:var(--red);margin-right:auto" onclick="closeRepModal();deleteRep(${row},'${_escRep(rep.nombre||'')}')">🗑️ Eliminar</button><button class="btn btn-ghost" onclick="closeRepModal()">Cerrar</button><button class="btn btn-primary" onclick="saveRep()">Guardar</button>`;
+  }
+  document.getElementById('modal-rep').style.display = 'flex';
+}
+
+function closeRepModal() { document.getElementById('modal-rep').style.display = 'none'; }
+
+async function saveRep() {
+  const nombre = document.getElementById('rep-nombre').value.trim();
+  if (!nombre) { showToast('El nombre es requerido', true); return; }
+  const rowVal = document.getElementById('rep-row').value;
+  const row = rowVal ? parseInt(rowVal) : null;
+  const payload = { mode: 'representante', nombre, email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), ...(row ? { row } : {}) };
+  try {
+    const r = await fetch('/api/campaign', { method: row ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Error');
+    showToast(row ? 'Representante actualizado' : 'Representante creado');
+    closeRepModal();
+    await loadRepresentantes();
+    renderRepresentantes();
+  } catch(e) { showToast(e.message, true); }
+}
+
+async function deleteRep(row, nombre) {
+  if (!confirm(`¿Eliminar representante "${nombre}"?`)) return;
+  try {
+    const r = await fetch('/api/campaign', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'representante', row }) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Error');
+    showToast('Representante eliminado');
+    await loadRepresentantes();
+    renderRepresentantes();
+  } catch(e) { showToast(e.message, true); }
 }
 
 // openClientModal → alias para nuevo cliente usando el modal estético
@@ -4082,6 +4241,36 @@ async function submitSale(e) {
       const result = await resp.json();
       if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
       saleSheetRow = result.row;
+    }
+
+    // Auto-generate invoice for Wise/PayPal sales
+    if (!esRegalo && ['Wise', 'PayPal'].includes(metodo)) {
+      const repEl = document.getElementById('f-representante');
+      const repName = repEl ? repEl.value.trim() : '';
+      const clienteData = window._clientesMap?.[artista.toLowerCase().trim()] || {};
+      (async () => {
+        try {
+          const ir = await fetch('/api/invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              artista: sheetArtista,
+              vendedor: venta,
+              representante: repName,
+              precio,
+              metodo,
+              clienteDireccion: clienteData.direccion || '',
+              clientePais: clienteData.pais || '',
+              clienteTaxId: clienteData.taxId || '',
+            }),
+          });
+          const id = await ir.json();
+          if (id.ok) {
+            showToast(`📄 Factura ${id.invoiceNum} generada`, 'success');
+            window._lastInvoice = id;
+          }
+        } catch(e) { console.warn('Invoice generation failed (non-fatal):', e); }
+      })();
     }
 
     // Leer estos valores ANTES de closeModal() porque resetea el form

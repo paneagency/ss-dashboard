@@ -5,6 +5,7 @@ const CLIENTES_SHEET    = 'Clientes';
 const CAMPANAS_SHEET    = 'CampañasCalendario';
 const CLIENTES_DB_ID    = '1-RgACwkV412FbwWe8J1PvI3gaftwY5w276v1NY3tyxc';
 const CLIENTES_DB_SHEET = '2025';
+const REPRESENTANTES_SHEET = 'Representantes';
 
 // ── Calendarios ────────────────────────────────────────────────
 const MASTER_CAL  = 'paneagency@gmail.com';
@@ -111,7 +112,7 @@ async function lookupClientDB(sheets, artista) {
 // A=ID, B=ARTISTA, C=GÉNERO, D=PAIS, E=TELÉFONO, F=EMAIL, G=SPOTIFY,
 // H=FECHA_PRIMERA_COMPRA, I=REPRESENTANTE, J=NOMBRE, K=APODO,
 // L=VENDEDOR, M=METODO_PAGO, N=ESTADO
-const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N', imagen:'O' };
+const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N', imagen:'O', tipo:'P', direccion:'Q', taxId:'R' };
 
 async function updateClientFields(sheets, artista, fields) {
   const entries = Object.entries(fields).filter(([k, v]) => CLIENT_COLS[k] && v !== undefined && v !== null && v !== '');
@@ -200,7 +201,7 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
   const newId = `C${String(rows.length).padStart(3, '0')}`;
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${CLIENTES_SHEET}!A:N`,
+    range: `${CLIENTES_SHEET}!A:R`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[
       newId, artista,
@@ -216,6 +217,10 @@ async function getOrCreateClient(sheets, artista, genero, fechaVenta, representa
       vendedor || '',       // VENDEDOR
       metodo   || '',       // METODO_PAGO
       'Activa',             // ESTADO
+      '',            // IMAGEN
+      '',            // TIPO
+      '',            // DIRECCION
+      '',            // TAX_ID
     ]] },
   });
   return newId;
@@ -363,7 +368,7 @@ module.exports = async (req, res) => {
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CLIENTES_SHEET}!A:O`,
+          range: `${CLIENTES_SHEET}!A:R`,
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
@@ -380,8 +385,19 @@ module.exports = async (req, res) => {
             metodoPago: r[12] || '',
             estado: r[13] || '',
             imagen: r[14] || '',
+            tipo: r[15] || '',
+            direccion: r[16] || '',
+            taxId: r[17] || '',
           })),
         });
+      }
+
+      if (mode === 'representantes') {
+        try {
+          const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${REPRESENTANTES_SHEET}!A:E` });
+          const rows = (resp.data.values || []).slice(1);
+          return res.json({ representantes: rows.map((r, i) => ({ row: i + 2, nombre: r[0] || '', email: r[1] || '', direccion: r[2] || '', taxId: r[3] || '', notas: r[4] || '' })).filter(r => r.nombre) });
+        } catch(e) { return res.json({ representantes: [] }); }
       }
 
       // Historial: finalizadas, eliminadas, editadas, renovadas
@@ -626,9 +642,21 @@ module.exports = async (req, res) => {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A:O`,
+        range: `${CLIENTES_SHEET}!A:R`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[newId, artista, genero || '', pais || '', safeTel, email || '', spotify || '', primeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa', imagen || '']] },
+        requestBody: { values: [[newId, artista, genero || '', pais || '', safeTel, email || '', spotify || '', primeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa', imagen || '', req.body.tipo || '', req.body.direccion || '', req.body.taxId || '']] },
+      });
+      return res.json({ ok: true });
+    }
+
+    if (req.method === 'POST' && req.body.mode === 'representante') {
+      const { nombre, email, direccion, taxId, notas } = req.body;
+      if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${REPRESENTANTES_SHEET}!A:E`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[nombre, email || '', direccion || '', taxId || '', notas || '']] },
       });
       return res.json({ ok: true });
     }
@@ -686,13 +714,25 @@ module.exports = async (req, res) => {
       return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId, campaignId });
     }
 
+    if (req.method === 'PUT' && req.body.mode === 'representante') {
+      const { row, nombre, email, direccion, taxId, notas } = req.body;
+      if (!row || !nombre) return res.status(400).json({ error: 'row y nombre requeridos' });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${REPRESENTANTES_SHEET}!A${row}:E${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[nombre, email || '', direccion || '', taxId || '', notas || '']] },
+      });
+      return res.json({ ok: true });
+    }
+
     // ── PUT: editar cliente ───────────────────────────────────
     if (req.method === 'PUT' && req.body.mode === 'client') {
-      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen } = req.body;
+      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen, tipo, direccion, taxId } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
       const existing = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:O${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:R${row}`,
       });
       const existingRow = existing.data.values?.[0] || [];
       const id = existingRow[0] || Date.now().toString();
@@ -700,9 +740,9 @@ module.exports = async (req, res) => {
       const safeTel = telefono ? (telefono.startsWith('+') ? `'${telefono}` : telefono) : '';
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:O${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:R${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '']] },
+        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '', tipo || existingRow[15] || '', direccion ?? existingRow[16] ?? '', taxId ?? existingRow[17] ?? '']] },
       });
       return res.json({ ok: true });
     }
@@ -1112,6 +1152,19 @@ module.exports = async (req, res) => {
       }
 
       return res.json({ ok: true, nuevaFechaVenc, newCampaignRow, campaignId });
+    }
+
+    if (req.method === 'DELETE' && req.body?.mode === 'representante') {
+      const { row } = req.body;
+      if (!row) return res.status(400).json({ error: 'row requerido' });
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+      const repSheet = meta.data.sheets.find(s => s.properties.title === REPRESENTANTES_SHEET);
+      if (!repSheet) return res.status(404).json({ error: 'Hoja Representantes no encontrada' });
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: { requests: [{ deleteDimension: { range: { sheetId: repSheet.properties.sheetId, dimension: 'ROWS', startIndex: row - 1, endIndex: row } } }] },
+      });
+      return res.json({ ok: true });
     }
 
     // ── DELETE: borrar cliente ────────────────────────────────
