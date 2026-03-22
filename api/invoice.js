@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const PDFDocument = require('pdfkit');
 const { Readable } = require('stream');
+const nodemailer = require('nodemailer');
 
 const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
 const FACTURAS_SHEET = 'Facturas';
@@ -260,23 +261,21 @@ module.exports = async (req, res) => {
     if (req.method === 'POST' && req.body.mode === 'send') {
       const { invoiceNum, to, driveUrl } = req.body;
       if (!to || !to.length) return res.status(400).json({ error: 'destinatario requerido' });
-      const RESEND_KEY = process.env.RESEND_API_KEY;
-      if (!RESEND_KEY) return res.status(500).json({ error: 'RESEND_API_KEY no configurada en Vercel' });
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailPass = process.env.GMAIL_PASS;
+      if (!gmailUser || !gmailPass) return res.status(500).json({ error: 'GMAIL_USER y GMAIL_PASS no configurados en Vercel' });
 
-      const emailRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: `Pane Agency <${process.env.RESEND_FROM || 'onboarding@resend.dev'}>`,
-          to: Array.isArray(to) ? to : [to],
-          subject: `Factura ${invoiceNum} - Pane Agency`,
-          html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency LLC</h2><p>Hola,</p><p>Adjunto encontrarás tu factura <strong>${invoiceNum}</strong>.</p><p><a href="${driveUrl}" style="background:#6366f1;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Ver Factura</a></p><hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
-        }),
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: gmailUser, pass: gmailPass },
       });
-      if (!emailRes.ok) {
-        const err = await emailRes.json().catch(() => ({}));
-        throw new Error(err.message || 'Error al enviar email');
-      }
+
+      await transporter.sendMail({
+        from: `Pane Agency <${gmailUser}>`,
+        to: Array.isArray(to) ? to.join(', ') : to,
+        subject: `Factura ${invoiceNum} - Pane Agency`,
+        html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency LLC</h2><p>Hola,</p><p>Te enviamos tu factura <strong>${invoiceNum}</strong>.</p><p><a href="${driveUrl}" style="background:#6366f1;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Ver Factura</a></p><hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
+      });
 
       // Update Facturas sheet log
       try {
