@@ -37,7 +37,7 @@ async function uploadToGCS(pdfBuffer, fileName) {
   if (!bucketName) throw new Error('GCS_BUCKET_NAME no configurado en Vercel');
   const storage = getStorage();
   const file = storage.bucket(bucketName).file(fileName);
-  await file.save(pdfBuffer, { contentType: 'application/pdf', public: true, resumable: false });
+  await file.save(pdfBuffer, { contentType: 'application/pdf', resumable: false });
   return `https://storage.googleapis.com/${bucketName}/${encodeURIComponent(fileName)}`;
 }
 
