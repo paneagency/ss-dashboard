@@ -4253,6 +4253,15 @@ async function copiarDeuda(row) {
   if (!c) return;
   const fmtDate = s => s ? s.split('-').reverse().join('/') : '—';
   const fmt$ = v => '$' + (parseFloat(v)||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:2});
+
+  // Detectar si es campaña grupal (varios hermanos pendiente_pago con mismo masterEventId)
+  const siblings = c.masterEventId
+    ? (_campanias || []).filter(x => x.masterEventId === c.masterEventId && x.estado === 'pendiente_pago')
+    : [c];
+  const esGrupal = siblings.length > 1;
+  const nombreArtista = esGrupal ? 'Varios' : c.artista;
+  const titulo = `Deuda pendiente — ${nombreArtista}${c.representante ? ` · Rep: ${c.representante}` : ''}`;
+
   let extendidas = [];
   try {
     const params = new URLSearchParams({ mode: 'pendientes_cobro' });
@@ -4263,13 +4272,27 @@ async function copiarDeuda(row) {
     const d = await r.json();
     extendidas = (d.extendidas || []).sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||''));
   } catch(e) {}
-  const allPeriods = [...extendidas, c];
-  const lines = [`Deuda pendiente — ${c.artista}`];
+
+  // Agrupar extendidas por rango de fechas (hermanas grupales comparten mismo rango) y sumar precios
+  const periodMap = new Map();
+  for (const e of extendidas) {
+    const key = `${e.fechaInicio}|${e.fechaVencimiento}`;
+    if (!periodMap.has(key)) periodMap.set(key, { fechaInicio: e.fechaInicio, fechaVencimiento: e.fechaVencimiento, precio: 0 });
+    periodMap.get(key).precio += parseFloat(e.precio) || 0;
+  }
+  const periodosExt = [...periodMap.values()].sort((a,b) => (a.fechaInicio||'').localeCompare(b.fechaInicio||''));
+
+  // Período actual: sumar precios de todos los hermanos
+  const precioActual = siblings.reduce((s, x) => s + (parseFloat(x.precio) || 0), 0);
+  const periodoActual = { fechaInicio: c.fechaInicio, fechaVencimiento: c.fechaVencimiento, precio: precioActual };
+
+  const allPeriods = [...periodosExt, periodoActual];
+  const lines = [titulo];
   allPeriods.forEach((p, i) => {
     const isLast = i === allPeriods.length - 1;
     lines.push(`Período ${i + 1}: ${fmtDate(p.fechaInicio)} al ${fmtDate(p.fechaVencimiento)} — ${fmt$(p.precio)}${isLast ? ' (período actual)' : ''}`);
   });
-  const total = allPeriods.reduce((s, p) => s + (parseFloat(p.precio) || 0), 0);
+  const total = allPeriods.reduce((s, p) => s + p.precio, 0);
   lines.push(`Total: ${fmt$(total)} (${allPeriods.length} período${allPeriods.length !== 1 ? 's' : ''})`);
   try {
     await navigator.clipboard.writeText(lines.join('\n'));
