@@ -189,57 +189,28 @@ module.exports = async (req, res) => {
       const issueDate = fecha || `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
       const monto = parseFloat(precio) || 0;
 
-      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion, clientePais, clienteTaxId, monto });
-
-      // Upload to Drive
-      const rootId = await getRootFolderId();
-      const artistasId = await getOrCreateFolder(drive, 'Artistas', rootId);
-      const artistaFolderId = await getOrCreateFolder(drive, artista, artistasId);
-
-      const fileName = `${invoiceNum} - ${artista}.pdf`;
-      const uploadRes = await drive.files.create({
-        requestBody: { name: fileName, mimeType: 'application/pdf', parents: [artistaFolderId] },
-        media: { mimeType: 'application/pdf', body: Readable.from([pdfBuffer]) },
-        fields: 'id,webViewLink',
-      });
-      const fileId = uploadRes.data.id;
-      const driveUrl = uploadRes.data.webViewLink;
-
-      // Also place in Representantes and Vendedores folders (same file, multiple parents)
-      const extraParents = [];
-      if (representante) {
-        const repsId = await getOrCreateFolder(drive, 'Representantes', rootId);
-        extraParents.push(await getOrCreateFolder(drive, representante, repsId));
-      }
-      if (vendedor) {
-        const vendsId = await getOrCreateFolder(drive, 'Vendedores', rootId);
-        extraParents.push(await getOrCreateFolder(drive, vendedor, vendsId));
-      }
-      if (extraParents.length) {
-        await drive.files.update({ fileId, addParents: extraParents.join(','), fields: 'id' });
-      }
-
-      // Make viewable by anyone with the link
-      await drive.permissions.create({ fileId, requestBody: { role: 'reader', type: 'anyone' } }).catch(() => {});
-
-      // Log in Facturas sheet
+      // Log in Facturas sheet (PDF se genera al enviar, no se almacena)
       await sheetsClient.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
         range: `${FACTURAS_SHEET}!A:K`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', 'Pagado', driveUrl, '', '']] },
+        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', 'Generada', '', '', '']] },
       });
 
-      return res.json({ ok: true, invoiceNum, driveUrl });
+      return res.json({ ok: true, invoiceNum, artista, vendedor, representante, precio: monto, metodo, issueDate, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '' });
     }
 
-    // ── SEND INVOICE BY EMAIL ─────────────────────────────────────
+    // ── SEND INVOICE BY EMAIL (genera PDF fresco y lo adjunta) ────
     if (req.method === 'POST' && req.body.mode === 'send') {
-      const { invoiceNum, to, driveUrl } = req.body;
+      const { invoiceNum, to, artista, vendedor, representante, precio, issueDate, clienteDireccion, clientePais, clienteTaxId } = req.body;
       if (!to || !to.length) return res.status(400).json({ error: 'destinatario requerido' });
       const gmailUser = process.env.GMAIL_USER;
       const gmailPass = process.env.GMAIL_PASS;
       if (!gmailUser || !gmailPass) return res.status(500).json({ error: 'GMAIL_USER y GMAIL_PASS no configurados en Vercel' });
+
+      // Regenerar PDF con los datos originales
+      const monto = parseFloat(precio) || 0;
+      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion, clientePais, clienteTaxId, monto });
 
       const transporter = nodemailer.createTransport({
         service: 'gmail',
@@ -250,7 +221,8 @@ module.exports = async (req, res) => {
         from: `Pane Agency <${gmailUser}>`,
         to: Array.isArray(to) ? to.join(', ') : to,
         subject: `Factura ${invoiceNum} - Pane Agency`,
-        html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency LLC</h2><p>Hola,</p><p>Te enviamos tu factura <strong>${invoiceNum}</strong>.</p><p><a href="${driveUrl}" style="background:#6366f1;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Ver Factura</a></p><hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
+        html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency LLC</h2><p>Hola,</p><p>Te enviamos tu factura <strong>${invoiceNum}</strong> adjunta a este email.</p><hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
+        attachments: [{ filename: `${invoiceNum} - ${artista || 'Factura'}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }],
       });
 
       // Update Facturas sheet log
