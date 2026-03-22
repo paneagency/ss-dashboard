@@ -459,6 +459,59 @@ module.exports = async (req, res) => {
         return res.json({ extendidas, sinCobrar });
       }
 
+      // Períodos de deuda para copiar: dedup por rango de fechas, una entrada por ciclo lógico.
+      // Combina byMaster + byArtVend para recuperar cadenas rotas por ediciones históricas.
+      if (mode === 'periodos_deuda') {
+        const masterEventId = req.query.masterEventId || '';
+        const artista       = req.query.artista || '';
+        const vendedor      = req.query.vendedor || '';
+
+        const resp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${CAMPANAS_SHEET}!A:J`,
+        });
+        const rows = (resp.data.values || []).slice(1).map((r, i) => ({
+          row: i + 2,
+          artista: r[0] || '', vendedor: r[1] || '',
+          fechaInicio: r[2] || '', fechaVencimiento: r[3] || '',
+          masterEventId: r[5] || '',
+          estado: r[7] || '',
+          precio: r[9] || '',
+        }));
+
+        // byMaster: extendidas con el masterEventId actual
+        const byMaster = masterEventId
+          ? rows.filter(r => r.masterEventId === masterEventId && r.estado === 'extendida' && r.artista)
+          : [];
+
+        // byArtVend: extendidas del mismo artista+vendedor (cualquier masterEventId)
+        // Útil para recuperar ciclos con masterEventId desactualizado.
+        // Para campañas grupales, buscamos por TODOS los artistas del grupo (mismo masterEventId activo).
+        // Usamos artista del query (primer hermano) como semilla.
+        const byArtVend = artista && vendedor
+          ? rows.filter(r => r.artista === artista && r.vendedor === vendedor && r.estado === 'extendida')
+          : [];
+
+        // Unión sin duplicados por row
+        const seenRows = new Set(byMaster.map(r => r.row));
+        const allExt = [...byMaster];
+        for (const r of byArtVend) {
+          if (!seenRows.has(r.row)) { seenRows.add(r.row); allExt.push(r); }
+        }
+
+        // Deduplicar por rango de fechas: hermanas grupales comparten mismo rango.
+        // Tomar UNA entrada representativa por rango (precio de esa fila, no sumar).
+        const periodMap = new Map();
+        for (const r of allExt) {
+          const key = `${r.fechaInicio}|${r.fechaVencimiento}`;
+          if (!periodMap.has(key)) periodMap.set(key, r);
+        }
+        const periodos = [...periodMap.values()]
+          .sort((a, b) => (a.fechaInicio || '').localeCompare(b.fechaInicio || ''));
+
+        return res.json({ periodos });
+      }
+
       // Extendidas legacy (kept for backward compatibility)
       if (mode === 'extendidas') {
         const masterEventId = req.query.masterEventId;
