@@ -39,34 +39,10 @@ async function getOrCreateFolder(drive, name, parentId) {
   return f.data.id;
 }
 
-async function getRootFolderId(drive, sheets) {
-  try {
-    const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${CONFIG_SHEET}!A:B` });
-    const rows = resp.data.values || [];
-    const found = rows.find(r => r[0] === 'DRIVE_ROOT_FOLDER_ID');
-    if (found?.[1]) return found[1];
-  } catch(e) {}
-
-  const rootRes = await drive.files.create({
-    requestBody: { name: 'Pane Agency - Facturas', mimeType: 'application/vnd.google-apps.folder' },
-    fields: 'id',
-  });
-  const rootId = rootRes.data.id;
-
-  // Share with agency Google account
-  await drive.permissions.create({ fileId: rootId, requestBody: { role: 'writer', type: 'user', emailAddress: AGENCY.email } }).catch(() => {});
-
-  // Save to Config sheet
-  try {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${CONFIG_SHEET}!A:B`,
-      valueInputOption: 'RAW',
-      requestBody: { values: [['DRIVE_ROOT_FOLDER_ID', rootId]] },
-    });
-  } catch(e) {}
-
-  return rootId;
+async function getRootFolderId() {
+  // Primero: env var DRIVE_ROOT_FOLDER_ID (carpeta del usuario compartida con la service account)
+  if (process.env.DRIVE_ROOT_FOLDER_ID) return process.env.DRIVE_ROOT_FOLDER_ID;
+  throw new Error('DRIVE_ROOT_FOLDER_ID no configurada. Creá una carpeta en Google Drive, compartila con la service account y agregá el ID como variable de entorno en Vercel.');
 }
 
 async function ensureSheets(sheetsClient) {
@@ -216,7 +192,7 @@ module.exports = async (req, res) => {
       const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion, clientePais, clienteTaxId, monto });
 
       // Upload to Drive
-      const rootId = await getRootFolderId(drive, sheetsClient);
+      const rootId = await getRootFolderId();
       const artistasId = await getOrCreateFolder(drive, 'Artistas', rootId);
       const artistaFolderId = await getOrCreateFolder(drive, artista, artistasId);
 
