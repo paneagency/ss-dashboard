@@ -527,50 +527,17 @@ module.exports = async (req, res) => {
         .map(c => {
           // Para pendiente_pago: adjuntar datos de períodos extendidos acumulados
           if (c.estado === 'pendiente_pago') {
-            // Buscar extendidas vía cadena de fechas contiguas:
-            // 1. byMaster: extendidas con masterEventId actual (fuente primaria)
-            // 2. Expansión: busca extendidas del mismo artista+vendedor cuya fechaVencimiento
-            //    conecta con el fechaInicio de las extendidas ya encontradas (cadena hacia atrás).
-            //    Esto maneja cadenas rotas por ediciones históricas sin sobrecontar campañas distintas.
-            const byMaster  = (c.masterEventId ? extendidasByMaster[c.masterEventId] : null) || [];
-            const byArtVend = (c.artista && c.vendedor ? extendidasByArtVend[`${c.artista}||${c.vendedor}`] : null) || [];
-
-            const seenRows = new Set(byMaster.map(e => e.row));
-            const allExtRows = [...byMaster];
-            // Límites inferiores conocidos: fechaInicio de extendidas encontradas.
-            // Si byMaster vacío, arranca desde el fechaInicio del período actual.
-            const lowerBounds = new Set(
-              byMaster.length > 0 ? byMaster.map(e => e.fechaInicio) : (c.fechaInicio ? [c.fechaInicio] : [])
-            );
-            // Expandir cadena hacia atrás: extendidas cuya fechaVencimiento empalma con un límite conocido
-            let changed = true;
-            while (changed) {
-              changed = false;
-              for (const e of byArtVend) {
-                if (!seenRows.has(e.row) && e.fechaVencimiento && lowerBounds.has(e.fechaVencimiento)) {
-                  seenRows.add(e.row);
-                  allExtRows.push(e);
-                  if (e.fechaInicio) lowerBounds.add(e.fechaInicio);
-                  changed = true;
-                }
-              }
-            }
-            // Agrupar por fechaInicio|fechaVencimiento: hermanas grupal del mismo período comparten fechas
-            const seenPeriod = new Set();
-            let sumPrecio = parseFloat(c.precio) || 0; // período actual
-            let sumGasto  = parseFloat(c.gasto)  || 0;
-            let periodCount = 0;
-            for (const e of allExtRows) {
-              const pid = `${e.fechaInicio}|${e.fechaVencimiento}`;
-              if (!seenPeriod.has(pid)) {
-                seenPeriod.add(pid);
-                periodCount++;
-                sumPrecio += parseFloat(e.precio) || 0;
-                sumGasto  += parseFloat(e.gasto)  || 0;
-              }
-            }
-            if (periodCount > 0) {
-              c._acumulado = { periodos: periodCount + 1, totalPrecio: +sumPrecio.toFixed(2), totalGasto: +sumGasto.toFixed(2) };
+            // Misma lógica que pendientes_cobro + cobrar modal:
+            // cada fila extendida = 1 ítem (sin deduplicar por fechas).
+            // byMaster es la fuente única; fallback byArtVend solo si byMaster vacío.
+            const byMaster = (c.masterEventId ? extendidasByMaster[c.masterEventId] : null) || [];
+            const extRows  = byMaster.length > 0
+              ? byMaster
+              : ((c.artista && c.vendedor ? extendidasByArtVend[`${c.artista}||${c.vendedor}`] : null) || []);
+            if (extRows.length > 0) {
+              const sumPrecio = extRows.reduce((s, e) => s + (parseFloat(e.precio) || 0), parseFloat(c.precio) || 0);
+              const sumGasto  = extRows.reduce((s, e) => s + (parseFloat(e.gasto)  || 0), parseFloat(c.gasto)  || 0);
+              c._acumulado = { periodos: extRows.length + 1, totalPrecio: +sumPrecio.toFixed(2), totalGasto: +sumGasto.toFixed(2) };
             }
           }
           return c;
