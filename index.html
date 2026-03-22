@@ -1304,6 +1304,15 @@
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="rep-taxid" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="rep-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Notas</div><input id="rep-notas" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field full">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none">
+              <div id="rep-auto-factura-toggle" onclick="toggleGenericAF('rep')" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
+                <div id="rep-auto-factura-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+              </div>
+              <input type="checkbox" id="rep-auto-factura" style="display:none">
+              <span style="font-size:12px;color:var(--muted)">📧 Recibir facturas automáticamente</span>
+            </label>
+          </div>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)" id="rep-footer"></div>
@@ -1326,6 +1335,15 @@
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="vend-taxid" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="vend-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Notas</div><input id="vend-notas" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field full">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none">
+              <div id="vend-auto-factura-toggle" onclick="toggleGenericAF('vend')" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
+                <div id="vend-auto-factura-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+              </div>
+              <input type="checkbox" id="vend-auto-factura" style="display:none">
+              <span style="font-size:12px;color:var(--muted)">📧 Recibir facturas automáticamente</span>
+            </label>
+          </div>
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)">
@@ -2975,7 +2993,7 @@ function openClientDetail(row) {
   const tipoEl = document.getElementById('dd-tipo');
   tipoEl.value = c.tipo || 'Artista';
   tipoEl.disabled = readonly;
-  setAutoFacturaToggle(c.autoFactura);
+  setAutoFacturaToggle(c.autoFactura, 'dd');
   const autoLabel = document.getElementById('dd-auto-factura-label');
   if (autoLabel) { autoLabel.style.opacity = readonly ? '0.5' : '1'; autoLabel.style.pointerEvents = readonly ? 'none' : 'auto'; }
   document.getElementById('dd-auto-factura-toggle').onclick = readonly ? null : toggleAutoFactura;
@@ -3084,19 +3102,23 @@ async function saveClientDetail() {
   } catch(e) { showToast(e.message, true); }
 }
 
-function toggleAutoFactura() {
-  const cb = document.getElementById('dd-auto-factura');
-  const toggle = document.getElementById('dd-auto-factura-toggle');
-  const thumb = document.getElementById('dd-auto-factura-thumb');
+function toggleGenericAF(prefix) {
+  const cb = document.getElementById(`${prefix}-auto-factura`);
+  const toggle = document.getElementById(`${prefix}-auto-factura-toggle`);
+  const thumb = document.getElementById(`${prefix}-auto-factura-thumb`);
+  if (!cb) return;
   cb.checked = !cb.checked;
   toggle.style.background = cb.checked ? 'var(--indigo)' : 'var(--border2)';
   thumb.style.left = cb.checked ? '18px' : '2px';
 }
 
-function setAutoFacturaToggle(val) {
-  const cb = document.getElementById('dd-auto-factura');
-  const toggle = document.getElementById('dd-auto-factura-toggle');
-  const thumb = document.getElementById('dd-auto-factura-thumb');
+function toggleAutoFactura() { toggleGenericAF('dd'); }
+
+function setAutoFacturaToggle(val, prefix) {
+  const p = prefix || 'dd';
+  const cb = document.getElementById(`${p}-auto-factura`);
+  const toggle = document.getElementById(`${p}-auto-factura-toggle`);
+  const thumb = document.getElementById(`${p}-auto-factura-thumb`);
   if (!cb) return;
   cb.checked = !!val;
   toggle.style.background = !!val ? 'var(--indigo)' : 'var(--border2)';
@@ -3165,6 +3187,7 @@ function openRepModal(row) {
   document.getElementById('rep-taxid').value = rep?.taxId || '';
   document.getElementById('rep-direccion').value = rep?.direccion || '';
   document.getElementById('rep-notas').value = rep?.notas || '';
+  setAutoFacturaToggle(rep?.autoFactura, 'rep');
   const footer = document.getElementById('rep-footer');
   if (isNew) {
     footer.innerHTML = `<button class="btn btn-ghost" onclick="closeRepModal()">Cancelar</button><button class="btn btn-primary" onclick="saveRep()">Crear</button>`;
@@ -3181,7 +3204,7 @@ async function saveRep() {
   if (!nombre) { showToast('El nombre es requerido', true); return; }
   const rowVal = document.getElementById('rep-row').value;
   const row = rowVal ? parseInt(rowVal) : null;
-  const payload = { mode: 'representante', nombre, nombreFiscal: document.getElementById('rep-nombre-fiscal').value.trim(), email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), ...(row ? { row } : {}) };
+  const payload = { mode: 'representante', nombre, nombreFiscal: document.getElementById('rep-nombre-fiscal').value.trim(), email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), autoFactura: document.getElementById('rep-auto-factura').checked ? '1' : '', ...(row ? { row } : {}) };
   try {
     const r = await fetch('/api/campaign', { method: row ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const d = await r.json();
@@ -3243,6 +3266,7 @@ function openVendedorModal(nombre) {
   document.getElementById('vend-nombre-fiscal').value = v.nombreFiscal || '';
   document.getElementById('vend-email').value = v.email || '';
   document.getElementById('vend-taxid').value = v.taxId || '';
+  setAutoFacturaToggle(v.autoFactura, 'vend');
   document.getElementById('vend-direccion').value = v.direccion || '';
   document.getElementById('vend-notas').value = v.notas || '';
   document.getElementById('modal-vendedor').style.display = 'flex';
@@ -3266,6 +3290,7 @@ async function saveVendedor() {
         taxId: document.getElementById('vend-taxid').value.trim(),
         direccion: document.getElementById('vend-direccion').value.trim(),
         notas: document.getElementById('vend-notas').value.trim(),
+        autoFactura: document.getElementById('vend-auto-factura').checked ? '1' : '',
       }),
     });
     const d = await r.json();
@@ -4439,9 +4464,18 @@ async function submitSale(e) {
           const id = await ir.json();
           if (id.ok) {
             window._lastInvoice = { ...id, artista: sheetArtista, vendedor: venta, representante: repName, monto: precio };
-            // Auto-envío si el cliente tiene autoFactura activado y tiene email
-            const autoEmails = (clienteData.email || '').split(',').map(e => e.trim()).filter(Boolean);
-            if (clienteData.autoFactura && autoEmails.length) {
+            // Auto-envío: prioridad artista → representante → vendedor
+            const repData = repName ? (window._representantesMap?.[repName] || {}) : {};
+            const vendData = (window._vendorsMap || {})[venta] || {};
+            let autoEmails = [];
+            if (clienteData.autoFactura && clienteData.email) {
+              autoEmails = clienteData.email.split(',').map(e => e.trim()).filter(Boolean);
+            } else if (repData.autoFactura && repData.email) {
+              autoEmails = repData.email.split(',').map(e => e.trim()).filter(Boolean);
+            } else if (vendData.autoFactura && vendData.email) {
+              autoEmails = vendData.email.split(',').map(e => e.trim()).filter(Boolean);
+            }
+            if (autoEmails.length) {
               fetch('/api/invoice', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

@@ -395,9 +395,9 @@ module.exports = async (req, res) => {
 
       if (mode === 'representantes') {
         try {
-          const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${REPRESENTANTES_SHEET}!A:E` });
+          const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${REPRESENTANTES_SHEET}!A:G` });
           const rows = (resp.data.values || []).slice(1);
-          return res.json({ representantes: rows.map((r, i) => ({ row: i + 2, nombre: r[0] || '', email: r[1] || '', direccion: r[2] || '', taxId: r[3] || '', notas: r[4] || '', nombreFiscal: r[5] || '' })).filter(r => r.nombre) });
+          return res.json({ representantes: rows.map((r, i) => ({ row: i + 2, nombre: r[0] || '', email: r[1] || '', direccion: r[2] || '', taxId: r[3] || '', notas: r[4] || '', nombreFiscal: r[5] || '', autoFactura: r[6] === '1' })).filter(r => r.nombre) });
         } catch(e) { return res.json({ representantes: [] }); }
       }
 
@@ -651,13 +651,13 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'POST' && req.body.mode === 'representante') {
-      const { nombre, email, direccion, taxId, notas, nombreFiscal } = req.body;
+      const { nombre, email, direccion, taxId, notas, nombreFiscal, autoFactura } = req.body;
       if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${REPRESENTANTES_SHEET}!A:F`,
+        range: `${REPRESENTANTES_SHEET}!A:G`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[nombre, email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '']] },
+        requestBody: { values: [[nombre, email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '']] },
       });
       return res.json({ ok: true });
     }
@@ -716,13 +716,13 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PUT' && req.body.mode === 'representante') {
-      const { row, nombre, email, direccion, taxId, notas, nombreFiscal } = req.body;
+      const { row, nombre, email, direccion, taxId, notas, nombreFiscal, autoFactura } = req.body;
       if (!row || !nombre) return res.status(400).json({ error: 'row y nombre requeridos' });
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${REPRESENTANTES_SHEET}!A${row}:F${row}`,
+        range: `${REPRESENTANTES_SHEET}!A${row}:G${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[nombre, email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '']] },
+        requestBody: { values: [[nombre, email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '']] },
       });
       return res.json({ ok: true });
     }
