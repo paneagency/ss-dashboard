@@ -1237,7 +1237,7 @@
         <div class="detalle-section-title">Contacto</div>
         <div class="detalle-grid" style="margin-bottom:16px">
           <div class="detalle-field"><div class="detalle-field-label">Teléfono</div><input id="dd-telefono" class="dd-input" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="dd-email" class="dd-input" type="email" placeholder="—"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="dd-email" class="dd-input" placeholder="uno@mail.com, dos@mail.com"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Spotify</div><input id="dd-spotify" class="dd-input" placeholder="—"></div>
         </div>
 
@@ -1251,6 +1251,15 @@
           </div>
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="dd-taxid" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="dd-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+          <div class="detalle-field full">
+            <label id="dd-auto-factura-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none">
+              <div id="dd-auto-factura-toggle" onclick="toggleAutoFactura()" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
+                <div id="dd-auto-factura-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+              </div>
+              <input type="checkbox" id="dd-auto-factura" style="display:none">
+              <span style="font-size:12px;color:var(--muted)">📧 Enviar factura automáticamente al registrar venta</span>
+            </label>
+          </div>
         </div>
 
         <div class="detalle-section-title">Comercial</div>
@@ -2966,6 +2975,10 @@ function openClientDetail(row) {
   const tipoEl = document.getElementById('dd-tipo');
   tipoEl.value = c.tipo || 'Artista';
   tipoEl.disabled = readonly;
+  setAutoFacturaToggle(c.autoFactura);
+  const autoLabel = document.getElementById('dd-auto-factura-label');
+  if (autoLabel) { autoLabel.style.opacity = readonly ? '0.5' : '1'; autoLabel.style.pointerEvents = readonly ? 'none' : 'auto'; }
+  document.getElementById('dd-auto-factura-toggle').onclick = readonly ? null : toggleAutoFactura;
 
   // Imagen actual (para preservarla o sobreescribirla si viene nueva de Spotify)
   window._ddSpotifyImage = c.imagen || null;
@@ -3055,6 +3068,7 @@ async function saveClientDetail() {
     tipo: document.getElementById('dd-tipo').value,
     taxId: document.getElementById('dd-taxid').value.trim(),
     direccion: document.getElementById('dd-direccion').value.trim(),
+    autoFactura: document.getElementById('dd-auto-factura').checked ? '1' : '',
   };
   try {
     const r = await fetch('/api/campaign', {
@@ -3068,6 +3082,25 @@ async function saveClientDetail() {
     closeClientDetail();
     await refreshDirectorio();
   } catch(e) { showToast(e.message, true); }
+}
+
+function toggleAutoFactura() {
+  const cb = document.getElementById('dd-auto-factura');
+  const toggle = document.getElementById('dd-auto-factura-toggle');
+  const thumb = document.getElementById('dd-auto-factura-thumb');
+  cb.checked = !cb.checked;
+  toggle.style.background = cb.checked ? 'var(--indigo)' : 'var(--border2)';
+  thumb.style.left = cb.checked ? '18px' : '2px';
+}
+
+function setAutoFacturaToggle(val) {
+  const cb = document.getElementById('dd-auto-factura');
+  const toggle = document.getElementById('dd-auto-factura-toggle');
+  const thumb = document.getElementById('dd-auto-factura-thumb');
+  if (!cb) return;
+  cb.checked = !!val;
+  toggle.style.background = !!val ? 'var(--indigo)' : 'var(--border2)';
+  thumb.style.left = !!val ? '18px' : '2px';
 }
 
 function closeClientDetail() {
@@ -4406,8 +4439,19 @@ async function submitSale(e) {
           const id = await ir.json();
           if (id.ok) {
             window._lastInvoice = { ...id, artista: sheetArtista, vendedor: venta, representante: repName, monto: precio };
-            const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
-            showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar</a>${pdfLink}`, 'success', 8000);
+            // Auto-envío si el cliente tiene autoFactura activado y tiene email
+            const autoEmails = (clienteData.email || '').split(',').map(e => e.trim()).filter(Boolean);
+            if (clienteData.autoFactura && autoEmails.length) {
+              fetch('/api/invoice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'send', ...id, precio: id.precio, issueDate: id.issueDate, to: autoEmails }),
+              }).catch(() => {});
+              showToast(`📄 ${id.invoiceNum} generada y enviada a ${autoEmails.join(', ')}`, 'success', 6000);
+            } else {
+              const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
+              showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar</a>${pdfLink}`, 'success', 8000);
+            }
           }
         } catch(e) { console.warn('Invoice generation failed (non-fatal):', e); }
       })();

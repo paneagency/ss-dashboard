@@ -112,7 +112,7 @@ async function lookupClientDB(sheets, artista) {
 // A=ID, B=ARTISTA, C=GÉNERO, D=PAIS, E=TELÉFONO, F=EMAIL, G=SPOTIFY,
 // H=FECHA_PRIMERA_COMPRA, I=REPRESENTANTE, J=NOMBRE, K=APODO,
 // L=VENDEDOR, M=METODO_PAGO, N=ESTADO
-const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N', imagen:'O', tipo:'P', direccion:'Q', taxId:'R' };
+const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N', imagen:'O', tipo:'P', direccion:'Q', taxId:'R', autoFactura:'S' };
 
 async function updateClientFields(sheets, artista, fields) {
   const entries = Object.entries(fields).filter(([k, v]) => CLIENT_COLS[k] && v !== undefined && v !== null && v !== '');
@@ -368,7 +368,7 @@ module.exports = async (req, res) => {
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CLIENTES_SHEET}!A:R`,
+          range: `${CLIENTES_SHEET}!A:S`,
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
@@ -388,6 +388,7 @@ module.exports = async (req, res) => {
             tipo: r[15] || '',
             direccion: r[16] || '',
             taxId: r[17] || '',
+            autoFactura: r[18] === '1',
           })),
         });
       }
@@ -728,11 +729,11 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar cliente ───────────────────────────────────
     if (req.method === 'PUT' && req.body.mode === 'client') {
-      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen, tipo, direccion, taxId } = req.body;
+      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen, tipo, direccion, taxId, autoFactura } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
       const existing = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:R${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:S${row}`,
       });
       const existingRow = existing.data.values?.[0] || [];
       const id = existingRow[0] || Date.now().toString();
@@ -740,9 +741,9 @@ module.exports = async (req, res) => {
       const safeTel = telefono ? (telefono.startsWith('+') ? `'${telefono}` : telefono) : '';
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:R${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:S${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '', tipo || existingRow[15] || '', direccion ?? existingRow[16] ?? '', taxId ?? existingRow[17] ?? '']] },
+        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '', tipo || existingRow[15] || '', direccion ?? existingRow[16] ?? '', taxId ?? existingRow[17] ?? '', autoFactura ? '1' : (existingRow[18] ?? '')]] },
       });
       return res.json({ ok: true });
     }
