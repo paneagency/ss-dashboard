@@ -253,6 +253,33 @@ module.exports = async (req, res) => {
       } catch(e) { return res.json({ facturas: [] }); }
     }
 
+    // ── CANCELAR FACTURA (al eliminar venta) ──────────────────────
+    if (req.method === 'DELETE') {
+      const { artista, monto } = req.body;
+      if (!artista) return res.status(400).json({ error: 'artista requerido' });
+      const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:H` });
+      const rows = resp.data.values || [];
+      const targetMonto = parseFloat(monto) || 0;
+      const norm = s => (s || '').toString().trim().toLowerCase();
+      let matchRow = -1;
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (norm(r[2]) !== norm(artista)) continue;
+        if (r[7] === 'Cancelada') continue;
+        if (targetMonto > 0 && Math.abs((parseFloat(r[5]) || 0) - targetMonto) > 0.5) continue;
+        matchRow = i + 1; // 1-indexed
+        break;
+      }
+      if (matchRow === -1) return res.json({ ok: true, notFound: true });
+      await sheetsClient.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${FACTURAS_SHEET}!H${matchRow}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [['Cancelada']] },
+      });
+      return res.json({ ok: true });
+    }
+
     return res.status(405).json({ error: 'Método no permitido' });
   } catch(e) {
     console.error(e);

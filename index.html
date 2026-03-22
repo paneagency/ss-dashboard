@@ -6554,6 +6554,11 @@ async function deleteSale(idx) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(delBody),
     }).catch(() => {});
+    fetch('/api/invoice', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista: r.artista, monto: r.precio }),
+    }).catch(() => {});
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
 
@@ -6830,6 +6835,11 @@ async function deleteVendorSale(idx) {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(vendorDelBody),
+    }).catch(() => {});
+    fetch('/api/invoice', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista: r.artista, monto: r.precio }),
     }).catch(() => {});
     showToast(`Venta de "${r.artista}" eliminada`, 'success');
     applyFilters();
