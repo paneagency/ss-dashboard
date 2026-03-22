@@ -4280,13 +4280,13 @@ async function copiarDeuda(row) {
   const periodoActual = { fechaInicio: c.fechaInicio, fechaVencimiento: c.fechaVencimiento, precio: parseFloat(c.precio) || 0 };
   const allPeriods = [...periodosExt, periodoActual];
 
-  const lines = [titulo];
+  const lines = [titulo, ''];
   allPeriods.forEach((p, i) => {
     const isLast = i === allPeriods.length - 1;
-    lines.push(`${fmtDate(p.fechaInicio)} al ${fmtDate(p.fechaVencimiento)} — ${fmt$(p.precio)}${isLast ? ' (período actual)' : ''}`);
+    lines.push(`${fmtDate(p.fechaInicio)} al ${fmtDate(p.fechaVencimiento)} — ${fmt$(p.precio)}${isLast ? ' _(período actual)_' : ''}`);
   });
   const total = allPeriods.reduce((s, p) => s + (parseFloat(p.precio) || 0), 0);
-  lines.push(`*Total: ${fmt$(total)} usd* (${allPeriods.length} período${allPeriods.length !== 1 ? 's' : ''})`);
+  lines.push('', `*Total: ${fmt$(total)} usd*`);
   try {
     await navigator.clipboard.writeText(lines.join('\n'));
     showToast('Resumen de deuda copiado', 'success');
