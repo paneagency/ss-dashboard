@@ -5356,6 +5356,12 @@ function renderCampHistorial() {
       : base + 'background:transparent;color:var(--muted);border-color:var(--border2)';
   };
 
+  // Vista Facturas: flujo separado
+  if (_historialFilter === 'facturas') {
+    renderHistorialFacturas(pillStyle);
+    return;
+  }
+
   const countBase = filterVendor === 'all' ? _historial : _historial.filter(c => c.vendedor === filterVendor);
   const pills = [
     { key: 'todas',      label: 'Todas (' + countBase.length + ')' },
@@ -5363,6 +5369,7 @@ function renderCampHistorial() {
     { key: 'finalizada', label: 'No renovó' },  // incluye finalizada_regalo al filtrar
     { key: 'eliminada',  label: 'Eliminadas' },
     { key: 'extendida',  label: 'Extendidas' },  // incluye cobrada al filtrar
+    { key: 'facturas',   label: '📄 Facturas' },
   ].map(p => `<span style="${pillStyle(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
 
   if (!data.length) {
@@ -5484,6 +5491,95 @@ function renderCampHistorial() {
               <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Método</th>
               <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Fecha de edición</th>
               <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Editado por</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+async function renderHistorialFacturas(pillStyle) {
+  const list = document.getElementById('campanias-list');
+  if (!list) return;
+
+  const pillStyleFn = pillStyle || (f => {
+    const active = f === _historialFilter;
+    const base = 'cursor:pointer;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;border:1px solid;transition:all 0.15s;';
+    return active
+      ? base + 'background:var(--indigo);color:#fff;border-color:var(--indigo)'
+      : base + 'background:transparent;color:var(--muted);border-color:var(--border2)';
+  });
+
+  const pillsHtml = [
+    { key: 'todas',      label: 'Todas' },
+    { key: 'editada',    label: 'Editadas' },
+    { key: 'finalizada', label: 'No renovó' },
+    { key: 'eliminada',  label: 'Eliminadas' },
+    { key: 'extendida',  label: 'Extendidas' },
+    { key: 'facturas',   label: '📄 Facturas' },
+  ].map(p => `<span style="${pillStyleFn(p.key)}" onclick="_historialFilter='${p.key}';renderCampHistorial()">${p.label}</span>`).join('');
+
+  list.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${pillsHtml}</div><div style="color:var(--muted);padding:24px">Cargando facturas…</div>`;
+
+  let facturas = [];
+  try {
+    const resp = await fetch('/api/invoice');
+    const data = await resp.json();
+    facturas = (data.facturas || []).reverse(); // más recientes primero
+  } catch(e) {
+    list.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${pillsHtml}</div><div style="color:var(--red);padding:24px">Error al cargar facturas: ${e.message}</div>`;
+    return;
+  }
+
+  if (!facturas.length) {
+    list.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${pillsHtml}</div><div class="empty-state"><div class="empty-icon">📄</div><p>No hay facturas generadas aún</p></div>`;
+    return;
+  }
+
+  // Guardar en memoria para acceder desde onclick sin serializar en HTML
+  window._facturasList = facturas;
+
+  const escH = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const rows = facturas.map((f, i) => {
+    const estadoBg    = f.estado === 'Enviada' ? 'rgba(16,185,129,0.12)' : 'rgba(99,102,241,0.12)';
+    const estadoColor = f.estado === 'Enviada' ? 'var(--green)' : '#a5b4fc';
+    const badge = `<span style="background:${estadoBg};color:${estadoColor};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${escH(f.estado || 'Generada')}</span>`;
+    const monto = f.monto ? '$' + parseFloat(f.monto).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+    const pdfBtn = f.gcsUrl
+      ? `<a href="${escH(f.gcsUrl)}" target="_blank" class="btn btn-sm" style="padding:3px 10px;font-size:11px">👁 Ver PDF</a>`
+      : '';
+    const sendBtn = `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--indigo)" onclick="openSendInvoiceModal(window._facturasList[${i}])">📤 Enviar</button>`;
+    return `
+      <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted);white-space:nowrap;font-family:monospace">${escH(f.invoiceNum)}</td>
+        <td style="padding:10px 12px;font-weight:600;font-size:13px;color:var(--text)">${escH(f.artista)}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(f.vendedor || '—')}</td>
+        <td style="padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)">${monto}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(f.metodo || '—')}</td>
+        <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(f.fecha || '—')}</td>
+        <td style="padding:10px 12px">${badge}</td>
+        <td style="padding:10px 12px;white-space:nowrap">
+          <div style="display:flex;gap:6px">${pdfBtn}${sendBtn}</div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  list.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${pillsHtml}</div>
+    <div class="table-card" style="overflow:hidden">
+      <div class="table-scroll">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">N° Factura</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Artista</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Vendedor</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Monto</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Método</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Fecha</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Estado</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Acciones</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
