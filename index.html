@@ -4259,7 +4259,8 @@ async function copiarDeuda(row) {
     ? (_campanias || []).filter(x => x.masterEventId === c.masterEventId && x.estado === 'pendiente_pago').length > 1
     : false;
   const nombreArtista = esGrupal ? 'Varios' : c.artista;
-  const titulo = `Deuda pendiente — ${nombreArtista}${c.representante ? ` · Rep: ${c.representante}` : ''}`;
+  const repPart = c.representante ? ` - *${c.representante}*` : '';
+  const titulo = `_Deuda pendiente_ — ${nombreArtista}${repPart}`;
 
   // Endpoint periodos_deuda: devuelve períodos únicos por rango de fechas
   // (combina byMaster + byArtVend para cubrir cadenas rotas, dedup por rango).
@@ -4282,10 +4283,10 @@ async function copiarDeuda(row) {
   const lines = [titulo];
   allPeriods.forEach((p, i) => {
     const isLast = i === allPeriods.length - 1;
-    lines.push(`Período ${i + 1}: ${fmtDate(p.fechaInicio)} al ${fmtDate(p.fechaVencimiento)} — ${fmt$(p.precio)}${isLast ? ' (período actual)' : ''}`);
+    lines.push(`${fmtDate(p.fechaInicio)} al ${fmtDate(p.fechaVencimiento)} — ${fmt$(p.precio)}${isLast ? ' (período actual)' : ''}`);
   });
   const total = allPeriods.reduce((s, p) => s + (parseFloat(p.precio) || 0), 0);
-  lines.push(`Total: ${fmt$(total)} (${allPeriods.length} período${allPeriods.length !== 1 ? 's' : ''})`);
+  lines.push(`*Total: ${fmt$(total)} usd* (${allPeriods.length} período${allPeriods.length !== 1 ? 's' : ''})`);
   try {
     await navigator.clipboard.writeText(lines.join('\n'));
     showToast('Resumen de deuda copiado', 'success');
