@@ -96,6 +96,25 @@ module.exports = async (req, res) => {
       return res.json({ ok: true, row: nextRow });
     }
 
+    // ── ACTUALIZAR VENDEDOR ────────────────────────────────────
+    if (req.method === 'PUT' && req.body.mode === 'vendedor') {
+      const { nombre, commission, email, direccion, taxId, notas } = req.body;
+      if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
+      const vendResp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:A' });
+      const vendRows = vendResp.data.values || [];
+      const startIdx = /^(nombre|vendedor|name|vendor)/i.test(vendRows[0]?.[0] || '') ? 1 : 0;
+      const rowIdx = vendRows.slice(startIdx).findIndex(r => (r[0] || '').trim().toLowerCase() === nombre.trim().toLowerCase());
+      if (rowIdx === -1) return res.status(404).json({ error: `Vendedor "${nombre}" no encontrado` });
+      const rowNum = startIdx + rowIdx + 1;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Vendedores!A${rowNum}:F${rowNum}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[nombre, commission ?? '', email || '', direccion || '', taxId || '', notas || '']] },
+      });
+      return res.json({ ok: true });
+    }
+
     // ── VINCULAR VENTA A CAMPAÑA (actualizar col L) ───────────
     if (req.method === 'PUT') {
       const { saleRow, campaignId } = req.body;

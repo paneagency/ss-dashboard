@@ -1128,6 +1128,7 @@
       <button class="btn btn-sm camp-view-btn active" data-clview="directorio" onclick="setClientesView('directorio')">📋 Directorio</button>
       <button class="btn btn-sm camp-view-btn" data-clview="analisis" onclick="setClientesView('analisis')">📊 Análisis</button>
       <button class="btn btn-sm camp-view-btn" data-clview="representantes" onclick="setClientesView('representantes')">👥 Representantes</button>
+      <button class="btn btn-sm camp-view-btn role-admin" data-clview="vendedores" onclick="setClientesView('vendedores')">🏢 Vendedores</button>
     </div>
 
     <!-- Vista: Análisis -->
@@ -1171,6 +1172,16 @@
       </div>
       <div class="table-card">
         <div class="table-scroll"><table id="table-representantes"></table></div>
+      </div>
+    </div>
+
+    <!-- Vista: Vendedores -->
+    <div id="clientes-view-vendedores" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="section-title" style="font-size:16px">Datos de Vendedores</div>
+      </div>
+      <div class="table-card">
+        <div class="table-scroll"><table id="table-vendedores-dir"></table></div>
       </div>
     </div>
 
@@ -1286,6 +1297,30 @@
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)" id="rep-footer"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: VENDEDOR -->
+  <div id="modal-vendedor" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeVendedorModal()">
+    <div class="modal-box" style="max-width:480px;padding:0;overflow:hidden">
+      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:20px 24px 16px;position:relative">
+        <button class="modal-close" onclick="closeVendedorModal()" style="position:absolute;top:12px;right:12px">✕</button>
+        <div class="section-title" style="font-size:17px" id="vend-modal-title">Vendedor</div>
+      </div>
+      <div style="padding:20px 24px">
+        <input type="hidden" id="vend-nombre">
+        <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field"><div class="detalle-field-label">Comisión %</div><input id="vend-commission" class="dd-input" type="number" step="0.01" placeholder="0"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="vend-email" class="dd-input" type="email" placeholder="email@ejemplo.com"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="vend-taxid" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="vend-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Notas</div><input id="vend-notas" class="dd-input" placeholder="—"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="closeVendedorModal()">Cerrar</button>
+        <button class="btn btn-primary" onclick="saveVendedor()">Guardar</button>
+      </div>
     </div>
   </div>
 
@@ -2772,12 +2807,14 @@ function setClientesView(view) {
   document.getElementById('clientes-view-directorio').style.display = view === 'directorio' ? '' : 'none';
   document.getElementById('clientes-view-analisis').style.display = view === 'analisis' ? '' : 'none';
   document.getElementById('clientes-view-representantes').style.display = view === 'representantes' ? '' : 'none';
+  document.getElementById('clientes-view-vendedores').style.display = view === 'vendedores' ? '' : 'none';
   const role = window._currentUser?.role;
   const canEdit = ['admin', 'secondary_admin'].includes(role);
   if (view === 'representantes') {
     document.getElementById('btn-nuevo-rep').style.display = canEdit ? '' : 'none';
     renderRepresentantes();
-  } else if (view === 'directorio') renderDirectorio();
+  } else if (view === 'vendedores') renderVendedoresDir();
+  else if (view === 'directorio') renderDirectorio();
   else if (view === 'analisis') renderClientes();
 }
 
@@ -3108,6 +3145,82 @@ async function deleteRep(row, nombre) {
     showToast('Representante eliminado');
     await loadRepresentantes();
     renderRepresentantes();
+  } catch(e) { showToast(e.message, true); }
+}
+
+// ── VENDEDORES DIRECTORIO ────────────────────────────────────────
+function renderVendedoresDir() {
+  const tbl = document.getElementById('table-vendedores-dir');
+  if (!tbl) return;
+  const vendors = window._vendors || [];
+  const vendorsMap = window._vendorsMap || {};
+  if (!vendors.length) {
+    tbl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No hay vendedores cargados</td></tr>';
+    return;
+  }
+  tbl.innerHTML = `<thead><tr><th>Nombre</th><th>Comisión %</th><th>Email</th><th>Dirección</th><th>Tax ID</th><th></th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  vendors.forEach(name => {
+    const v = vendorsMap[name] || { name, commission: 0, email: '', direccion: '', taxId: '' };
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML = `
+      <td><strong>${_escRep(v.name)}</strong></td>
+      <td>${v.commission ? v.commission * 100 + '%' : '—'}</td>
+      <td>${_escRep(v.email || '—')}</td>
+      <td>${_escRep(v.direccion || '—')}</td>
+      <td>${_escRep(v.taxId || '—')}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openVendedorModal('${_escRep(v.name)}')">✏️</button></td>
+    `;
+    tr.onclick = () => openVendedorModal(v.name);
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+}
+
+function openVendedorModal(nombre) {
+  const v = (window._vendorsMap || {})[nombre] || { name: nombre, commission: 0, email: '', direccion: '', taxId: '', notas: '' };
+  document.getElementById('vend-modal-title').textContent = nombre;
+  document.getElementById('vend-nombre').value = nombre;
+  document.getElementById('vend-commission').value = v.commission ? +(v.commission * 100).toFixed(2) : '';
+  document.getElementById('vend-email').value = v.email || '';
+  document.getElementById('vend-taxid').value = v.taxId || '';
+  document.getElementById('vend-direccion').value = v.direccion || '';
+  document.getElementById('vend-notas').value = v.notas || '';
+  document.getElementById('modal-vendedor').style.display = 'flex';
+}
+
+function closeVendedorModal() { document.getElementById('modal-vendedor').style.display = 'none'; }
+
+async function saveVendedor() {
+  const nombre = document.getElementById('vend-nombre').value;
+  const commissionPct = parseFloat(document.getElementById('vend-commission').value) || 0;
+  try {
+    const r = await fetch('/api/sheets', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'vendedor',
+        nombre,
+        commission: commissionPct / 100,
+        email: document.getElementById('vend-email').value.trim(),
+        taxId: document.getElementById('vend-taxid').value.trim(),
+        direccion: document.getElementById('vend-direccion').value.trim(),
+        notas: document.getElementById('vend-notas').value.trim(),
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Error');
+    // Refresh vendors in memory
+    const sd = await fetch('/api/sheets').then(r => r.json());
+    if (sd.vendors) {
+      window._vendors = sd.vendors.map(v => v.name);
+      window._vendorsMap = {};
+      sd.vendors.forEach(v => { window._vendorsMap[v.name] = v; });
+    }
+    showToast('Vendedor actualizado');
+    closeVendedorModal();
+    renderVendedoresDir();
   } catch(e) { showToast(e.message, true); }
 }
 
