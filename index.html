@@ -5499,6 +5499,41 @@ function renderCampHistorial() {
     </div>`;
 }
 
+async function sendInvoiceDirect(idx) {
+  const f = (window._facturasList || [])[idx];
+  if (!f) return;
+
+  // Resolver email: representante → artista (clientesMap) → fallback modal
+  const repEmail = f.representante ? (window._representantesMap?.[f.representante]?.email || '') : '';
+  const clienteEmail = (window._clientesMap?.[f.artista?.toLowerCase()?.trim()] || {}).email || '';
+  const toEmail = repEmail || clienteEmail;
+
+  if (!toEmail) {
+    openSendInvoiceModal(f);
+    return;
+  }
+
+  const btn = document.querySelectorAll('.btn-sm[onclick^="sendInvoiceDirect"]')[idx];
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+
+  try {
+    const resp = await fetch('/api/invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'send', ...f, precio: f.monto, issueDate: f.fecha, to: [toEmail] }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    showToast(`📄 Factura enviada a ${toEmail}`, 'success', 5000);
+    // Actualizar estado en memoria y re-renderizar
+    if (window._facturasList[idx]) window._facturasList[idx].estado = 'Enviada';
+    renderHistorialFacturas();
+  } catch(e) {
+    showToast('Error al enviar: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Enviar'; }
+  }
+}
+
 async function renderHistorialFacturas(pillStyle) {
   const list = document.getElementById('campanias-list');
   if (!list) return;
@@ -5549,7 +5584,7 @@ async function renderHistorialFacturas(pillStyle) {
     const pdfBtn = f.gcsUrl
       ? `<a href="${escH(f.gcsUrl)}" target="_blank" class="btn btn-sm" style="padding:3px 10px;font-size:11px">👁 Ver PDF</a>`
       : '';
-    const sendBtn = `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--indigo)" onclick="openSendInvoiceModal(window._facturasList[${i}])">📤 Enviar</button>`;
+    const sendBtn = `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--indigo)" onclick="sendInvoiceDirect(${i})">📤 Enviar</button>`;
     return `
       <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
         <td style="padding:10px 12px;font-size:12px;color:var(--muted);white-space:nowrap;font-family:monospace">${escH(f.invoiceNum)}</td>
