@@ -1324,6 +1324,27 @@
     </div>
   </div>
 
+  <!-- MODAL: ENVIAR FACTURA -->
+  <div id="modal-send-invoice" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSendInvoiceModal()">
+    <div class="modal-box" style="max-width:440px;padding:0;overflow:hidden">
+      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:20px 24px 16px;position:relative">
+        <button class="modal-close" onclick="closeSendInvoiceModal()" style="position:absolute;top:12px;right:12px">✕</button>
+        <div class="section-title" style="font-size:17px">📤 Enviar Factura</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px" id="send-invoice-subtitle"></div>
+      </div>
+      <div style="padding:20px 24px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Seleccioná a quién enviar:</div>
+        <div id="send-invoice-recipients" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+        <div style="font-size:12px;color:var(--muted)">También podés agregar un email adicional:</div>
+        <input id="send-invoice-extra" class="form-input" type="email" placeholder="otro@email.com" style="margin-top:6px;width:100%;box-sizing:border-box">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="closeSendInvoiceModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmSendInvoice()">📤 Enviar</button>
+      </div>
+    </div>
+  </div>
+
   </section>
 
 
@@ -4379,8 +4400,8 @@ async function submitSale(e) {
           });
           const id = await ir.json();
           if (id.ok) {
-            showToast(`📄 Factura ${id.invoiceNum} generada`, 'success');
-            window._lastInvoice = id;
+            window._lastInvoice = { ...id, artista: sheetArtista, vendedor: venta, representante: repName, monto: precio };
+            showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar</a> · <a href="${id.driveUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>`, 'success', 8000);
           }
         } catch(e) { console.warn('Invoice generation failed (non-fatal):', e); }
       })();
@@ -4548,6 +4569,83 @@ async function submitSinPago(e) {
     btn.disabled = false;
     btn.textContent = '💳 Sin Pago';
   }
+}
+
+// ── ENVIAR FACTURA ───────────────────────────────────────────────
+function openSendInvoiceModal(invoiceData) {
+  // invoiceData: { invoiceNum, driveUrl, artista, vendedor, representante }
+  window._sendInvoiceData = invoiceData;
+  document.getElementById('send-invoice-subtitle').textContent =
+    `${invoiceData.invoiceNum} · ${invoiceData.artista || ''} · $${parseFloat(invoiceData.monto||0).toLocaleString('es-AR')} USD`;
+
+  const container = document.getElementById('send-invoice-recipients');
+  container.innerHTML = '';
+  document.getElementById('send-invoice-extra').value = '';
+
+  // Build recipient options from vendorsMap + representantesMap
+  const recipients = [];
+  const vendNombre = invoiceData.vendedor || '';
+  const repNombre  = invoiceData.representante || '';
+
+  if (vendNombre) {
+    const vd = (window._vendorsMap || {})[vendNombre] || {};
+    recipients.push({ label: `Vendedor — ${vendNombre}`, email: vd.email || '', checked: !!vd.email });
+  }
+  if (repNombre) {
+    const rd = (window._representantesMap || {})[repNombre] || {};
+    recipients.push({ label: `Representante — ${repNombre}`, email: rd.email || '', checked: !!rd.email });
+  }
+
+  if (!recipients.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:13px">No hay destinatarios configurados. Usá el email adicional.</div>';
+  } else {
+    recipients.forEach((r, i) => {
+      const id = `send-chk-${i}`;
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid var(--border)';
+      row.innerHTML = `
+        <input type="checkbox" id="${id}" ${r.checked ? 'checked' : ''} ${!r.email ? 'disabled' : ''} value="${r.email}" style="width:16px;height:16px;accent-color:var(--indigo)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600">${r.label}</div>
+          <div style="font-size:12px;color:${r.email ? 'var(--muted)' : 'var(--red)'}">${r.email || 'Sin email configurado'}</div>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  document.getElementById('modal-send-invoice').style.display = 'flex';
+}
+
+function closeSendInvoiceModal() {
+  document.getElementById('modal-send-invoice').style.display = 'none';
+  window._sendInvoiceData = null;
+}
+
+async function confirmSendInvoice() {
+  const data = window._sendInvoiceData;
+  if (!data) return;
+
+  const to = [];
+  document.querySelectorAll('#send-invoice-recipients input[type=checkbox]:checked').forEach(chk => {
+    if (chk.value) to.push(chk.value);
+  });
+  const extra = document.getElementById('send-invoice-extra').value.trim();
+  if (extra) to.push(extra);
+
+  if (!to.length) { showToast('Seleccioná al menos un destinatario', true); return; }
+
+  try {
+    const r = await fetch('/api/invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'send', invoiceNum: data.invoiceNum, to, driveUrl: data.driveUrl }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Error al enviar');
+    showToast(`📤 Factura enviada a ${to.join(', ')}`, 'success');
+    closeSendInvoiceModal();
+  } catch(e) { showToast(e.message, true); }
 }
 
 async function copiarDeuda(row) {
@@ -6353,12 +6451,12 @@ async function deleteRegalo(campRow) {
   }
 }
 
-function showToast(msg, type = 'success') {
+function showToast(msg, type = 'success', duration = 4000) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  t.innerHTML = msg;
   t.className = `toast ${type}`;
   setTimeout(() => t.classList.add('show'), 10);
-  setTimeout(() => t.classList.remove('show'), 4000);
+  setTimeout(() => t.classList.remove('show'), duration);
 }
 
 // ============================================================
