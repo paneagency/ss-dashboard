@@ -3254,7 +3254,7 @@ function renderVendedoresDir() {
     tr.style.cursor = 'pointer';
     tr.innerHTML = `
       <td><strong>${_escRep(v.name)}</strong></td>
-      <td>${v.commission ? v.commission * 100 + '%' : '—'}</td>
+      <td>${v.commission ? v.commission + '%' : '—'}</td>
       <td>${_escRep(v.email || '—')}</td>
       <td>${_escRep(v.direccion || '—')}</td>
       <td>${_escRep(v.taxId || '—')}</td>
@@ -3270,7 +3270,7 @@ function openVendedorModal(nombre) {
   const v = (window._vendorsMap || {})[nombre] || { name: nombre, commission: 0, email: '', direccion: '', taxId: '', notas: '' };
   document.getElementById('vend-modal-title').textContent = nombre;
   document.getElementById('vend-nombre').value = nombre;
-  document.getElementById('vend-commission').value = v.commission ? +(v.commission * 100).toFixed(2) : '';
+  document.getElementById('vend-commission').value = v.commission || '';
   document.getElementById('vend-nombre-fiscal').value = v.nombreFiscal || '';
   document.getElementById('vend-email').value = v.email || '';
   document.getElementById('vend-taxid').value = v.taxId || '';
@@ -3292,7 +3292,7 @@ async function saveVendedor() {
       body: JSON.stringify({
         mode: 'vendedor',
         nombre,
-        commission: commissionPct / 100,
+        commission: commissionPct,
         nombreFiscal: document.getElementById('vend-nombre-fiscal').value.trim(),
         email: document.getElementById('vend-email').value.trim(),
         taxId: document.getElementById('vend-taxid').value.trim(),
