@@ -5695,20 +5695,25 @@ async function sendInvoiceDirect(idx) {
   }
 }
 
-function openRegenModal(idx) {
-  const f = (window._facturasList || [])[idx];
-  if (!f) return;
-  // Pre-fill con datos de la factura, y sobre-escribe con datos actuales del cliente si existen
-  const cliente = (window._clientesMap || {})[f.artista?.toLowerCase()?.trim()] || {};
-  document.getElementById('regen-invoice-num').value = f.invoiceNum;
-  document.getElementById('regen-artista').value = f.artista;
-  document.getElementById('regen-subtitle').textContent = `${f.invoiceNum} · ${f.artista}`;
-  document.getElementById('regen-nombre-fiscal').value = f.clienteNombreFiscal || '';
-  document.getElementById('regen-taxid').value = f.clienteTaxId || cliente.taxId || '';
-  document.getElementById('regen-pais').value = f.clientePais || cliente.pais || '';
-  document.getElementById('regen-direccion').value = f.clienteDireccion || cliente.direccion || '';
-  document.getElementById('regen-update-perfil').checked = true;
-  document.getElementById('modal-regen-invoice').style.display = 'flex';
+function openRegenModal(invoiceNum) {
+  try {
+    const list = window._facturasList || [];
+    // Buscar por invoiceNum en lugar de índice — más robusto contra re-renders
+    const f = typeof invoiceNum === 'string'
+      ? list.find(x => x.invoiceNum === invoiceNum)
+      : list[invoiceNum];
+    if (!f) { showToast('No se encontró la factura. Recargando…', 'info', 2000); renderHistorialFacturas(); return; }
+    const cliente = (window._clientesMap || {})[f.artista?.toLowerCase()?.trim()] || {};
+    document.getElementById('regen-invoice-num').value = f.invoiceNum;
+    document.getElementById('regen-artista').value = f.artista;
+    document.getElementById('regen-subtitle').textContent = `${f.invoiceNum} · ${f.artista}`;
+    document.getElementById('regen-nombre-fiscal').value = f.clienteNombreFiscal || '';
+    document.getElementById('regen-taxid').value = f.clienteTaxId || cliente.taxId || '';
+    document.getElementById('regen-pais').value = f.clientePais || cliente.pais || '';
+    document.getElementById('regen-direccion').value = f.clienteDireccion || cliente.direccion || '';
+    document.getElementById('regen-update-perfil').checked = true;
+    document.getElementById('modal-regen-invoice').style.display = 'flex';
+  } catch(e) { showToast('Error al abrir: ' + e.message, 'error'); }
 }
 
 function closeRegenModal() { document.getElementById('modal-regen-invoice').style.display = 'none'; }
@@ -5831,7 +5836,7 @@ async function renderHistorialFacturas(pillStyle) {
       : '';
     const sendBtn = `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--indigo)" onclick="sendInvoiceDirect(${i})">📤 Enviar</button>`;
     const editBtn = f.estado !== 'Cancelada'
-      ? `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--muted)" onclick="openRegenModal(${i})" title="Actualizar datos fiscales y regenerar PDF">✏️</button>`
+      ? `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--muted)" onclick="openRegenModal('${escH(f.invoiceNum)}')" title="Actualizar datos fiscales y regenerar PDF">✏️</button>`
       : '';
     return `
       <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
