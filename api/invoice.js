@@ -196,7 +196,7 @@ module.exports = async (req, res) => {
 
     // ── GENERATE INVOICE ─────────────────────────────────────────
     if (req.method === 'POST' && (!req.body.mode || req.body.mode === 'generate')) {
-      const { artista, vendedor, representante, precio, metodo, fecha, clienteDireccion, clientePais, clienteTaxId } = req.body;
+      const { artista, vendedor, representante, precio, metodo, fecha, clienteDireccion, clientePais, clienteTaxId, clienteNombreFiscal } = req.body;
       if (!artista || !precio) return res.status(400).json({ error: 'artista y precio requeridos' });
 
       await ensureSheets(sheetsClient);
@@ -206,31 +206,31 @@ module.exports = async (req, res) => {
       const monto = parseFloat(precio) || 0;
 
       // Generar PDF y subir a GCS
-      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto });
+      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteNombreFiscal: clienteNombreFiscal || '', clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto });
       const gcsUrl = await uploadToGCS(pdfBuffer, `${invoiceNum} - ${artista}.pdf`);
 
-      // Log en hoja Facturas (cols A:N para guardar datos completos para reenvío)
+      // Log en hoja Facturas (cols A:O para guardar datos completos para reenvío)
       await sheetsClient.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${FACTURAS_SHEET}!A:N`,
+        range: `${FACTURAS_SHEET}!A:O`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', 'Generada', gcsUrl, '', '', clienteDireccion || '', clientePais || '', clienteTaxId || '']] },
+        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', 'Generada', gcsUrl, '', '', clienteDireccion || '', clientePais || '', clienteTaxId || '', clienteNombreFiscal || '']] },
       });
 
-      return res.json({ ok: true, invoiceNum, gcsUrl, artista, vendedor, representante, precio: monto, metodo, issueDate, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '' });
+      return res.json({ ok: true, invoiceNum, gcsUrl, artista, vendedor, representante, precio: monto, metodo, issueDate, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', clienteNombreFiscal: clienteNombreFiscal || '' });
     }
 
     // ── SEND INVOICE BY EMAIL ─────────────────────────────────────
     if (req.method === 'POST' && req.body.mode === 'send') {
-      const { invoiceNum, to, artista, vendedor, representante, precio, issueDate, clienteDireccion, clientePais, clienteTaxId, gcsUrl } = req.body;
+      const { invoiceNum, to, artista, vendedor, representante, precio, issueDate, clienteDireccion, clientePais, clienteTaxId, clienteNombreFiscal: sendNombreFiscal, gcsUrl } = req.body;
       if (!to || !to.length) return res.status(400).json({ error: 'destinatario requerido' });
       const gmailUser = process.env.GMAIL_USER;
       const gmailPass = process.env.GMAIL_PASS;
       if (!gmailUser || !gmailPass) return res.status(500).json({ error: 'GMAIL_USER y GMAIL_PASS no configurados en Vercel' });
 
-      // Regenerar PDF (o usar GCS si está disponible)
+      // Regenerar PDF con datos fiscales completos
       const monto = parseFloat(precio) || 0;
-      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto });
+      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteNombreFiscal: sendNombreFiscal || '', clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto });
 
       const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: gmailUser, pass: gmailPass } });
       const gcsLine = gcsUrl ? `<p><a href="${gcsUrl}" style="color:#6366f1">Ver factura online</a></p>` : '';
@@ -286,17 +286,18 @@ module.exports = async (req, res) => {
       });
       const fileName = `${r[0]} - ${r[2]}.pdf`;
       const gcsUrl = await uploadToGCS(pdfBuffer, fileName);
+      const versionedUrl = gcsUrl + '?v=' + Date.now();
       await sheetsClient.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: { valueInputOption: 'USER_ENTERED', data: [
-          { range: `${FACTURAS_SHEET}!I${rowNum}`, values: [[gcsUrl]] },
+          { range: `${FACTURAS_SHEET}!I${rowNum}`, values: [[versionedUrl]] },
           { range: `${FACTURAS_SHEET}!L${rowNum}`, values: [[newDireccion]] },
           { range: `${FACTURAS_SHEET}!M${rowNum}`, values: [[newPais]] },
           { range: `${FACTURAS_SHEET}!N${rowNum}`, values: [[newTaxId]] },
           { range: `${FACTURAS_SHEET}!O${rowNum}`, values: [[newNombreFiscal]] },
         ]},
       });
-      return res.json({ ok: true, gcsUrl: gcsUrl + '?v=' + Date.now() });
+      return res.json({ ok: true, gcsUrl: versionedUrl });
     }
 
     // ── LIST INVOICES ─────────────────────────────────────────────
