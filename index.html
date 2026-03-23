@@ -566,6 +566,7 @@
     body.role-vendedor .tab-btn[data-tab="metodos"]  { order: 4; }
     body.role-vendedor .tab-btn[data-tab="temporal"] { order: 5; }
     body.role-vendedor .tab-btn[data-tab="insights"] { order: 6; }
+    body.role-vendedor .camp-view-btn[data-clview="vendedores"] { display: none !important; }
 
     /* ==================== MOBILE ==================== */
     @media (max-width: 768px) {
@@ -3158,7 +3159,14 @@ function renderRepresentantes() {
   if (!tbl) return;
   const role = window._currentUser?.role;
   const canEdit = ['admin', 'secondary_admin'].includes(role);
-  const data = _representantes;
+  let data = _representantes;
+  if (role === 'vendedor') {
+    const vendorName = window._currentUser?.vendorName;
+    const assocReps = new Set(
+      (_campanias || []).filter(c => c.vendedor === vendorName && c.representante).map(c => c.representante)
+    );
+    data = data.filter(r => assocReps.has(r.nombre));
+  }
   if (!data.length) {
     tbl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No hay representantes registrados</td></tr>';
     return;
@@ -3240,13 +3248,15 @@ async function deleteRep(row, nombre) {
 function renderVendedoresDir() {
   const tbl = document.getElementById('table-vendedores-dir');
   if (!tbl) return;
+  const role = window._currentUser?.role;
+  const showComision = role === 'admin';
   const vendors = window._vendors || [];
   const vendorsMap = window._vendorsMap || {};
   if (!vendors.length) {
     tbl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No hay vendedores cargados</td></tr>';
     return;
   }
-  tbl.innerHTML = `<thead><tr><th>Nombre</th><th>Comisión %</th><th>Email</th><th>Dirección</th><th>Tax ID</th><th></th></tr></thead>`;
+  tbl.innerHTML = `<thead><tr><th>Nombre</th>${showComision ? '<th>Comisión %</th>' : ''}<th>Email</th><th>Dirección</th><th>Tax ID</th><th></th></tr></thead>`;
   const tbody = document.createElement('tbody');
   vendors.forEach(name => {
     const v = vendorsMap[name] || { name, commission: 0, email: '', direccion: '', taxId: '' };
@@ -3254,7 +3264,7 @@ function renderVendedoresDir() {
     tr.style.cursor = 'pointer';
     tr.innerHTML = `
       <td><strong>${_escRep(v.name)}</strong></td>
-      <td>${v.commission ? v.commission + '%' : '—'}</td>
+      ${showComision ? `<td>${v.commission ? v.commission + '%' : '—'}</td>` : ''}
       <td>${_escRep(v.email || '—')}</td>
       <td>${_escRep(v.direccion || '—')}</td>
       <td>${_escRep(v.taxId || '—')}</td>
