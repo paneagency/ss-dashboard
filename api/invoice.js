@@ -37,7 +37,11 @@ async function uploadToGCS(pdfBuffer, fileName) {
   if (!bucketName) throw new Error('GCS_BUCKET_NAME no configurado en Vercel');
   const storage = getStorage();
   const file = storage.bucket(bucketName).file(fileName);
-  await file.save(pdfBuffer, { contentType: 'application/pdf', resumable: false });
+  await file.save(pdfBuffer, {
+    contentType: 'application/pdf',
+    resumable: false,
+    metadata: { cacheControl: 'no-cache, no-store, max-age=0' },
+  });
   return `https://storage.googleapis.com/${bucketName}/${encodeURIComponent(fileName)}`;
 }
 
@@ -47,19 +51,19 @@ async function ensureSheets(sheetsClient) {
   const toCreate = [];
   if (!existing.includes(FACTURAS_SHEET)) toCreate.push(FACTURAS_SHEET);
   if (!existing.includes(CONFIG_SHEET)) toCreate.push(CONFIG_SHEET);
-  if (!toCreate.length) return;
-  await sheetsClient.spreadsheets.batchUpdate({
-    spreadsheetId: SPREADSHEET_ID,
-    requestBody: { requests: toCreate.map(title => ({ addSheet: { properties: { title } } })) },
-  });
-  if (toCreate.includes(FACTURAS_SHEET)) {
-    await sheetsClient.spreadsheets.values.update({
+  if (toCreate.length) {
+    await sheetsClient.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${FACTURAS_SHEET}!A1:K1`,
-      valueInputOption: 'RAW',
-      requestBody: { values: [['INVOICE_NUM','FECHA','ARTISTA','VENDEDOR','REPRESENTANTE','MONTO','METODO','ESTADO','DRIVE_URL','EMAIL_ENVIADO','PARA']] },
+      requestBody: { requests: toCreate.map(title => ({ addSheet: { properties: { title } } })) },
     });
   }
+  // Always ensure full header row (adds L-O cols if missing)
+  await sheetsClient.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${FACTURAS_SHEET}!A1:O1`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [['INVOICE_NUM','FECHA','ARTISTA','VENDEDOR','REPRESENTANTE','MONTO','METODO','ESTADO','DRIVE_URL','EMAIL_ENVIADO','PARA','DIRECCION','PAIS','TAX_ID','NOMBRE_FISCAL']] },
+  });
 }
 
 async function getNextInvoiceNumber(sheetsClient) {
@@ -285,13 +289,14 @@ module.exports = async (req, res) => {
       await sheetsClient.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: { valueInputOption: 'USER_ENTERED', data: [
+          { range: `${FACTURAS_SHEET}!I${rowNum}`, values: [[gcsUrl]] },
           { range: `${FACTURAS_SHEET}!L${rowNum}`, values: [[newDireccion]] },
           { range: `${FACTURAS_SHEET}!M${rowNum}`, values: [[newPais]] },
           { range: `${FACTURAS_SHEET}!N${rowNum}`, values: [[newTaxId]] },
           { range: `${FACTURAS_SHEET}!O${rowNum}`, values: [[newNombreFiscal]] },
         ]},
       });
-      return res.json({ ok: true, gcsUrl });
+      return res.json({ ok: true, gcsUrl: gcsUrl + '?v=' + Date.now() });
     }
 
     // ── LIST INVOICES ─────────────────────────────────────────────

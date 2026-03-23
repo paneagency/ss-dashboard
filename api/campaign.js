@@ -111,8 +111,8 @@ async function lookupClientDB(sheets, artista) {
 // Columnas de la hoja Clientes (post-INSTAGRAM):
 // A=ID, B=ARTISTA, C=GÉNERO, D=PAIS, E=TELÉFONO, F=EMAIL, G=SPOTIFY,
 // H=FECHA_PRIMERA_COMPRA, I=REPRESENTANTE, J=NOMBRE, K=APODO,
-// L=VENDEDOR, M=METODO_PAGO, N=ESTADO
-const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N', imagen:'O', tipo:'P', direccion:'Q', taxId:'R', autoFactura:'S' };
+// L=VENDEDOR, M=METODO_PAGO, N=ESTADO, O=IMAGEN, P=TIPO, Q=DIRECCIÓN, R=TAX_ID, S=AUTO_FACTURA, T=NOMBRE_FISCAL
+const CLIENT_COLS = { spotify:'G', representante:'I', nombre:'J', apodo:'K', vendedor:'L', metodoPago:'M', estado:'N', imagen:'O', tipo:'P', direccion:'Q', taxId:'R', autoFactura:'S', nombreFiscal:'T' };
 
 async function updateClientFields(sheets, artista, fields) {
   const entries = Object.entries(fields).filter(([k, v]) => CLIENT_COLS[k] && v !== undefined && v !== null && v !== '');
@@ -368,7 +368,7 @@ module.exports = async (req, res) => {
       if (mode === 'clients') {
         const resp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CLIENTES_SHEET}!A:S`,
+          range: `${CLIENTES_SHEET}!A:T`,
         });
         const rows = (resp.data.values || []).slice(1);
         return res.json({
@@ -389,6 +389,7 @@ module.exports = async (req, res) => {
             direccion: r[16] || '',
             taxId: r[17] || '',
             autoFactura: r[18] === '1',
+            nombreFiscal: r[19] || '',
           })),
         });
       }
@@ -621,7 +622,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nuevo cliente ───────────────────────────────────
     if (req.method === 'POST' && req.body.mode === 'client') {
-      const { artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen } = req.body;
+      const { artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen, nombreFiscal: nFiscal } = req.body;
       if (!artista) return res.status(400).json({ error: 'artista requerido' });
 
       // ID correlativo: leer IDs existentes y generar el siguiente C00X
@@ -643,9 +644,9 @@ module.exports = async (req, res) => {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A:R`,
+        range: `${CLIENTES_SHEET}!A:T`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[newId, artista, genero || '', pais || '', safeTel, email || '', spotify || '', primeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa', imagen || '', req.body.tipo || '', req.body.direccion || '', req.body.taxId || '']] },
+        requestBody: { values: [[newId, artista, genero || '', pais || '', safeTel, email || '', spotify || '', primeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || 'Activa', imagen || '', req.body.tipo || '', req.body.direccion || '', req.body.taxId || '', req.body.autoFactura ? '1' : '', nFiscal || '']] },
       });
       return res.json({ ok: true });
     }
@@ -729,11 +730,11 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar cliente ───────────────────────────────────
     if (req.method === 'PUT' && req.body.mode === 'client') {
-      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen, tipo, direccion, taxId, autoFactura } = req.body;
+      const { row, artista, genero, pais, telefono, email, spotify, representante, nombre, apodo, vendedor: vend, metodoPago, estado, imagen, tipo, direccion, taxId, autoFactura, nombreFiscal: nFiscalPut } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
       const existing = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:S${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:T${row}`,
       });
       const existingRow = existing.data.values?.[0] || [];
       const id = existingRow[0] || Date.now().toString();
@@ -741,9 +742,9 @@ module.exports = async (req, res) => {
       const safeTel = telefono ? (telefono.startsWith('+') ? `'${telefono}` : telefono) : '';
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CLIENTES_SHEET}!A${row}:S${row}`,
+        range: `${CLIENTES_SHEET}!A${row}:T${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '', tipo || existingRow[15] || '', direccion ?? existingRow[16] ?? '', taxId ?? existingRow[17] ?? '', autoFactura ? '1' : (existingRow[18] ?? '')]] },
+        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '', tipo || existingRow[15] || '', direccion ?? existingRow[16] ?? '', taxId ?? existingRow[17] ?? '', autoFactura ? '1' : (existingRow[18] ?? ''), nFiscalPut ?? existingRow[19] ?? '']] },
       });
       return res.json({ ok: true });
     }

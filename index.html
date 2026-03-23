@@ -1270,6 +1270,7 @@
           </div>
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="dd-taxid" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="dd-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal</div><input id="dd-nombre-fiscal" class="dd-input" placeholder="Nombre en factura (si difiere del artista)"></div>
           <div class="detalle-field full">
             <div id="dd-auto-factura-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none">
               <div id="dd-auto-factura-toggle" onclick="toggleAutoFactura()" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
@@ -3044,6 +3045,7 @@ function openClientDetail(row) {
   setVal('dd-spotify', c.spotify);
   setVal('dd-taxid', c.taxId);
   setVal('dd-direccion', c.direccion);
+  setVal('dd-nombre-fiscal', c.nombreFiscal);
   const tipoEl = document.getElementById('dd-tipo');
   tipoEl.value = c.tipo || 'Artista';
   tipoEl.disabled = readonly;
@@ -3140,6 +3142,7 @@ async function saveClientDetail() {
     tipo: document.getElementById('dd-tipo').value,
     taxId: document.getElementById('dd-taxid').value.trim(),
     direccion: document.getElementById('dd-direccion').value.trim(),
+    nombreFiscal: document.getElementById('dd-nombre-fiscal').value.trim(),
     autoFactura: document.getElementById('dd-auto-factura').checked ? '1' : '',
   };
   try {
@@ -5707,7 +5710,7 @@ function openRegenModal(invoiceNum) {
     document.getElementById('regen-invoice-num').value = f.invoiceNum;
     document.getElementById('regen-artista').value = f.artista;
     document.getElementById('regen-subtitle').textContent = `${f.invoiceNum} · ${f.artista}`;
-    document.getElementById('regen-nombre-fiscal').value = f.clienteNombreFiscal || '';
+    document.getElementById('regen-nombre-fiscal').value = f.clienteNombreFiscal || cliente.nombreFiscal || '';
     document.getElementById('regen-taxid').value = f.clienteTaxId || cliente.taxId || '';
     document.getElementById('regen-pais').value = f.clientePais || cliente.pais || '';
     document.getElementById('regen-direccion').value = f.clienteDireccion || cliente.direccion || '';
@@ -5754,6 +5757,7 @@ async function saveRegenInvoice() {
             vendedor: c.vendedor || '', metodoPago: c.metodoPago || '', estado: c.estado || '',
             tipo: c.tipo || '', taxId: taxId || c.taxId || '',
             direccion: direccion || c.direccion || '', autoFactura: c.autoFactura ? '1' : '',
+            nombreFiscal: nombreFiscal || c.nombreFiscal || '',
           }),
         });
         // Actualizar en memoria
@@ -5761,6 +5765,7 @@ async function saveRegenInvoice() {
           window._clientesMap[clienteKey].taxId = taxId || c.taxId;
           window._clientesMap[clienteKey].pais = pais || c.pais;
           window._clientesMap[clienteKey].direccion = direccion || c.direccion;
+          window._clientesMap[clienteKey].nombreFiscal = nombreFiscal || c.nombreFiscal;
         }
       }
     }
