@@ -1399,6 +1399,35 @@
     </div>
   </div>
 
+  <!-- MODAL: REGENERAR FACTURA CON DATOS FISCALES -->
+  <div id="modal-regen-invoice" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRegenModal()">
+    <div class="modal-box" style="max-width:460px;padding:0;overflow:hidden">
+      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:20px 24px 16px;position:relative">
+        <button class="modal-close" onclick="closeRegenModal()" style="position:absolute;top:12px;right:12px">✕</button>
+        <div class="section-title" style="font-size:17px">✏️ Actualizar datos fiscales</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px" id="regen-subtitle"></div>
+      </div>
+      <input type="hidden" id="regen-invoice-num">
+      <input type="hidden" id="regen-artista">
+      <div style="padding:20px 24px">
+        <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal (empresa o razón social)</div><input id="regen-nombre-fiscal" class="dd-input" placeholder="Ej: Music Corp Ltd"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="regen-taxid" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field"><div class="detalle-field-label">País</div><input id="regen-pais" class="dd-input" placeholder="—"></div>
+          <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="regen-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted)">
+          <input type="checkbox" id="regen-update-perfil" checked style="accent-color:var(--indigo)">
+          Actualizar también el perfil del cliente
+        </label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="closeRegenModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveRegenInvoice()">🔄 Regenerar PDF</button>
+      </div>
+    </div>
+  </div>
+
   </section>
 
 
@@ -5666,6 +5695,90 @@ async function sendInvoiceDirect(idx) {
   }
 }
 
+function openRegenModal(idx) {
+  const f = (window._facturasList || [])[idx];
+  if (!f) return;
+  // Pre-fill con datos de la factura, y sobre-escribe con datos actuales del cliente si existen
+  const cliente = (window._clientesMap || {})[f.artista?.toLowerCase()?.trim()] || {};
+  document.getElementById('regen-invoice-num').value = f.invoiceNum;
+  document.getElementById('regen-artista').value = f.artista;
+  document.getElementById('regen-subtitle').textContent = `${f.invoiceNum} · ${f.artista}`;
+  document.getElementById('regen-nombre-fiscal').value = f.clienteNombreFiscal || '';
+  document.getElementById('regen-taxid').value = f.clienteTaxId || cliente.taxId || '';
+  document.getElementById('regen-pais').value = f.clientePais || cliente.pais || '';
+  document.getElementById('regen-direccion').value = f.clienteDireccion || cliente.direccion || '';
+  document.getElementById('regen-update-perfil').checked = true;
+  document.getElementById('modal-regen-invoice').style.display = 'flex';
+}
+
+function closeRegenModal() { document.getElementById('modal-regen-invoice').style.display = 'none'; }
+
+async function saveRegenInvoice() {
+  const invoiceNum     = document.getElementById('regen-invoice-num').value;
+  const artista        = document.getElementById('regen-artista').value;
+  const nombreFiscal   = document.getElementById('regen-nombre-fiscal').value.trim();
+  const taxId          = document.getElementById('regen-taxid').value.trim();
+  const pais           = document.getElementById('regen-pais').value.trim();
+  const direccion      = document.getElementById('regen-direccion').value.trim();
+  const updatePerfil   = document.getElementById('regen-update-perfil').checked;
+  const btn = document.querySelector('#modal-regen-invoice .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Regenerando…'; }
+  try {
+    // 1. Regenerar PDF
+    const r = await fetch('/api/invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'regenerate', invoiceNum, clienteNombreFiscal: nombreFiscal, clienteDireccion: direccion, clientePais: pais, clienteTaxId: taxId }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Error al regenerar');
+
+    // 2. Opcionalmente actualizar perfil del cliente
+    if (updatePerfil) {
+      const clienteKey = artista?.toLowerCase()?.trim();
+      const c = (window._clientesMap || {})[clienteKey];
+      if (c?.row) {
+        await fetch('/api/campaign', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'client', row: c.row, artista: c.artista,
+            nombre: c.nombre || '', apodo: c.apodo || '', genero: c.genero || '',
+            pais: pais || c.pais || '', telefono: c.telefono || '', email: c.email || '',
+            spotify: c.spotify || '', imagen: c.imagen || '', representante: c.representante || '',
+            vendedor: c.vendedor || '', metodoPago: c.metodoPago || '', estado: c.estado || '',
+            tipo: c.tipo || '', taxId: taxId || c.taxId || '',
+            direccion: direccion || c.direccion || '', autoFactura: c.autoFactura ? '1' : '',
+          }),
+        });
+        // Actualizar en memoria
+        if (window._clientesMap[clienteKey]) {
+          window._clientesMap[clienteKey].taxId = taxId || c.taxId;
+          window._clientesMap[clienteKey].pais = pais || c.pais;
+          window._clientesMap[clienteKey].direccion = direccion || c.direccion;
+        }
+      }
+    }
+
+    // 3. Actualizar en memoria y re-render
+    const fi = (window._facturasList || []).findIndex(f => f.invoiceNum === invoiceNum);
+    if (fi !== -1) {
+      window._facturasList[fi].clienteNombreFiscal = nombreFiscal;
+      window._facturasList[fi].clienteTaxId = taxId;
+      window._facturasList[fi].clientePais = pais;
+      window._facturasList[fi].clienteDireccion = direccion;
+      if (d.gcsUrl) window._facturasList[fi].gcsUrl = d.gcsUrl;
+    }
+    closeRegenModal();
+    renderHistorialFacturas();
+    showToast('PDF regenerado con datos fiscales actualizados', 'success', 5000);
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Regenerar PDF'; }
+  }
+}
+
 async function renderHistorialFacturas(pillStyle) {
   const list = document.getElementById('campanias-list');
   if (!list) return;
@@ -5717,6 +5830,9 @@ async function renderHistorialFacturas(pillStyle) {
       ? `<a href="${escH(f.gcsUrl)}" target="_blank" class="btn btn-sm" style="padding:3px 10px;font-size:11px">👁 Ver PDF</a>`
       : '';
     const sendBtn = `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--indigo)" onclick="sendInvoiceDirect(${i})">📤 Enviar</button>`;
+    const editBtn = f.estado !== 'Cancelada'
+      ? `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--muted)" onclick="openRegenModal(${i})" title="Actualizar datos fiscales y regenerar PDF">✏️</button>`
+      : '';
     return `
       <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
         <td style="padding:10px 12px;font-size:12px;color:var(--muted);white-space:nowrap;font-family:monospace">${escH(f.invoiceNum)}</td>
@@ -5727,7 +5843,7 @@ async function renderHistorialFacturas(pillStyle) {
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(f.fecha || '—')}</td>
         <td style="padding:10px 12px">${badge}</td>
         <td style="padding:10px 12px;white-space:nowrap">
-          <div style="display:flex;gap:6px">${pdfBtn}${sendBtn}</div>
+          <div style="display:flex;gap:6px">${pdfBtn}${sendBtn}${editBtn}</div>
         </td>
       </tr>`;
   }).join('');

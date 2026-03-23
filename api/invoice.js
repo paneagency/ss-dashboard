@@ -82,7 +82,7 @@ function generateInvoicePDF(data) {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const { invoiceNum, issueDate, artista, clienteDireccion, clientePais, clienteTaxId, monto, cancelled = false } = data;
+    const { invoiceNum, issueDate, artista, clienteNombreFiscal, clienteDireccion, clientePais, clienteTaxId, monto, cancelled = false } = data;
     const ACCENT = '#6366f1';
     const DARK = '#1a1a2e';
     const GRAY = '#6b7280';
@@ -111,9 +111,11 @@ function generateInvoicePDF(data) {
 
     // TO block
     doc.fillColor(GRAY).fontSize(8).font('Helvetica-Bold').text('BILL TO', 300, 130);
-    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text(artista, 300, 143);
+    const billToName = clienteNombreFiscal || artista;
+    doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text(billToName, 300, 143);
     let toY = 157;
     doc.fillColor(GRAY).fontSize(9).font('Helvetica');
+    if (clienteNombreFiscal && clienteNombreFiscal !== artista) { doc.text(artista, 300, toY); toY += 12; }
     if (clienteDireccion) { doc.text(clienteDireccion, 300, toY); toY += 12; }
     if (clientePais) { doc.text(clientePais, 300, toY); toY += 12; }
     if (clienteTaxId) { doc.text(`Tax ID: ${clienteTaxId}`, 300, toY); }
@@ -259,12 +261,45 @@ module.exports = async (req, res) => {
       return res.json({ ok: true });
     }
 
+    // ── REGENERATE INVOICE WITH FISCAL DATA ──────────────────────
+    if (req.method === 'POST' && req.body.mode === 'regenerate') {
+      const { invoiceNum, clienteNombreFiscal, clienteDireccion, clientePais, clienteTaxId } = req.body;
+      if (!invoiceNum) return res.status(400).json({ error: 'invoiceNum requerido' });
+      const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:O` });
+      const rows = resp.data.values || [];
+      const rowIdx = rows.findIndex(r => r[0] === invoiceNum);
+      if (rowIdx === -1) return res.status(404).json({ error: 'Factura no encontrada' });
+      const r = rows[rowIdx];
+      const rowNum = rowIdx + 1;
+      const newDireccion = clienteDireccion !== undefined ? clienteDireccion : (r[11] || '');
+      const newPais      = clientePais      !== undefined ? clientePais      : (r[12] || '');
+      const newTaxId     = clienteTaxId     !== undefined ? clienteTaxId     : (r[13] || '');
+      const newNombreFiscal = clienteNombreFiscal !== undefined ? clienteNombreFiscal : (r[14] || '');
+      const pdfBuffer = await generateInvoicePDF({
+        invoiceNum: r[0], issueDate: r[1], artista: r[2],
+        clienteNombreFiscal: newNombreFiscal, clienteDireccion: newDireccion,
+        clientePais: newPais, clienteTaxId: newTaxId, monto: parseFloat(r[5]) || 0,
+      });
+      const fileName = `${r[0]} - ${r[2]}.pdf`;
+      const gcsUrl = await uploadToGCS(pdfBuffer, fileName);
+      await sheetsClient.spreadsheets.values.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: { valueInputOption: 'USER_ENTERED', data: [
+          { range: `${FACTURAS_SHEET}!L${rowNum}`, values: [[newDireccion]] },
+          { range: `${FACTURAS_SHEET}!M${rowNum}`, values: [[newPais]] },
+          { range: `${FACTURAS_SHEET}!N${rowNum}`, values: [[newTaxId]] },
+          { range: `${FACTURAS_SHEET}!O${rowNum}`, values: [[newNombreFiscal]] },
+        ]},
+      });
+      return res.json({ ok: true, gcsUrl });
+    }
+
     // ── LIST INVOICES ─────────────────────────────────────────────
     if (req.method === 'GET') {
       try {
-        const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:N` });
+        const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:O` });
         const rows = (resp.data.values || []).slice(1);
-        return res.json({ facturas: rows.map(r => ({ invoiceNum: r[0], fecha: r[1], artista: r[2], vendedor: r[3], representante: r[4], monto: r[5], metodo: r[6], estado: r[7], gcsUrl: r[8], emailEnviado: r[9], para: r[10], clienteDireccion: r[11]||'', clientePais: r[12]||'', clienteTaxId: r[13]||'' })) });
+        return res.json({ facturas: rows.map(r => ({ invoiceNum: r[0], fecha: r[1], artista: r[2], vendedor: r[3], representante: r[4], monto: r[5], metodo: r[6], estado: r[7], gcsUrl: r[8], emailEnviado: r[9], para: r[10], clienteDireccion: r[11]||'', clientePais: r[12]||'', clienteTaxId: r[13]||'', clienteNombreFiscal: r[14]||'' })) });
       } catch(e) { return res.json({ facturas: [] }); }
     }
 
