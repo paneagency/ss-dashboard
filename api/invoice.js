@@ -82,7 +82,7 @@ function generateInvoicePDF(data) {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const { invoiceNum, issueDate, artista, clienteDireccion, clientePais, clienteTaxId, monto } = data;
+    const { invoiceNum, issueDate, artista, clienteDireccion, clientePais, clienteTaxId, monto, cancelled = false } = data;
     const ACCENT = '#6366f1';
     const DARK = '#1a1a2e';
     const GRAY = '#6b7280';
@@ -149,9 +149,24 @@ function generateInvoicePDF(data) {
       .text('TOTAL', 360, 350)
       .text(`${fmt(monto)} USD`, 360, 350, { width: 180, align: 'right' });
 
-    // PAID badge
-    doc.rect(50, 340, 90, 34).fill('rgba(16,185,129,0.1)').strokeColor('#10b981').lineWidth(2).stroke();
-    doc.fillColor('#10b981').fontSize(16).font('Helvetica-Bold').text('✓ PAID', 55, 350);
+    // PAID / CANCELADA badge
+    if (cancelled) {
+      doc.rect(50, 340, 130, 34).fill('rgba(239,68,68,0.1)').strokeColor('#ef4444').lineWidth(2).stroke();
+      doc.fillColor('#ef4444').fontSize(13).font('Helvetica-Bold').text('CANCELADA', 57, 351);
+    } else {
+      doc.rect(50, 340, 90, 34).fill('rgba(16,185,129,0.1)').strokeColor('#10b981').lineWidth(2).stroke();
+      doc.fillColor('#10b981').fontSize(16).font('Helvetica-Bold').text('✓ PAID', 55, 350);
+    }
+
+    // Diagonal watermark for cancelled invoices
+    if (cancelled) {
+      doc.save();
+      doc.opacity(0.07);
+      doc.fillColor('#ef4444').fontSize(90).font('Helvetica-Bold');
+      doc.rotate(-38, { origin: [297.64, 421.28] });
+      doc.text('CANCELADA', 0, 370, { width: 595.28, align: 'center' });
+      doc.restore();
+    }
 
     // Footer
     doc.moveTo(50, 760).lineTo(545.28, 760).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
@@ -165,7 +180,7 @@ function generateInvoicePDF(data) {
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -257,20 +272,39 @@ module.exports = async (req, res) => {
     if (req.method === 'DELETE') {
       const { artista, monto } = req.body;
       if (!artista) return res.status(400).json({ error: 'artista requerido' });
-      const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:H` });
+      const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:N` });
       const rows = resp.data.values || [];
       const targetMonto = parseFloat(monto) || 0;
       const norm = s => (s || '').toString().trim().toLowerCase();
       let matchRow = -1;
+      let matchData = null;
       for (let i = 1; i < rows.length; i++) {
         const r = rows[i];
         if (norm(r[2]) !== norm(artista)) continue;
         if (r[7] === 'Cancelada') continue;
         if (targetMonto > 0 && Math.abs((parseFloat(r[5]) || 0) - targetMonto) > 0.5) continue;
-        matchRow = i + 1; // 1-indexed
+        matchRow = i + 1;
+        matchData = r;
         break;
       }
       if (matchRow === -1) return res.json({ ok: true, notFound: true });
+
+      // Regenerar PDF con sello CANCELADA y sobreescribir en GCS
+      try {
+        const pdfBuffer = await generateInvoicePDF({
+          invoiceNum: matchData[0],
+          issueDate: matchData[1],
+          artista: matchData[2],
+          clienteDireccion: matchData[11] || '',
+          clientePais: matchData[12] || '',
+          clienteTaxId: matchData[13] || '',
+          monto: parseFloat(matchData[5]) || 0,
+          cancelled: true,
+        });
+        const fileName = `${matchData[0]} - ${matchData[2]}.pdf`;
+        await uploadToGCS(pdfBuffer, fileName);
+      } catch(e) { console.warn('GCS cancel re-upload failed:', e.message); }
+
       await sheetsClient.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${FACTURAS_SHEET}!H${matchRow}`,
