@@ -115,6 +115,19 @@ module.exports = async (req, res) => {
       return res.json({ ok: true });
     }
 
+    // ── CREAR NUEVO VENDEDOR ────────────────────────────────────
+    if (req.method === 'POST' && req.body.mode === 'vendedor') {
+      const { nombre, commission, email, direccion, taxId, notas, nombreFiscal, autoFactura } = req.body;
+      if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Vendedores!A:H',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[nombre, commission ?? '', email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '']] },
+      });
+      return res.json({ ok: true });
+    }
+
     // ── VINCULAR VENTA A CAMPAÑA (actualizar col L) ───────────
     if (req.method === 'PUT') {
       const { saleRow, campaignId } = req.body;

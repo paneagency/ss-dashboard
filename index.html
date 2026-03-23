@@ -1170,9 +1170,16 @@
 
     <!-- Vista: Representantes -->
     <div id="clientes-view-representantes" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="section-title" style="font-size:16px">Directorio de Representantes</div>
         <button class="btn btn-primary btn-sm" id="btn-nuevo-rep" onclick="openRepModal(null)" style="display:none">+ Nuevo Representante</button>
+      </div>
+      <div style="position:relative;margin-bottom:14px">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;opacity:0.4;pointer-events:none">🔍</span>
+        <input type="text" id="rep-search" class="form-input" placeholder="Buscar representante..."
+          style="width:100%;padding:9px 36px 9px 38px;border-radius:8px;border:1.5px solid var(--border);font-size:14px"
+          oninput="this.nextElementSibling.style.display=this.value?'flex':'none';renderRepresentantes()">
+        <button onclick="document.getElementById('rep-search').value='';this.style.display='none';renderRepresentantes()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;width:22px;height:22px;align-items:center;justify-content:center;border-radius:50%">✕</button>
       </div>
       <div class="table-card">
         <div class="table-scroll"><table id="table-representantes"></table></div>
@@ -1181,8 +1188,16 @@
 
     <!-- Vista: Vendedores -->
     <div id="clientes-view-vendedores" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="section-title" style="font-size:16px">Datos de Vendedores</div>
+        <button class="btn btn-primary btn-sm" onclick="openVendedorModal(null)">+ Nuevo Vendedor</button>
+      </div>
+      <div style="position:relative;margin-bottom:14px">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;opacity:0.4;pointer-events:none">🔍</span>
+        <input type="text" id="vend-dir-search" class="form-input" placeholder="Buscar vendedor..."
+          style="width:100%;padding:9px 36px 9px 38px;border-radius:8px;border:1.5px solid var(--border);font-size:14px"
+          oninput="this.nextElementSibling.style.display=this.value?'flex':'none';renderVendedoresDir()">
+        <button onclick="document.getElementById('vend-dir-search').value='';this.style.display='none';renderVendedoresDir()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;width:22px;height:22px;align-items:center;justify-content:center;border-radius:50%">✕</button>
       </div>
       <div class="table-card">
         <div class="table-scroll"><table id="table-vendedores-dir"></table></div>
@@ -1333,6 +1348,7 @@
       <div style="padding:20px 24px">
         <input type="hidden" id="vend-nombre">
         <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field full" id="vend-nombre-row" style="display:none"><div class="detalle-field-label">Nombre</div><input id="vend-nombre-input" class="dd-input" placeholder="Nombre del vendedor"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal</div><input id="vend-nombre-fiscal" class="dd-input" placeholder="Ej: Melboss Music S.L"></div>
           <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="vend-email" class="dd-input" type="email" placeholder="email@ejemplo.com"></div>
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="vend-taxid" class="dd-input" placeholder="—"></div>
@@ -3167,6 +3183,8 @@ function renderRepresentantes() {
     );
     data = data.filter(r => assocReps.has(r.nombre));
   }
+  const repQ = (document.getElementById('rep-search')?.value || '').toLowerCase().trim();
+  if (repQ) data = data.filter(r => (r.nombre || '').toLowerCase().includes(repQ) || (r.email || '').toLowerCase().includes(repQ));
   if (!data.length) {
     tbl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No hay representantes registrados</td></tr>';
     return;
@@ -3256,9 +3274,16 @@ function renderVendedoresDir() {
     tbl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No hay vendedores cargados</td></tr>';
     return;
   }
+  const vendQ = (document.getElementById('vend-dir-search')?.value || '').toLowerCase().trim();
+  const filteredVendors = vendQ ? vendors.filter(n => n.toLowerCase().includes(vendQ)) : vendors;
+  const cols = showComision ? 6 : 5;
   tbl.innerHTML = `<thead><tr><th>Nombre</th>${showComision ? '<th>Comisión %</th>' : ''}<th>Email</th><th>Dirección</th><th>Tax ID</th><th></th></tr></thead>`;
   const tbody = document.createElement('tbody');
-  vendors.forEach(name => {
+  if (!filteredVendors.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;padding:32px;color:var(--muted)">Sin resultados</td></tr>`;
+    tbl.appendChild(tbody); return;
+  }
+  filteredVendors.forEach(name => {
     const v = vendorsMap[name] || { name, commission: 0, email: '', direccion: '', taxId: '' };
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
@@ -3277,9 +3302,12 @@ function renderVendedoresDir() {
 }
 
 function openVendedorModal(nombre) {
-  const v = (window._vendorsMap || {})[nombre] || { name: nombre, commission: 0, email: '', direccion: '', taxId: '', notas: '' };
-  document.getElementById('vend-modal-title').textContent = nombre;
-  document.getElementById('vend-nombre').value = nombre;
+  const isNew = !nombre;
+  const v = isNew ? {} : ((window._vendorsMap || {})[nombre] || { name: nombre, commission: 0, email: '', direccion: '', taxId: '', notas: '' });
+  document.getElementById('vend-modal-title').textContent = isNew ? 'Nuevo Vendedor' : nombre;
+  document.getElementById('vend-nombre').value = nombre || '';
+  document.getElementById('vend-nombre-row').style.display = isNew ? '' : 'none';
+  document.getElementById('vend-nombre-input').value = '';
   document.getElementById('vend-commission').value = v.commission || '';
   document.getElementById('vend-nombre-fiscal').value = v.nombreFiscal || '';
   document.getElementById('vend-email').value = v.email || '';
@@ -3293,34 +3321,37 @@ function openVendedorModal(nombre) {
 function closeVendedorModal() { document.getElementById('modal-vendedor').style.display = 'none'; }
 
 async function saveVendedor() {
-  const nombre = document.getElementById('vend-nombre').value;
+  const hiddenNombre = document.getElementById('vend-nombre').value;
+  const isNew = !hiddenNombre;
+  const nombre = isNew ? document.getElementById('vend-nombre-input').value.trim() : hiddenNombre;
+  if (!nombre) return showToast('El nombre es obligatorio', true);
   const commissionPct = parseFloat(document.getElementById('vend-commission').value) || 0;
+  const payload = {
+    mode: 'vendedor',
+    nombre,
+    commission: commissionPct,
+    nombreFiscal: document.getElementById('vend-nombre-fiscal').value.trim(),
+    email: document.getElementById('vend-email').value.trim(),
+    taxId: document.getElementById('vend-taxid').value.trim(),
+    direccion: document.getElementById('vend-direccion').value.trim(),
+    notas: document.getElementById('vend-notas').value.trim(),
+    autoFactura: document.getElementById('vend-auto-factura').checked ? '1' : '',
+  };
   try {
     const r = await fetch('/api/sheets', {
-      method: 'PUT',
+      method: isNew ? 'POST' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'vendedor',
-        nombre,
-        commission: commissionPct,
-        nombreFiscal: document.getElementById('vend-nombre-fiscal').value.trim(),
-        email: document.getElementById('vend-email').value.trim(),
-        taxId: document.getElementById('vend-taxid').value.trim(),
-        direccion: document.getElementById('vend-direccion').value.trim(),
-        notas: document.getElementById('vend-notas').value.trim(),
-        autoFactura: document.getElementById('vend-auto-factura').checked ? '1' : '',
-      }),
+      body: JSON.stringify(payload),
     });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || 'Error');
-    // Refresh vendors in memory
     const sd = await fetch('/api/sheets').then(r => r.json());
     if (sd.vendors) {
       window._vendors = sd.vendors.map(v => v.name);
       window._vendorsMap = {};
       sd.vendors.forEach(v => { window._vendorsMap[v.name] = v; });
     }
-    showToast('Vendedor actualizado');
+    showToast(isNew ? 'Vendedor creado' : 'Vendedor actualizado');
     closeVendedorModal();
     renderVendedoresDir();
   } catch(e) { showToast(e.message, true); }
