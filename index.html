@@ -1399,35 +1399,6 @@
     </div>
   </div>
 
-  <!-- MODAL: REGENERAR FACTURA CON DATOS FISCALES -->
-  <div id="modal-regen-invoice" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRegenModal()">
-    <div class="modal-box" style="max-width:460px;padding:0;overflow:hidden">
-      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:20px 24px 16px;position:relative">
-        <button class="modal-close" onclick="closeRegenModal()" style="position:absolute;top:12px;right:12px">✕</button>
-        <div class="section-title" style="font-size:17px">✏️ Actualizar datos fiscales</div>
-        <div style="color:var(--muted);font-size:13px;margin-top:4px" id="regen-subtitle"></div>
-      </div>
-      <input type="hidden" id="regen-invoice-num">
-      <input type="hidden" id="regen-artista">
-      <div style="padding:20px 24px">
-        <div class="detalle-grid" style="margin-bottom:16px">
-          <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal (empresa o razón social)</div><input id="regen-nombre-fiscal" class="dd-input" placeholder="Ej: Music Corp Ltd"></div>
-          <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="regen-taxid" class="dd-input" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">País</div><input id="regen-pais" class="dd-input" placeholder="—"></div>
-          <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="regen-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
-        </div>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted)">
-          <input type="checkbox" id="regen-update-perfil" checked style="accent-color:var(--indigo)">
-          Actualizar también el perfil del cliente
-        </label>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)">
-        <button class="btn btn-ghost" onclick="closeRegenModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveRegenInvoice()">🔄 Regenerar PDF</button>
-      </div>
-    </div>
-  </div>
-
   </section>
 
 
@@ -1742,6 +1713,35 @@
   </section>
 
 </main>
+
+<!-- MODAL: REGENERAR FACTURA CON DATOS FISCALES -->
+<div id="modal-regen-invoice" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRegenModal()">
+  <div class="modal-box" style="max-width:460px;padding:0;overflow:hidden">
+    <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.1));padding:20px 24px 16px;position:relative">
+      <button class="modal-close" onclick="closeRegenModal()" style="position:absolute;top:12px;right:12px">✕</button>
+      <div class="section-title" style="font-size:17px">✏️ Actualizar datos fiscales</div>
+      <div style="color:var(--muted);font-size:13px;margin-top:4px" id="regen-subtitle"></div>
+    </div>
+    <input type="hidden" id="regen-invoice-num">
+    <input type="hidden" id="regen-artista">
+    <div style="padding:20px 24px">
+      <div class="detalle-grid" style="margin-bottom:16px">
+        <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal (empresa o razón social)</div><input id="regen-nombre-fiscal" class="dd-input" placeholder="Ej: Music Corp Ltd"></div>
+        <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="regen-taxid" class="dd-input" placeholder="—"></div>
+        <div class="detalle-field"><div class="detalle-field-label">País</div><input id="regen-pais" class="dd-input" placeholder="—"></div>
+        <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="regen-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted)">
+        <input type="checkbox" id="regen-update-perfil" checked style="accent-color:var(--indigo)">
+        Actualizar también el perfil del cliente
+      </label>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 18px;border-top:1px solid var(--border)">
+      <button class="btn btn-ghost" onclick="closeRegenModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveRegenInvoice()">🔄 Regenerar PDF</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ============================================================
