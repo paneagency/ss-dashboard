@@ -1329,19 +1329,24 @@
       <div style="padding:20px 24px">
         <input type="hidden" id="vend-nombre">
         <div class="detalle-grid" style="margin-bottom:16px">
-          <div class="detalle-field"><div class="detalle-field-label">Comisión %</div><input id="vend-commission" class="dd-input" type="number" step="0.01" placeholder="0"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal</div><input id="vend-nombre-fiscal" class="dd-input" placeholder="Ej: Melboss Music S.L"></div>
           <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="vend-email" class="dd-input" type="email" placeholder="email@ejemplo.com"></div>
           <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="vend-taxid" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="vend-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
           <div class="detalle-field full"><div class="detalle-field-label">Notas</div><input id="vend-notas" class="dd-input" placeholder="—"></div>
           <div class="detalle-field full">
-            <div style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none">
-              <div id="vend-auto-factura-toggle" onclick="toggleGenericAF('vend')" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
-                <div id="vend-auto-factura-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <div style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none" onclick="toggleGenericAF('vend')">
+                <div id="vend-auto-factura-toggle" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
+                  <div id="vend-auto-factura-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+                </div>
+                <input type="checkbox" id="vend-auto-factura" style="display:none">
+                <span style="font-size:16px">🧾</span>
               </div>
-              <input type="checkbox" id="vend-auto-factura" style="display:none">
-              <span style="font-size:16px">🧾</span>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div class="detalle-field-label" style="font-size:10px">Comisión %</div>
+                <input id="vend-commission" class="dd-input" type="number" step="0.01" placeholder="0" style="width:80px">
+              </div>
             </div>
           </div>
         </div>
