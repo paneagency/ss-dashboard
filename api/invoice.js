@@ -118,11 +118,21 @@ function generateInvoicePDF(data) {
     const billToName = clienteNombreFiscal || artista;
     doc.fillColor(DARK).fontSize(10).font('Helvetica-Bold').text(billToName, 300, 143);
     let toY = 157;
+    const billW = 245;
     doc.fillColor(GRAY).fontSize(9).font('Helvetica');
-    if (clienteNombreFiscal && clienteNombreFiscal !== artista) { doc.text(artista, 300, toY); toY += 12; }
-    if (clienteDireccion) { doc.text(clienteDireccion, 300, toY); toY += 12; }
-    if (clientePais) { doc.text(clientePais, 300, toY); toY += 12; }
-    if (clienteTaxId) { doc.text(`Tax ID: ${clienteTaxId}`, 300, toY); }
+    if (clienteNombreFiscal && clienteNombreFiscal !== artista) {
+      doc.text(artista, 300, toY, { width: billW });
+      toY += doc.heightOfString(artista, { width: billW }) + 2;
+    }
+    if (clienteDireccion) {
+      doc.text(clienteDireccion, 300, toY, { width: billW });
+      toY += doc.heightOfString(clienteDireccion, { width: billW }) + 2;
+    }
+    if (clientePais) {
+      doc.text(clientePais, 300, toY, { width: billW });
+      toY += doc.heightOfString(clientePais, { width: billW }) + 2;
+    }
+    if (clienteTaxId) { doc.text(`Tax ID: ${clienteTaxId}`, 300, toY, { width: billW }); }
 
     // Divider
     doc.moveTo(50, 228).lineTo(545.28, 228).strokeColor('#e5e7eb').lineWidth(1).stroke();
