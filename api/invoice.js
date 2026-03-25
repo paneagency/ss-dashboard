@@ -86,7 +86,7 @@ function generateInvoicePDF(data) {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const { invoiceNum, issueDate, artista, clienteNombreFiscal, clienteDireccion, clientePais, clienteTaxId, monto, cancelled = false } = data;
+    const { invoiceNum, issueDate, artista, clienteNombreFiscal, clienteDireccion, clientePais, clienteTaxId, monto, cancelled = false, pending = false } = data;
     const ACCENT = '#6366f1';
     const DARK = '#1a1a2e';
     const GRAY = '#6b7280';
@@ -155,10 +155,13 @@ function generateInvoicePDF(data) {
       .text('TOTAL', 360, 350)
       .text(`${fmt(monto)} USD`, 360, 350, { width: 180, align: 'right' });
 
-    // PAID / CANCELADA badge
+    // PAID / CANCELADA / PENDIENTE badge
     if (cancelled) {
       doc.rect(50, 340, 130, 34).fill('rgba(239,68,68,0.1)').strokeColor('#ef4444').lineWidth(2).stroke();
       doc.fillColor('#ef4444').fontSize(13).font('Helvetica-Bold').text('CANCELADA', 57, 351);
+    } else if (pending) {
+      doc.rect(50, 340, 175, 34).fill('rgba(245,158,11,0.1)').strokeColor('#f59e0b').lineWidth(2).stroke();
+      doc.fillColor('#f59e0b').fontSize(10).font('Helvetica-Bold').text('PENDIENTE DE PAGO', 57, 352);
     } else {
       doc.rect(50, 340, 90, 34).fill('rgba(16,185,129,0.1)').strokeColor('#10b981').lineWidth(2).stroke();
       doc.fillColor('#10b981').fontSize(16).font('Helvetica-Bold').text('✓ PAID', 55, 350);
@@ -196,7 +199,7 @@ module.exports = async (req, res) => {
 
     // ── GENERATE INVOICE ─────────────────────────────────────────
     if (req.method === 'POST' && (!req.body.mode || req.body.mode === 'generate')) {
-      const { artista, vendedor, representante, precio, metodo, fecha, clienteDireccion, clientePais, clienteTaxId, clienteNombreFiscal } = req.body;
+      const { artista, vendedor, representante, precio, metodo, fecha, clienteDireccion, clientePais, clienteTaxId, clienteNombreFiscal, pending: isPending } = req.body;
       if (!artista || !precio) return res.status(400).json({ error: 'artista y precio requeridos' });
 
       await ensureSheets(sheetsClient);
@@ -206,7 +209,7 @@ module.exports = async (req, res) => {
       const monto = parseFloat(precio) || 0;
 
       // Generar PDF y subir a GCS
-      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteNombreFiscal: clienteNombreFiscal || '', clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto });
+      const pdfBuffer = await generateInvoicePDF({ invoiceNum, issueDate, artista, clienteNombreFiscal: clienteNombreFiscal || '', clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', monto, pending: !!isPending });
       const gcsUrl = await uploadToGCS(pdfBuffer, `${invoiceNum} - ${artista}.pdf`);
 
       // Log en hoja Facturas (cols A:O para guardar datos completos para reenvío)
@@ -214,10 +217,46 @@ module.exports = async (req, res) => {
         spreadsheetId: SPREADSHEET_ID,
         range: `${FACTURAS_SHEET}!A:O`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', 'Generada', gcsUrl, '', '', clienteDireccion || '', clientePais || '', clienteTaxId || '', clienteNombreFiscal || '']] },
+        requestBody: { values: [[invoiceNum, issueDate, artista, vendedor || '', representante || '', monto, metodo || '', isPending ? 'Pendiente' : 'Generada', gcsUrl, '', '', clienteDireccion || '', clientePais || '', clienteTaxId || '', clienteNombreFiscal || '']] },
       });
 
-      return res.json({ ok: true, invoiceNum, gcsUrl, artista, vendedor, representante, precio: monto, metodo, issueDate, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', clienteNombreFiscal: clienteNombreFiscal || '' });
+      return res.json({ ok: true, invoiceNum, gcsUrl, artista, vendedor, representante, precio: monto, metodo, issueDate, pending: !!isPending, clienteDireccion: clienteDireccion || '', clientePais: clientePais || '', clienteTaxId: clienteTaxId || '', clienteNombreFiscal: clienteNombreFiscal || '' });
+    }
+
+    // ── MARK PENDING INVOICE AS PAID ─────────────────────────────
+    if (req.method === 'POST' && req.body.mode === 'pay') {
+      const { artista, monto } = req.body;
+      if (!artista) return res.status(400).json({ error: 'artista requerido' });
+      const resp = await sheetsClient.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${FACTURAS_SHEET}!A:O` });
+      const rows = resp.data.values || [];
+      const norm = s => (s || '').toString().trim().toLowerCase();
+      let matchRow = -1, matchData = null;
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (norm(r[2]) !== norm(artista)) continue;
+        if (r[7] !== 'Pendiente') continue;
+        matchRow = i + 1;
+        matchData = r;
+        break;
+      }
+      if (matchRow === -1) return res.json({ ok: true, skipped: true });
+      const pdfBuffer = await generateInvoicePDF({
+        invoiceNum: matchData[0], issueDate: matchData[1], artista: matchData[2],
+        clienteNombreFiscal: matchData[14] || '', clienteDireccion: matchData[11] || '',
+        clientePais: matchData[12] || '', clienteTaxId: matchData[13] || '',
+        monto: parseFloat(matchData[5]) || 0,
+      });
+      const fileName = `${matchData[0]} - ${matchData[2]}.pdf`;
+      const gcsUrl = await uploadToGCS(pdfBuffer, fileName);
+      const versionedUrl = gcsUrl + '?v=' + Date.now();
+      await sheetsClient.spreadsheets.values.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: { valueInputOption: 'USER_ENTERED', data: [
+          { range: `${FACTURAS_SHEET}!H${matchRow}`, values: [['Pagada']] },
+          { range: `${FACTURAS_SHEET}!I${matchRow}`, values: [[versionedUrl]] },
+        ]},
+      });
+      return res.json({ ok: true, gcsUrl: versionedUrl });
     }
 
     // ── SEND INVOICE BY EMAIL ─────────────────────────────────────

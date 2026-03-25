@@ -4721,6 +4721,34 @@ async function submitSinPago(e) {
       if (i === 0) { sharedMasterId = cd.masterEventId || ''; sharedVendorId = cd.vendorEventId || ''; }
     }
 
+    // Generate pending invoice for sinPago campaign
+    const invoiceArtista = esGrupal ? 'Varios' : artista;
+    const artKey = invoiceArtista.toLowerCase().trim();
+    const clienteData = window._clientesMap?.[artKey] || {};
+    try {
+      const ir = await fetch('/api/invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artista: invoiceArtista,
+          vendedor: venta,
+          representante: representanteVal,
+          precio,
+          metodo,
+          pending: true,
+          clienteNombreFiscal: clienteData.nombreFiscal || '',
+          clienteDireccion: clienteData.direccion || '',
+          clientePais: clienteData.pais || '',
+          clienteTaxId: clienteData.taxId || '',
+        }),
+      });
+      const id = await ir.json();
+      if (id.ok) {
+        const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
+        showToast(`📄 ${id.invoiceNum} pendiente generada${pdfLink}`, 'info', 7000);
+      }
+    } catch(e) { console.warn('Pending invoice error (non-fatal):', e); }
+
     const msg = artistasList.length > 1
       ? `${artistasList.length} campañas registradas (sin pago)`
       : 'Campaña registrada (sin pago)';
@@ -4914,6 +4942,13 @@ async function executeCobrar(camp, extraRows, totalPrecio, totalGasto, sinCobrar
     const periodsCount = extraRows.length + sinCobrarRows.length + 1;
     showToast(`Cobro registrado para ${camp.artista}${periodsCount > 1 ? ` (${periodsCount} períodos)` : ''}`, 'success');
 
+    // Mark pending invoice as paid (non-fatal)
+    fetch('/api/invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'pay', artista: camp.artista, monto: totalPrecio }),
+    }).catch(() => {});
+
     _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
     loadCampanias().catch(() => {});
 
@@ -5046,6 +5081,14 @@ async function submitCobrarConSeleccion() {
       await fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values: sheetRow }) });
 
       showToast(`Cobro parcial registrado para ${camp.artista} (${extraRows.length + sinCobrarRows.length + otrosPendientesRows.length} períodos)`, 'success');
+
+      // Mark pending invoice as paid (non-fatal)
+      fetch('/api/invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'pay', artista: camp.artista, monto: totalPrecio }),
+      }).catch(() => {});
+
       _campaniasLoaded = false; _campaniasLoading = false; _historial = null;
       loadCampanias().catch(() => {});
 
