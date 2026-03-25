@@ -56,14 +56,14 @@ module.exports = async (req, res) => {
     // ── LISTA DE VENDEDORES ────────────────────────────────────
     if (req.method === 'GET') {
       const [vendResp, provResp] = await Promise.all([
-        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:H' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:I' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Proveedores!A:A' }).catch(() => ({ data: { values: [] } })),
       ]);
       const vendRows = vendResp.data.values || [];
       const vendStart = /^(nombre|vendedor|name|vendor)/i.test(vendRows[0]?.[0] || '') ? 1 : 0;
       const vendors = vendRows.slice(vendStart)
         .filter(r => r[0]?.trim())
-        .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0, email: r[2]?.trim() || '', direccion: r[3]?.trim() || '', taxId: r[4]?.trim() || '', notas: r[5]?.trim() || '', nombreFiscal: r[6]?.trim() || '', autoFactura: r[7]?.trim() === '1' }));
+        .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0, email: r[2]?.trim() || '', direccion: r[3]?.trim() || '', taxId: r[4]?.trim() || '', notas: r[5]?.trim() || '', nombreFiscal: r[6]?.trim() || '', autoFactura: r[7]?.trim() === '1', facturarA: r[8]?.trim() === '1' }));
       const providers = (provResp.data.values || []).slice(1)
         .map(r => r[0]?.trim()).filter(Boolean);
       return res.json({ vendors, providers });
@@ -98,7 +98,7 @@ module.exports = async (req, res) => {
 
     // ── ACTUALIZAR VENDEDOR ────────────────────────────────────
     if (req.method === 'PUT' && req.body.mode === 'vendedor') {
-      const { nombre, commission, email, direccion, taxId, notas, nombreFiscal, autoFactura } = req.body;
+      const { nombre, commission, email, direccion, taxId, notas, nombreFiscal, autoFactura, facturarA } = req.body;
       if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
       const vendResp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:A' });
       const vendRows = vendResp.data.values || [];
@@ -108,22 +108,22 @@ module.exports = async (req, res) => {
       const rowNum = startIdx + rowIdx + 1;
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `Vendedores!A${rowNum}:H${rowNum}`,
+        range: `Vendedores!A${rowNum}:I${rowNum}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[nombre, commission ?? '', email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '']] },
+        requestBody: { values: [[nombre, commission ?? '', email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '', facturarA ? '1' : '']] },
       });
       return res.json({ ok: true });
     }
 
     // ── CREAR NUEVO VENDEDOR ────────────────────────────────────
     if (req.method === 'POST' && req.body.mode === 'vendedor') {
-      const { nombre, commission, email, direccion, taxId, notas, nombreFiscal, autoFactura } = req.body;
+      const { nombre, commission, email, direccion, taxId, notas, nombreFiscal, autoFactura, facturarA } = req.body;
       if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Vendedores!A:H',
+        range: 'Vendedores!A:I',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[nombre, commission ?? '', email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '']] },
+        requestBody: { values: [[nombre, commission ?? '', email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '', facturarA ? '1' : '']] },
       });
       return res.json({ ok: true });
     }

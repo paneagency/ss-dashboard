@@ -1332,6 +1332,13 @@
               <input type="checkbox" id="rep-auto-factura" style="display:none">
               <span style="font-size:16px">🧾</span>
             </div>
+            <div style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none;margin-top:8px" onclick="toggleDirectToggle('rep-facturar')">
+              <div id="rep-facturar-toggle" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
+                <div id="rep-facturar-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+              </div>
+              <input type="checkbox" id="rep-facturar" style="display:none">
+              <span style="font-size:14px;color:var(--muted)">📄 Facturar a mi nombre</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1368,6 +1375,13 @@
                 <div class="detalle-field-label" style="font-size:10px">Comisión %</div>
                 <input id="vend-commission" class="dd-input" type="number" step="0.01" placeholder="0" style="width:80px">
               </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none;margin-top:8px" onclick="toggleDirectToggle('vend-facturar')">
+              <div id="vend-facturar-toggle" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
+                <div id="vend-facturar-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+              </div>
+              <input type="checkbox" id="vend-facturar" style="display:none">
+              <span style="font-size:14px;color:var(--muted)">📄 Facturar a mi nombre</span>
             </div>
           </div>
         </div>
@@ -3169,6 +3183,27 @@ function toggleGenericAF(prefix) {
   thumb.style.left = cb.checked ? '18px' : '2px';
 }
 
+// Generic toggle for direct-id pattern: ids are ${id}-toggle, ${id}-thumb, ${id} (checkbox)
+function toggleDirectToggle(id) {
+  const cb = document.getElementById(id);
+  const toggle = document.getElementById(`${id}-toggle`);
+  const thumb = document.getElementById(`${id}-thumb`);
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  toggle.style.background = cb.checked ? 'var(--indigo)' : 'var(--border2)';
+  thumb.style.left = cb.checked ? '18px' : '2px';
+}
+
+function setDirectToggle(val, id) {
+  const cb = document.getElementById(id);
+  const toggle = document.getElementById(`${id}-toggle`);
+  const thumb = document.getElementById(`${id}-thumb`);
+  if (!cb) return;
+  cb.checked = !!val;
+  toggle.style.background = !!val ? 'var(--indigo)' : 'var(--border2)';
+  thumb.style.left = !!val ? '18px' : '2px';
+}
+
 function toggleAutoFactura() { toggleGenericAF('dd'); }
 
 function setAutoFacturaToggle(val, prefix) {
@@ -3254,6 +3289,7 @@ function openRepModal(row) {
   document.getElementById('rep-direccion').value = rep?.direccion || '';
   document.getElementById('rep-notas').value = rep?.notas || '';
   setAutoFacturaToggle(rep?.autoFactura, 'rep');
+  setDirectToggle(rep?.facturarA, 'rep-facturar');
   const footer = document.getElementById('rep-footer');
   if (isNew) {
     footer.innerHTML = `<button class="btn btn-ghost" onclick="closeRepModal()">Cancelar</button><button class="btn btn-primary" onclick="saveRep()">Crear</button>`;
@@ -3270,7 +3306,7 @@ async function saveRep() {
   if (!nombre) { showToast('El nombre es requerido', true); return; }
   const rowVal = document.getElementById('rep-row').value;
   const row = rowVal ? parseInt(rowVal) : null;
-  const payload = { mode: 'representante', nombre, nombreFiscal: document.getElementById('rep-nombre-fiscal').value.trim(), email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), autoFactura: document.getElementById('rep-auto-factura').checked ? '1' : '', ...(row ? { row } : {}) };
+  const payload = { mode: 'representante', nombre, nombreFiscal: document.getElementById('rep-nombre-fiscal').value.trim(), email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), autoFactura: document.getElementById('rep-auto-factura').checked ? '1' : '', facturarA: document.getElementById('rep-facturar').checked ? '1' : '', ...(row ? { row } : {}) };
   try {
     const r = await fetch('/api/campaign', { method: row ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const d = await r.json();
@@ -3345,6 +3381,7 @@ function openVendedorModal(nombre) {
   document.getElementById('vend-email').value = v.email || '';
   document.getElementById('vend-taxid').value = v.taxId || '';
   setAutoFacturaToggle(v.autoFactura, 'vend');
+  setDirectToggle(v.facturarA, 'vend-facturar');
   document.getElementById('vend-direccion').value = v.direccion || '';
   document.getElementById('vend-notas').value = v.notas || '';
   document.getElementById('modal-vendedor').style.display = 'flex';
@@ -3368,6 +3405,7 @@ async function saveVendedor() {
     direccion: document.getElementById('vend-direccion').value.trim(),
     notas: document.getElementById('vend-notas').value.trim(),
     autoFactura: document.getElementById('vend-auto-factura').checked ? '1' : '',
+    facturarA: document.getElementById('vend-facturar').checked ? '1' : '',
   };
   try {
     const r = await fetch('/api/sheets', {
@@ -4526,6 +4564,7 @@ async function submitSale(e) {
       const repEl = document.getElementById('f-representante');
       const repName = repEl ? repEl.value.trim() : '';
       const clienteData = window._clientesMap?.[artista.toLowerCase().trim()] || {};
+      const facData = resolverDatosFacturacion(sheetArtista, repName, venta);
       (async () => {
         try {
           const ir = await fetch('/api/invoice', {
@@ -4537,10 +4576,7 @@ async function submitSale(e) {
               representante: repName,
               precio,
               metodo,
-              clienteNombreFiscal: clienteData.nombreFiscal || '',
-              clienteDireccion: clienteData.direccion || '',
-              clientePais: clienteData.pais || '',
-              clienteTaxId: clienteData.taxId || '',
+              ...facData,
             }),
           });
           const id = await ir.json();
@@ -4723,9 +4759,8 @@ async function submitSinPago(e) {
 
     // Generate pending invoice for sinPago campaign
     const invoiceArtista = esGrupal ? 'Varios' : artista;
-    const artKey = invoiceArtista.toLowerCase().trim();
-    const clienteData = window._clientesMap?.[artKey] || {};
     if (precio) {
+      const facData = resolverDatosFacturacion(invoiceArtista, representanteVal, venta);
       try {
         const ir = await fetch('/api/invoice', {
           method: 'POST',
@@ -4737,10 +4772,7 @@ async function submitSinPago(e) {
             precio,
             metodo,
             pending: true,
-            clienteNombreFiscal: clienteData.nombreFiscal || '',
-            clienteDireccion: clienteData.direccion || '',
-            clientePais: clienteData.pais || '',
-            clienteTaxId: clienteData.taxId || '',
+            ...facData,
           }),
         });
         const id = await ir.json();
@@ -5748,6 +5780,19 @@ async function sendInvoiceDirect(idx) {
     showToast('Error al enviar: ' + e.message, 'error');
     if (btn) { btn.disabled = false; btn.textContent = '📤 Enviar'; }
   }
+}
+
+function resolverDatosFacturacion(artista, representanteNombre, vendedorNombre) {
+  const rep = representanteNombre ? (window._representantesMap?.[representanteNombre] || {}) : {};
+  const vend = vendedorNombre ? (window._vendorsMap?.[vendedorNombre] || {}) : {};
+  const cliente = (window._clientesMap?.[(artista || '').toLowerCase().trim()] || {});
+  if (rep.facturarA) {
+    return { clienteNombreFiscal: rep.nombreFiscal || rep.nombre || '', clienteDireccion: rep.direccion || '', clientePais: '', clienteTaxId: rep.taxId || '' };
+  }
+  if (vend.facturarA) {
+    return { clienteNombreFiscal: vend.nombreFiscal || vend.name || '', clienteDireccion: vend.direccion || '', clientePais: '', clienteTaxId: vend.taxId || '' };
+  }
+  return { clienteNombreFiscal: cliente.nombreFiscal || '', clienteDireccion: cliente.direccion || '', clientePais: cliente.pais || '', clienteTaxId: cliente.taxId || '' };
 }
 
 function openRegenModal(invoiceNum) {
