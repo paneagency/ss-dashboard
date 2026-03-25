@@ -4725,29 +4725,37 @@ async function submitSinPago(e) {
     const invoiceArtista = esGrupal ? 'Varios' : artista;
     const artKey = invoiceArtista.toLowerCase().trim();
     const clienteData = window._clientesMap?.[artKey] || {};
-    try {
-      const ir = await fetch('/api/invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          artista: invoiceArtista,
-          vendedor: venta,
-          representante: representanteVal,
-          precio,
-          metodo,
-          pending: true,
-          clienteNombreFiscal: clienteData.nombreFiscal || '',
-          clienteDireccion: clienteData.direccion || '',
-          clientePais: clienteData.pais || '',
-          clienteTaxId: clienteData.taxId || '',
-        }),
-      });
-      const id = await ir.json();
-      if (id.ok) {
-        const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
-        showToast(`📄 ${id.invoiceNum} pendiente generada${pdfLink}`, 'info', 7000);
+    if (precio) {
+      try {
+        const ir = await fetch('/api/invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            artista: invoiceArtista,
+            vendedor: venta,
+            representante: representanteVal,
+            precio,
+            metodo,
+            pending: true,
+            clienteNombreFiscal: clienteData.nombreFiscal || '',
+            clienteDireccion: clienteData.direccion || '',
+            clientePais: clienteData.pais || '',
+            clienteTaxId: clienteData.taxId || '',
+          }),
+        });
+        const id = await ir.json();
+        if (id.ok) {
+          const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
+          showToast(`📄 ${id.invoiceNum} pendiente generada${pdfLink}`, 'info', 7000);
+        } else {
+          console.warn('Pending invoice error:', id.error);
+          showToast(`⚠️ Factura pendiente: ${id.error || 'error desconocido'}`, 'error', 5000);
+        }
+      } catch(e) {
+        console.warn('Pending invoice error (non-fatal):', e);
+        showToast(`⚠️ No se pudo generar la factura pendiente: ${e.message}`, 'error', 5000);
       }
-    } catch(e) { console.warn('Pending invoice error (non-fatal):', e); }
+    }
 
     const msg = artistasList.length > 1
       ? `${artistasList.length} campañas registradas (sin pago)`
