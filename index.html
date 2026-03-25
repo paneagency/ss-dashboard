@@ -4515,6 +4515,7 @@ async function submitSale(e) {
   btn.textContent = 'Guardando...';
 
   try {
+    // ── 1. Leer y validar todos los inputs (SÍNCRONO) ──────────
     const venta    = document.getElementById('f-venta').value.trim();
     const metodo   = document.getElementById('f-metodo').value.trim();
     const comision = document.getElementById('f-comision').value.trim();
@@ -4523,93 +4524,25 @@ async function submitSale(e) {
     const neto     = document.getElementById('f-neto').value.trim();
     const margen   = document.getElementById('f-margen').value.trim();
     const final    = document.getElementById('f-final').value.trim();
-    const fechaRaw = document.getElementById('f-fecha').value;   // YYYY-MM-DD
+    const fechaRaw = document.getElementById('f-fecha').value;
     const genero   = document.getElementById('f-genero').value.trim() || 'Sin género';
     const pauta    = document.getElementById('f-pauta').value.trim();
     const _pautaLinkMatch = pauta.match(/https?:\/\/open\.spotify\.com\/(?:intl-[^/\s]+\/)?track\/[A-Za-z0-9]+(?:\?[^\s]*)?/);
     const link     = _pautaLinkMatch ? _pautaLinkMatch[0] : '';
-
-    const artista = document.getElementById('f-artista').value.trim();
+    const artista  = document.getElementById('f-artista').value.trim();
 
     if (!artista) { showToast('Ingresá el artista', 'error'); return; }
     if (!fechaRaw) { showToast('Ingresá la fecha', 'error'); return; }
 
-    const [fy, fm, fd] = fechaRaw.split('-');
-    // El pago siempre se registra con la fecha de hoy (independientemente de la fecha de inicio de campaña)
     const todayPago = new Date();
-    const fechaFmt = `${String(todayPago.getDate()).padStart(2,'0')}/${String(todayPago.getMonth()+1).padStart(2,'0')}/${todayPago.getFullYear()}`;
-    const esGrupal = _isMultiArtista && artista === 'Varios' && parseArtistasFromPauta(pauta).length > 1;
+    const fechaFmt  = `${String(todayPago.getDate()).padStart(2,'0')}/${String(todayPago.getMonth()+1).padStart(2,'0')}/${todayPago.getFullYear()}`;
+    const esGrupal  = _isMultiArtista && artista === 'Varios' && parseArtistasFromPauta(pauta).length > 1;
     const sheetArtista = artista;
-
-    // Leer duracion ANTES de POST para detectar regalo
     const duracionVal  = document.getElementById('f-duracion').value;
     const esRegalo     = duracionVal === 'regalo';
     const duracion     = esRegalo ? 7 : (parseInt(duracionVal) || 30);
 
-    let saleSheetRow = null;
-    if (!esRegalo) {
-      const row = [sheetArtista, venta, metodo, comision, precio, gasto, neto, margen, final, fechaFmt, genero];
-      const resp = await fetch('/api/sheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: row })
-      });
-      const result = await resp.json();
-      if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
-      saleSheetRow = result.row;
-    }
-
-    // Auto-generate invoice for Wise/PayPal sales
-    if (!esRegalo && ['Wise', 'PayPal'].includes(metodo)) {
-      const repEl = document.getElementById('f-representante');
-      const repName = repEl ? repEl.value.trim() : '';
-      const clienteData = window._clientesMap?.[artista.toLowerCase().trim()] || {};
-      const facData = resolverDatosFacturacion(sheetArtista, repName, venta);
-      (async () => {
-        try {
-          const ir = await fetch('/api/invoice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              artista: sheetArtista,
-              vendedor: venta,
-              representante: repName,
-              precio,
-              metodo,
-              ...facData,
-            }),
-          });
-          const id = await ir.json();
-          if (id.ok) {
-            window._lastInvoice = { ...id, artista: sheetArtista, vendedor: venta, representante: repName, monto: precio };
-            // Auto-envío: prioridad artista → representante → vendedor
-            const repData = repName ? (window._representantesMap?.[repName] || {}) : {};
-            const vendData = (window._vendorsMap || {})[venta] || {};
-            let autoEmails = [];
-            if (clienteData.autoFactura && clienteData.email) {
-              autoEmails = clienteData.email.split(',').map(e => e.trim()).filter(Boolean);
-            } else if (repData.autoFactura && repData.email) {
-              autoEmails = repData.email.split(',').map(e => e.trim()).filter(Boolean);
-            } else if (vendData.autoFactura && vendData.email) {
-              autoEmails = vendData.email.split(',').map(e => e.trim()).filter(Boolean);
-            }
-            if (autoEmails.length) {
-              fetch('/api/invoice', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode: 'send', ...id, precio: id.precio, issueDate: id.issueDate, to: autoEmails }),
-              }).catch(() => {});
-              showToast(`📄 ${id.invoiceNum} generada y enviada a ${autoEmails.join(', ')}`, 'success', 6000);
-            } else {
-              const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
-              showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar</a>${pdfLink}`, 'success', 8000);
-            }
-          }
-        } catch(e) { console.warn('Invoice generation failed (non-fatal):', e); }
-      })();
-    }
-
-    // Leer estos valores ANTES de closeModal() porque resetea el form
+    // Capturar estos ANTES de closeModal()
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
     const representanteVal = document.getElementById('f-representante').value.trim();
     const notasVal         = document.getElementById('f-notas').value.trim();
@@ -4619,67 +4552,25 @@ async function submitSale(e) {
       amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
       provider: r.querySelector('.gasto-provider').value.trim(),
     })).filter(r => r.amount > 0);
-
-    // Artistas para campañas (multi o single) — capturar datos Spotify ANTES de closeModal
     const artistasBase = esGrupal ? parseArtistasFromPauta(pauta) : [{ nombre: artista, link }];
     const artistasList = artistasBase.map(a => ({
       ...a,
       spotifyArtistId: esGrupal ? (_processedTrackUrls.get(a.link)?.artistSpotifyId || null) : spotifyArtistId,
       spotifyImageUrl: esGrupal ? (_processedTrackUrls.get(a.link)?.image  || null) : spotifyImageUrl,
     }));
+    // campaignId generado acá para incluirlo en la venta desde el inicio
+    const campaignId = 'CP_' + Date.now();
 
-    showToast(esRegalo ? '🎁 Regalo registrado' : 'Venta Registrada', 'success');
-    closeModal(true);
-
-    // Crear campañas (primera crea evento calendar, resto lo comparten)
-    (async () => {
-      try {
-        let sharedMasterId = '', sharedVendorId = '';
-        for (let i = 0; i < artistasList.length; i++) {
-          const a = artistasList[i];
-          const campBody = {
-            artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
-            fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
-            link: a.link || '', gastosRows, representante: representanteVal, notas: notasVal,
-            spotifyArtistId: a.spotifyArtistId,
-            spotifyImageUrl: a.spotifyImageUrl,
-            ...(esRegalo ? { regalo: true } : {}),
-            ...(i === 0 && esGrupal ? { grupal: true } : {}),
-            ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
-          };
-          const cr = await fetch('/api/campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campBody) });
-          const cd = await cr.json();
-          if (i === 0) {
-            sharedMasterId = cd.masterEventId || '';
-            sharedVendorId = cd.vendorEventId || '';
-            // Vincular venta a campaña en col L
-            if (saleSheetRow && cd.campaignId) {
-              fetch('/api/sheets', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleRow: saleSheetRow, campaignId: cd.campaignId }) }).catch(() => {});
-            }
-          }
-        }
-        if (artistasList.length > 1) {
-          _campaniasLoaded = false; _campaniasLoading = false; _historial = null; loadCampanias().catch(() => {});
-        }
-      } catch (err) { console.warn('Campaign registration failed (non-fatal):', err); }
-    })();
-
+    // ── 2. Actualización optimista: UI responde al instante ────
     if (!esRegalo) {
       const fecha = new Date(todayPago.getFullYear(), todayPago.getMonth(), todayPago.getDate());
       const newRow = {
-        artista:  sheetArtista || 'Sin artista',
-        venta:    venta   || 'Sin vendedor',
-        metodo:   metodo  || 'Sin método',
-        genero:   genero  || 'Sin género',
-        comision: parseFloat(comision) || 0,
-        precio:   parseFloat(precio)   || 0,
-        gasto:    parseFloat(gasto)    || 0,
-        neto:     parseFloat(neto)     || 0,
-        margen:   parseFloat(margen)   || 0,
-        final:    parseFloat(final)    || 0,
-        fecha,
-        monthKey: monthKey(fecha),
-        _addedAt: Date.now()
+        artista: sheetArtista || 'Sin artista', venta: venta || 'Sin vendedor',
+        metodo: metodo || 'Sin método', genero: genero || 'Sin género',
+        comision: parseFloat(comision)||0, precio: parseFloat(precio)||0,
+        gasto: parseFloat(gasto)||0, neto: parseFloat(neto)||0,
+        margen: parseFloat(margen)||0, final: parseFloat(final)||0,
+        fecha, monthKey: monthKey(fecha), _addedAt: Date.now(),
       };
       allData.push(newRow);
       window._localSales = window._localSales || [];
@@ -4687,6 +4578,79 @@ async function submitSale(e) {
       document.getElementById('badge-text').textContent = `${allData.length} registros`;
       applyFilters();
     }
+    showToast(esRegalo ? '🎁 Regalo registrado' : 'Venta Registrada', 'success');
+    closeModal(true);
+
+    // ── 3. API calls en segundo plano (no bloquean la UI) ──────
+    (async () => {
+      try {
+        // Guardar venta en sheet (incluye campaignId desde el inicio)
+        if (!esRegalo) {
+          const row = [sheetArtista, venta, metodo, comision, precio, gasto, neto, margen, final, fechaFmt, genero];
+          const resp = await fetch('/api/sheets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: row, campaignId }),
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            showToast(`⚠️ Error guardando venta: ${err.error || resp.status}`, 'error', 6000);
+            return;
+          }
+        }
+
+        // Crear campañas y eventos de calendario
+        let sharedMasterId = '', sharedVendorId = '';
+        for (let i = 0; i < artistasList.length; i++) {
+          const a = artistasList[i];
+          const campBody = {
+            artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
+            fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
+            link: a.link || '', gastosRows, representante: representanteVal, notas: notasVal,
+            spotifyArtistId: a.spotifyArtistId, spotifyImageUrl: a.spotifyImageUrl,
+            ...(esRegalo ? { regalo: true } : {}),
+            ...(i === 0 && esGrupal ? { grupal: true } : {}),
+            ...(i > 0 ? { skipCalendar: true, masterEventId: sharedMasterId, vendorEventId: sharedVendorId } : {}),
+          };
+          const cr = await fetch('/api/campaign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(campBody) });
+          const cd = await cr.json();
+          if (i === 0) { sharedMasterId = cd.masterEventId || ''; sharedVendorId = cd.vendorEventId || ''; }
+        }
+        if (artistasList.length > 1) {
+          _campaniasLoaded = false; _campaniasLoading = false; _historial = null; loadCampanias().catch(() => {});
+        }
+
+        // Generar factura para Wise/PayPal
+        if (!esRegalo && ['Wise', 'PayPal'].includes(metodo)) {
+          const clienteData = window._clientesMap?.[artista.toLowerCase().trim()] || {};
+          const facData = resolverDatosFacturacion(sheetArtista, representanteVal, venta);
+          try {
+            const ir = await fetch('/api/invoice', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ artista: sheetArtista, vendedor: venta, representante: representanteVal, precio, metodo, ...facData }),
+            });
+            const id = await ir.json();
+            if (id.ok) {
+              window._lastInvoice = { ...id, artista: sheetArtista, vendedor: venta, representante: representanteVal, monto: precio };
+              const repData = representanteVal ? (window._representantesMap?.[representanteVal] || {}) : {};
+              const vendData = (window._vendorsMap || {})[venta] || {};
+              let autoEmails = [];
+              if (clienteData.autoFactura && clienteData.email) autoEmails = clienteData.email.split(',').map(e => e.trim()).filter(Boolean);
+              else if (repData.autoFactura && repData.email) autoEmails = repData.email.split(',').map(e => e.trim()).filter(Boolean);
+              else if (vendData.autoFactura && vendData.email) autoEmails = vendData.email.split(',').map(e => e.trim()).filter(Boolean);
+              if (autoEmails.length) {
+                fetch('/api/invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'send', ...id, precio: id.precio, issueDate: id.issueDate, to: autoEmails }) }).catch(() => {});
+                showToast(`📄 ${id.invoiceNum} generada y enviada a ${autoEmails.join(', ')}`, 'success', 6000);
+              } else {
+                const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
+                showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar</a>${pdfLink}`, 'success', 8000);
+              }
+            }
+          } catch(e) { console.warn('Invoice generation failed (non-fatal):', e); }
+        }
+      } catch(err) { console.warn('Background save error (non-fatal):', err); }
+    })();
 
   } catch(err) {
     showToast('Error: ' + err.message, 'error');
