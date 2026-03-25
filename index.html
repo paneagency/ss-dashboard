@@ -3169,6 +3169,7 @@ async function saveClientDetail() {
     if (!d.ok) throw new Error(d.error || 'Error al guardar');
     showToast(isNew ? 'Cliente creado' : 'Cliente actualizado');
     closeClientDetail();
+    if (payload.representante) ensureRepresentante(payload.representante);
     await refreshDirectorio();
   } catch(e) { showToast(e.message, true); }
 }
@@ -3235,6 +3236,23 @@ async function loadRepresentantes() {
     window._representantesMap = {};
     _representantes.forEach(r => { window._representantesMap[r.nombre] = r; });
   } catch(e) { _representantes = []; }
+}
+
+// Auto-crea un representante si el nombre no existe aún en el directorio
+async function ensureRepresentante(nombre) {
+  if (!nombre || window._representantesMap?.[nombre]) return;
+  try {
+    const r = await fetch('/api/campaign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'representante', nombre }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      await loadRepresentantes();
+      if (document.getElementById('clientes-view-representantes')?.style.display !== 'none') renderRepresentantes();
+    }
+  } catch(e) { /* no-op */ }
 }
 
 function renderRepresentantes() {
@@ -3306,7 +3324,8 @@ async function saveRep() {
   if (!nombre) { showToast('El nombre es requerido', true); return; }
   const rowVal = document.getElementById('rep-row').value;
   const row = rowVal ? parseInt(rowVal) : null;
-  const payload = { mode: 'representante', nombre, nombreFiscal: document.getElementById('rep-nombre-fiscal').value.trim(), email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), autoFactura: document.getElementById('rep-auto-factura').checked ? '1' : '', facturarA: document.getElementById('rep-facturar').checked ? '1' : '', ...(row ? { row } : {}) };
+  const oldNombre = row ? (_representantes.find(r => r.row === row)?.nombre || '') : '';
+  const payload = { mode: 'representante', nombre, nombreFiscal: document.getElementById('rep-nombre-fiscal').value.trim(), email: document.getElementById('rep-email').value.trim(), taxId: document.getElementById('rep-taxid').value.trim(), direccion: document.getElementById('rep-direccion').value.trim(), notas: document.getElementById('rep-notas').value.trim(), autoFactura: document.getElementById('rep-auto-factura').checked ? '1' : '', facturarA: document.getElementById('rep-facturar').checked ? '1' : '', ...(row ? { row, oldNombre } : {}) };
   try {
     const r = await fetch('/api/campaign', { method: row ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const d = await r.json();
@@ -3315,6 +3334,14 @@ async function saveRep() {
     closeRepModal();
     await loadRepresentantes();
     renderRepresentantes();
+    // Si hubo renombre, sincronizar datos en memoria
+    if (row && oldNombre && oldNombre !== nombre) {
+      const old = oldNombre.trim().toLowerCase();
+      (_campanias || []).forEach(c => { if ((c.representante || '').trim().toLowerCase() === old) c.representante = nombre; });
+      (window._clientesArr || []).forEach(c => { if ((c.representante || '').trim().toLowerCase() === old) c.representante = nombre; });
+      Object.values(window._clientesMap || {}).forEach(c => { if ((c.representante || '').trim().toLowerCase() === old) c.representante = nombre; });
+      refreshDirectorio().catch(() => {});
+    }
   } catch(e) { showToast(e.message, true); }
 }
 
@@ -4619,6 +4646,7 @@ async function submitSale(e) {
         if (artistasList.length > 1) {
           _campaniasLoaded = false; _campaniasLoading = false; _historial = null; loadCampanias().catch(() => {});
         }
+        if (representanteVal) ensureRepresentante(representanteVal);
 
         // Generar factura para Wise/PayPal
         if (!esRegalo && ['Wise', 'PayPal'].includes(metodo)) {
@@ -4720,6 +4748,7 @@ async function submitSinPago(e) {
       if (!cr.ok) throw new Error(cd.error || `HTTP ${cr.status}`);
       if (i === 0) { sharedMasterId = cd.masterEventId || ''; sharedVendorId = cd.vendorEventId || ''; }
     }
+    if (representanteVal) ensureRepresentante(representanteVal);
 
     // Generate pending invoice for sinPago campaign
     const invoiceArtista = esGrupal ? 'Varios' : artista;

@@ -717,7 +717,7 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'PUT' && req.body.mode === 'representante') {
-      const { row, nombre, email, direccion, taxId, notas, nombreFiscal, autoFactura, facturarA } = req.body;
+      const { row, nombre, email, direccion, taxId, notas, nombreFiscal, autoFactura, facturarA, oldNombre } = req.body;
       if (!row || !nombre) return res.status(400).json({ error: 'row y nombre requeridos' });
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
@@ -725,6 +725,28 @@ module.exports = async (req, res) => {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [[nombre, email || '', direccion || '', taxId || '', notas || '', nombreFiscal || '', autoFactura ? '1' : '', facturarA ? '1' : '']] },
       });
+      // Cascade rename to Clientes and CampañasCalendario
+      if (oldNombre && oldNombre.trim().toLowerCase() !== nombre.trim().toLowerCase()) {
+        const old = oldNombre.trim().toLowerCase();
+        try {
+          const [cliResp, campResp] = await Promise.all([
+            sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${CLIENTES_SHEET}!I:I` }),
+            sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${CAMPANAS_SHEET}!R:R` }),
+          ]);
+          const updates = [];
+          (cliResp.data.values || []).slice(1).forEach((r, idx) => {
+            if ((r[0] || '').trim().toLowerCase() === old)
+              updates.push({ range: `${CLIENTES_SHEET}!I${idx + 2}`, values: [[nombre]] });
+          });
+          (campResp.data.values || []).slice(1).forEach((r, idx) => {
+            if ((r[0] || '').trim().toLowerCase() === old)
+              updates.push({ range: `${CAMPANAS_SHEET}!R${idx + 2}`, values: [[nombre]] });
+          });
+          if (updates.length) {
+            await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SPREADSHEET_ID, requestBody: { valueInputOption: 'USER_ENTERED', data: updates } });
+          }
+        } catch(e) { /* cascade non-fatal */ }
+      }
       return res.json({ ok: true });
     }
 
