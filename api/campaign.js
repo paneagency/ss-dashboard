@@ -744,7 +744,7 @@ module.exports = async (req, res) => {
         spreadsheetId: SPREADSHEET_ID,
         range: `${CLIENTES_SHEET}!A${row}:T${row}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '', tipo || existingRow[15] || '', direccion ?? existingRow[16] ?? '', taxId ?? existingRow[17] ?? '', autoFactura ? '1' : (existingRow[18] ?? ''), nFiscalPut ?? existingRow[19] ?? '']] },
+        requestBody: { values: [[id, artista, genero || '', pais || '', safeTel, email || '', spotify || '', fechaPrimeraCompra, representante || '', nombre || '', apodo || '', vend || '', metodoPago || '', estado || '', imagen ?? existingRow[14] ?? '', tipo || existingRow[15] || '', direccion ?? existingRow[16] ?? '', taxId ?? existingRow[17] ?? '', autoFactura === '1' ? '1' : '', nFiscalPut ?? existingRow[19] ?? '']] },
       });
       return res.json({ ok: true });
     }
