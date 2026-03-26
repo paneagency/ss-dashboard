@@ -6290,6 +6290,7 @@ async function renovarRapido(idx) {
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
 
     // Registrar nueva venta automáticamente
+    const artistaRenov = detectEsVarios(camp) ? 'Varios' : camp.artista;
     const today = localDateStr(new Date());
     const [fy, fm, fd] = today.split('-');
     const comisionPct = COMISIONES[(camp.metodo || '').toLowerCase()] ?? 0;
@@ -6300,12 +6301,12 @@ async function renovarRapido(idx) {
     const saleResp = await fetch('/api/sheets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [camp.artista, camp.vendedor, camp.metodo || '', comisionPct, precioN, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''], campaignId: data.campaignId || null }),
+      body: JSON.stringify({ values: [artistaRenov, camp.vendedor, camp.metodo || '', comisionPct, precioN, gastoN, neto.toFixed(2), margen, '', `${fd}/${fm}/${fy}`, camp.genero || ''], campaignId: data.campaignId || null }),
     });
     const saleData = await saleResp.json();
     if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
 
-    showToast(`✅ ${camp.artista} renovada hasta ${data.nuevaFechaVenc}`, 'success');
+    showToast(`✅ ${artistaRenov} renovada hasta ${data.nuevaFechaVenc}`, 'success');
     await loadCampanias();
   } catch(e) {
     showToast('Error: ' + e.message, 'error');

@@ -239,7 +239,7 @@ function buildEvent(artista, fechaVencimiento, vendedor, duracion, precio, metod
     gastosRows.forEach(r => parts.push(`(${r.amount})${r.provider ? ' ' + r.provider : ''}`));
   }
   const repTag = representante ? `[${representante}]` : '';
-  const displayArtist = artista;
+  const displayArtist = grupal ? 'Varios' : artista;
   const giftPrefix = regalo ? '🎁 ' : '';
   return {
     summary:     `${giftPrefix}(${vendedor})${repTag} - ${displayArtist}`,
@@ -1055,15 +1055,15 @@ module.exports = async (req, res) => {
       const nuevaFechaVenc = fechaVencBody || addDays(baseDate, duracion);
 
       // Detectar si es campaña grupal: buscar otros rows activos con el mismo masterEventId
-      let siblingRows = []; // [{rowNum}]
+      let siblingRows = []; // [{rowNum, artista, vendedor, vendorEventId, estado}]
       if (masterEventId) {
         const allResp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!F:H`, // F=EVENT_ID_MASTER, H=ESTADO
+          range: `${CAMPANAS_SHEET}!A:H`, // A=artista, B=vendedor, F=masterEventId, G=vendorEventId, H=estado
         });
         const allVals = (allResp.data.values || []).slice(1); // skip header
         siblingRows = allVals
-          .map((r, i) => ({ rowNum: i + 2, masterId: r[0] || '', estado: r[2] || '' }))
+          .map((r, i) => ({ rowNum: i + 2, artista: r[0] || '', vendedor: r[1] || '', masterId: r[5] || '', vendorEventId: r[6] || '', estado: r[7] || '' }))
           .filter(r => r.masterId === masterEventId && ['activa', 'pendiente_pago', 'pendiente_inicio', 'regalo', 'prueba'].includes(r.estado) && r.rowNum !== parseInt(row));
       }
       const esGrupal = siblingRows.length > 0;
@@ -1141,19 +1141,36 @@ module.exports = async (req, res) => {
       } else {
         // Marcar fila vieja como historial ('editada' o 'renovada') y agregar nueva fila activa
         const estadoHistorial = esEdicion ? 'editada' : 'renovada';
-        await sheets.spreadsheets.values.update({
+        const ts2 = new Date().toISOString();
+        // Para campañas grupales: marcar TODAS las filas hermanas como historial también
+        const markData = [
+          { range: `${CAMPANAS_SHEET}!H${row}`, values: [[estadoHistorial]] },
+          { range: `${CAMPANAS_SHEET}!U${row}`, values: [[ts2]] },
+        ];
+        if (esGrupal) {
+          siblingRows.forEach(sib => {
+            markData.push({ range: `${CAMPANAS_SHEET}!H${sib.rowNum}`, values: [[estadoHistorial]] });
+            markData.push({ range: `${CAMPANAS_SHEET}!U${sib.rowNum}`, values: [[ts2]] });
+          });
+        }
+        await sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!H${row}`,
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[estadoHistorial]] },
+          requestBody: { valueInputOption: 'USER_ENTERED', data: markData },
         });
+        // Armar nuevas filas: la del artista clickeado + una por cada sibling (mismo campaignId/masterEventId)
+        const newRows = [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts2, editadoPor || '']];
+        if (esGrupal) {
+          siblingRows.forEach(sib => {
+            newRows.push([sib.artista, sib.vendedor || vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts2, editadoPor || '']);
+          });
+        }
         const appendResp = await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
           range: `${CAMPANAS_SHEET}!A:V`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '']] },
+          requestBody: { values: newRows },
         });
-        // Extraer row number de la respuesta del append
+        // Extraer row number de la respuesta del append (primera fila insertada)
         const updatedRange = appendResp.data?.updates?.updatedRange || '';
         const rowMatch = updatedRange.match(/(\d+)$/);
         if (rowMatch) newCampaignRow = parseInt(rowMatch[1]);
