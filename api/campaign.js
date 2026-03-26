@@ -459,10 +459,21 @@ module.exports = async (req, res) => {
           campaignId: r[19] || '',
         }));
 
-        // extendidas: mismo masterEventId
-        const extendidas = masterEventId
+        // extendidas: mismo masterEventId, dedup por período para campañas grupales
+        const rawExtendidas = masterEventId
           ? rows.filter(c => c.masterEventId === masterEventId && c.estado === 'extendida' && c.artista)
           : [];
+        // Agrupar por período (fechaInicio+fechaVencimiento) → 1 entrada por período lógico
+        const extPeriodMap = new Map();
+        for (const e of rawExtendidas) {
+          const key = `${e.fechaInicio}|${e.fechaVencimiento}`;
+          if (!extPeriodMap.has(key)) {
+            extPeriodMap.set(key, { ...e, siblingRows: [e.row] });
+          } else {
+            extPeriodMap.get(key).siblingRows.push(e.row);
+          }
+        }
+        const extendidas = [...extPeriodMap.values()].sort((a, b) => (a.fechaInicio || '').localeCompare(b.fechaInicio || ''));
 
         // finalizada_sin_cobrar + pendiente_pago (distinto masterEventId): mismo artista O representante, mismo vendedor
         const sinCobrar = rows.filter(c => {
@@ -593,18 +604,35 @@ module.exports = async (req, res) => {
         }
       }
 
+      // Índice de artistas activos/pendientes por masterEventId (para detectar grupales)
+      const artistasByMaster = {};
+      for (const r of allRows) {
+        if (r.masterEventId && r.artista && ['activa','pendiente_pago','extendida','pendiente_inicio'].includes(r.estado)) {
+          if (!artistasByMaster[r.masterEventId]) artistasByMaster[r.masterEventId] = new Set();
+          artistasByMaster[r.masterEventId].add(r.artista);
+        }
+      }
+
       let campanias = allRows
         .filter(c => ['activa', 'pendiente_pago', 'prueba', 'regalo', 'pendiente_inicio'].includes(c.estado) && c.artista)
         .map(c => {
+          // Detectar campaña grupal (Varios): mismo masterEventId tiene más de 1 artista distinto
+          if (c.masterEventId && artistasByMaster[c.masterEventId]?.size > 1) {
+            c._esVarios = true;
+          }
           // Para pendiente_pago: adjuntar datos de períodos extendidos acumulados
           if (c.estado === 'pendiente_pago') {
-            // Misma lógica que pendientes_cobro + cobrar modal:
-            // cada fila extendida = 1 ítem (sin deduplicar por fechas).
-            // byMaster es la fuente única; fallback byArtVend solo si byMaster vacío.
             const byMaster = (c.masterEventId ? extendidasByMaster[c.masterEventId] : null) || [];
-            const extRows  = byMaster.length > 0
+            const rawExtRows = byMaster.length > 0
               ? byMaster
               : ((c.artista && c.vendedor ? extendidasByArtVend[`${c.artista}||${c.vendedor}`] : null) || []);
+            // Dedup por período (fechaInicio+fechaVencimiento) para campañas grupales
+            const periodMap = new Map();
+            for (const e of rawExtRows) {
+              const key = `${e.fechaInicio}|${e.fechaVencimiento}`;
+              if (!periodMap.has(key)) periodMap.set(key, e);
+            }
+            const extRows = [...periodMap.values()];
             if (extRows.length > 0) {
               const sumPrecio = extRows.reduce((s, e) => s + (parseFloat(e.precio) || 0), parseFloat(c.precio) || 0);
               const sumGasto  = extRows.reduce((s, e) => s + (parseFloat(e.gasto)  || 0), parseFloat(c.gasto)  || 0);
@@ -881,7 +909,7 @@ module.exports = async (req, res) => {
 
     // ── PUT: cobrar campaña pendiente ─────────────────────────
     if (req.method === 'PUT' && req.body.mode === 'cobrar') {
-      const { row, masterEventId, vendorEventId, vendedor, extraRows } = req.body;
+      const { row, masterEventId, vendorEventId, vendedor, extraRows, fechaVencimiento } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
       const ts = new Date().toISOString();
@@ -889,6 +917,24 @@ module.exports = async (req, res) => {
         { range: `${CAMPANAS_SHEET}!H${row}`, values: [['activa']] },
         { range: `${CAMPANAS_SHEET}!U${row}`, values: [[ts]] },
       ];
+
+      // Para campañas grupales: marcar filas hermanas del período actual como 'activa'
+      // (mismo masterEventId + misma fechaVencimiento + estado pendiente_pago, distinto row)
+      if (masterEventId && fechaVencimiento) {
+        try {
+          const sibResp = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${CAMPANAS_SHEET}!A:H`,
+          });
+          (sibResp.data.values || []).forEach((r, idx) => {
+            const rRow = idx + 1;
+            if (rRow !== row && (r[5] || '') === masterEventId && r[7] === 'pendiente_pago' && r[3] === fechaVencimiento) {
+              updateData.push({ range: `${CAMPANAS_SHEET}!H${rRow}`, values: [['activa']] });
+              updateData.push({ range: `${CAMPANAS_SHEET}!U${rRow}`, values: [[ts]] });
+            }
+          });
+        } catch(e) { /* non-fatal */ }
+      }
 
       // Marcar extendidas seleccionadas como 'cobrada'
       if (extraRows && extraRows.length) {
