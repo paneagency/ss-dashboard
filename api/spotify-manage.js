@@ -104,7 +104,7 @@ export default async function handler(req, res) {
         const me = await meRes.json();
         if (!meRes.ok) return res.status(meRes.status).json({ error: me.error?.message || `HTTP ${meRes.status}`, scope });
         const hasModify = scope.includes('playlist-modify-public') || scope.includes('playlist-modify-private');
-        return res.json({ ok: true, userId, displayName: me.display_name, email: me.email, scope, hasModify });
+        return res.json({ ok: true, kvUserId: userId, meId: me.id, displayName: me.display_name, email: me.email, scope, hasModify, idsMatch: userId === me.id });
       }
 
       // Get all tracks — uses client credentials (no OAuth needed for public playlists)
@@ -181,7 +181,12 @@ export default async function handler(req, res) {
     // ── CREATE PLAYLIST ─────────────────────────────────────────────
     if (!mode || mode === 'create') {
       if (!name) return res.status(400).json({ error: 'name requerido' });
-      const r = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+      // Use /me to get the current user's ID directly (avoids KV mismatch)
+      const meCheck = await fetch('https://api.spotify.com/v1/me', { headers });
+      const meData = await meCheck.json();
+      const createUserId = meData.id || userId;
+      console.log(`spotify-manage create: kvUserId=${userId} meUserId=${meData.id}`);
+      const r = await fetch(`https://api.spotify.com/v1/users/${createUserId}/playlists`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
