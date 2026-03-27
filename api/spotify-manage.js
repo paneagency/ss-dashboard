@@ -169,10 +169,12 @@ export default async function handler(req, res) {
           body: JSON.stringify({ playlistId }),
         });
         const makeText = await makeRes.text();
+        console.log(`Make raw response (first 500): ${makeText.slice(0,500)}`);
         let full = {};
         try { full = JSON.parse(makeText); } catch(_) {
           return res.status(500).json({ error: `Make response parse error: ${makeText.slice(0,200)}` });
         }
+        console.log(`Make parsed: name=${full.name} tracks.total=${full.tracks?.total} tracks.items.length=${full.tracks?.items?.length} tracks keys=${Object.keys(full.tracks||{}).join(',')}`);
         if (!makeRes.ok || full.error) {
           return res.status(makeRes.status || 500).json({ error: full.error?.message || full.error || `Make HTTP ${makeRes.status}` });
         }
