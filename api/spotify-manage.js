@@ -72,13 +72,64 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // ── LIST OWNERS ──────────────────────────────────────────────────
+  // ── GET ──────────────────────────────────────────────────────────
   if (req.method === 'GET') {
+    const { action, userId: qUserId, playlistId } = req.query;
     try {
-      const { accessToken, userId } = await getAccessToken(req.query.userId || null);
-      const meRes = await fetch('https://api.spotify.com/v1/me', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const { accessToken, userId } = await getAccessToken(qUserId || null);
+
+      // List all playlists (handles pagination)
+      if (action === 'playlists') {
+        let playlists = [];
+        let url = 'https://api.spotify.com/v1/me/playlists?limit=50';
+        while (url) {
+          const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const data = await r.json();
+          if (!r.ok) return res.status(r.status).json({ error: data.error?.message || 'Error fetching playlists' });
+          playlists = playlists.concat(data.items || []);
+          url = data.next || null;
+        }
+        return res.json({ ok: true, userId, playlists: playlists.map(p => ({
+          id: p.id,
+          name: p.name,
+          description: p.description || '',
+          public: p.public,
+          tracks: p.tracks?.total || 0,
+          image: p.images?.[0]?.url || null,
+          url: p.external_urls?.spotify,
+          ownerId: p.owner?.id,
+          ownerName: p.owner?.display_name || p.owner?.id,
+        })) });
+      }
+
+      // Get all tracks of a playlist with 1-indexed positions
+      if (action === 'tracks') {
+        if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
+        let tracks = [];
+        let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,artists,external_urls,album(images)))`;
+        while (url) {
+          const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const data = await r.json();
+          if (!r.ok) return res.status(r.status).json({ error: data.error?.message || `HTTP ${r.status}` });
+          (data.items || []).forEach(item => {
+            if (item.track?.id) {
+              tracks.push({
+                position: tracks.length + 1,
+                id: item.track.id,
+                name: item.track.name,
+                artist: item.track.artists?.[0]?.name || '',
+                image: item.track.album?.images?.[2]?.url || item.track.album?.images?.[0]?.url || null,
+                url: item.track.external_urls?.spotify || '',
+              });
+            }
+          });
+          url = data.next || null;
+        }
+        return res.json({ ok: true, tracks });
+      }
+
+      // Default: whoami
+      const meRes = await fetch('https://api.spotify.com/v1/me', { headers: { Authorization: `Bearer ${accessToken}` } });
       const me = await meRes.json();
       return res.json({ ok: true, userId, displayName: me.display_name, email: me.email });
     } catch(e) {
