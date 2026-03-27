@@ -4752,7 +4752,7 @@ async function submitSinPago(e) {
 
     // Generate pending invoice for sinPago campaign
     const invoiceArtista = esGrupal ? 'Varios' : artista;
-    if (precio) {
+    if (precio && ['Wise', 'PayPal'].includes(metodo)) {
       const facData = resolverDatosFacturacion(invoiceArtista, representanteVal, venta);
       try {
         const ir = await fetch('/api/invoice', {
