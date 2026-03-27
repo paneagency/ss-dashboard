@@ -7716,8 +7716,8 @@ function renderSpotifyPlaylists(playlists) {
         </div>
         <div class="sp-card-actions">
           <button class="sp-btn" onclick="openSpotifyModal(${i})" title="Editar">✏️</button>
-          <button class="sp-btn sp-green" onclick="analyzeSpotifyPlaylist('${p.id}','${p.name.replace(/'/g,'\\'').replace(/"/g,'')}' )" title="Analizar posiciones">📊</button>
-          <button class="sp-btn" onclick="navigator.clipboard.writeText('${p.url}');showToast('Link copiado','success')" title="Copiar link">🔗</button>
+          <button class="sp-btn sp-green" onclick="analyzeSpotifyPlaylist(${i})" title="Analizar posiciones">📊</button>
+          <button class="sp-btn" onclick="spCopyLink(${i})" title="Copiar link">🔗</button>
           <a href="${p.url}" target="_blank" class="sp-btn" title="Abrir en Spotify">↗</a>
         </div>
       </div>
@@ -7810,7 +7810,18 @@ async function saveSpotifyPlaylist() {
 }
 
 // ── Análisis de posiciones ───────────────────────────────────
-async function analyzeSpotifyPlaylist(playlistId, playlistName) {
+function spCopyLink(idx) {
+  const p = (_spPlaylists || [])[idx];
+  if (!p) return;
+  navigator.clipboard.writeText(p.url);
+  showToast('Link copiado', 'success');
+}
+
+async function analyzeSpotifyPlaylist(idx) {
+  const p = (_spPlaylists || [])[idx];
+  if (!p) return;
+  const playlistId = p.id;
+  const playlistName = p.name;
   document.getElementById('sp-analysis-title').textContent = playlistName;
   document.getElementById('sp-analysis-body').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Cargando tracks...</div>';
   document.getElementById('sp-analysis-modal').style.display = 'flex';
