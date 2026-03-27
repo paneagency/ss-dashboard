@@ -107,64 +107,95 @@ export default async function handler(req, res) {
         return res.json({ ok: true, kvUserId: userId, meId: me.id, displayName: me.display_name, email: me.email, scope, hasModify, idsMatch: userId === me.id });
       }
 
-      // Get playlist detail + tracks — uses client credentials (works for public playlists, no OAuth restrictions)
+      // Get playlist detail + tracks
+      // Tries client credentials first; if restricted (403), falls back to Make webhook
       if (action === 'tracks' || action === 'detail') {
         if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
+
+        // ── Try direct Spotify (client credentials) ──
         const ccToken = await getClientCredToken();
         const ccHeaders = { Authorization: `Bearer ${ccToken}` };
+        const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, { headers: ccHeaders });
 
-        // Get playlist metadata (followers, description, image, owner)
-        const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,public,followers(total),tracks(total),images,owner,external_urls`, { headers: ccHeaders });
-        const metaText = await metaRes.text();
-        let meta = {};
-        try { meta = JSON.parse(metaText); } catch(_) {}
-        if (!metaRes.ok) {
-          console.error(`Spotify playlist meta error: status=${metaRes.status} body=${metaText.slice(0,300)}`);
-          return res.status(metaRes.status).json({ error: meta.error?.message || `HTTP ${metaRes.status} — la playlist puede ser privada` });
-        }
-
-        // Get all tracks
-        let tracks = [];
-        let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,artists,external_urls,album(images)))`;
-        while (url) {
-          const r = await fetch(url, { headers: ccHeaders });
-          const rawText = await r.text();
-          let data = {};
-          try { data = JSON.parse(rawText); } catch(_) {}
-          if (!r.ok) {
-            console.error(`Spotify tracks error: status=${r.status} body=${rawText.slice(0,300)}`);
-            return res.status(r.status).json({ error: data.error?.message || `HTTP ${r.status}` });
-          }
-          (data.items || []).forEach(item => {
-            if (item.track?.id) {
-              tracks.push({
+        if (metaRes.ok) {
+          const full = await metaRes.json();
+          let tracks = [];
+          // First page from metadata response
+          (full.tracks?.items || []).forEach(item => {
+            if (item.track?.id) tracks.push({
+              position: tracks.length + 1,
+              id: item.track.id, name: item.track.name,
+              artist: item.track.artists?.[0]?.name || '',
+              image: item.track.album?.images?.[2]?.url || item.track.album?.images?.[0]?.url || null,
+              url: item.track.external_urls?.spotify || '',
+            });
+          });
+          // Paginate remaining tracks
+          let nextUrl = full.tracks?.next || null;
+          while (nextUrl) {
+            const r = await fetch(nextUrl, { headers: ccHeaders });
+            if (!r.ok) break;
+            const d = await r.json();
+            (d.items || []).forEach(item => {
+              if (item.track?.id) tracks.push({
                 position: tracks.length + 1,
-                id: item.track.id,
-                name: item.track.name,
+                id: item.track.id, name: item.track.name,
                 artist: item.track.artists?.[0]?.name || '',
                 image: item.track.album?.images?.[2]?.url || item.track.album?.images?.[0]?.url || null,
                 url: item.track.external_urls?.spotify || '',
               });
-            }
-          });
-          url = data.next || null;
+            });
+            nextUrl = d.next || null;
+          }
+          return res.json({ ok: true, source: 'direct',
+            playlist: {
+              id: full.id, name: full.name, description: full.description || '',
+              public: full.public, followers: full.followers?.total || 0,
+              totalTracks: full.tracks?.total || 0,
+              image: full.images?.[0]?.url || null,
+              url: full.external_urls?.spotify || '',
+              owner: full.owner?.display_name || full.owner?.id || '',
+            }, tracks });
         }
 
-        return res.json({
-          ok: true,
-          playlist: {
-            id: meta.id,
-            name: meta.name,
-            description: meta.description || '',
-            public: meta.public,
-            followers: meta.followers?.total || 0,
-            totalTracks: meta.tracks?.total || 0,
-            image: meta.images?.[0]?.url || null,
-            url: meta.external_urls?.spotify || '',
-            owner: meta.owner?.display_name || meta.owner?.id || '',
-          },
-          tracks,
+        // ── Fallback: Make webhook ──
+        const makeUrl = process.env.MAKE_SPOTIFY_READ_URL;
+        if (!makeUrl) {
+          return res.status(403).json({ error: 'Spotify API restringida. Configurá MAKE_SPOTIFY_READ_URL para habilitar esta función.' });
+        }
+        const makeRes = await fetch(makeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playlistId }),
         });
+        const makeText = await makeRes.text();
+        let full = {};
+        try { full = JSON.parse(makeText); } catch(_) {
+          return res.status(500).json({ error: `Make response parse error: ${makeText.slice(0,200)}` });
+        }
+        if (!makeRes.ok || full.error) {
+          return res.status(makeRes.status || 500).json({ error: full.error?.message || full.error || `Make HTTP ${makeRes.status}` });
+        }
+        // Parse Spotify format from Make response
+        let tracks = [];
+        (full.tracks?.items || []).forEach(item => {
+          if (item.track?.id) tracks.push({
+            position: tracks.length + 1,
+            id: item.track.id, name: item.track.name,
+            artist: item.track.artists?.[0]?.name || '',
+            image: item.track.album?.images?.[2]?.url || item.track.album?.images?.[0]?.url || null,
+            url: item.track.external_urls?.spotify || '',
+          });
+        });
+        return res.json({ ok: true, source: 'make',
+          playlist: {
+            id: full.id, name: full.name, description: full.description || '',
+            public: full.public, followers: full.followers?.total || 0,
+            totalTracks: full.tracks?.total || 0,
+            image: full.images?.[0]?.url || null,
+            url: full.external_urls?.spotify || '',
+            owner: full.owner?.display_name || full.owner?.id || '',
+          }, tracks });
       }
 
       const { accessToken, userId } = await getAccessToken(qUserId || null);
