@@ -119,8 +119,8 @@ export default async function handler(req, res) {
 
         if (metaRes.ok) {
           const full = await metaRes.json();
+          const totalTracks = full.tracks?.total || 0;
           let tracks = [];
-          // First page from metadata response
           (full.tracks?.items || []).forEach(item => {
             if (item.track?.id) tracks.push({
               position: tracks.length + 1,
@@ -130,7 +130,6 @@ export default async function handler(req, res) {
               url: item.track.external_urls?.spotify || '',
             });
           });
-          // Paginate remaining tracks
           let nextUrl = full.tracks?.next || null;
           while (nextUrl) {
             const r = await fetch(nextUrl, { headers: ccHeaders });
@@ -147,15 +146,20 @@ export default async function handler(req, res) {
             });
             nextUrl = d.next || null;
           }
-          return res.json({ ok: true, source: 'direct',
-            playlist: {
-              id: full.id, name: full.name, description: full.description || '',
-              public: full.public, followers: full.followers?.total || 0,
-              totalTracks: full.tracks?.total || 0,
-              image: full.images?.[0]?.url || null,
-              url: full.external_urls?.spotify || '',
-              owner: full.owner?.display_name || full.owner?.id || '',
-            }, tracks });
+          console.log(`Spotify direct: totalTracks=${totalTracks} loaded=${tracks.length}`);
+          // If Spotify returned metadata but 0 tracks (restricted), fall through to Make
+          if (tracks.length > 0 || totalTracks === 0) {
+            return res.json({ ok: true, source: 'direct',
+              playlist: {
+                id: full.id, name: full.name, description: full.description || '',
+                public: full.public, followers: full.followers?.total || 0,
+                totalTracks,
+                image: full.images?.[0]?.url || null,
+                url: full.external_urls?.spotify || '',
+                owner: full.owner?.display_name || full.owner?.id || '',
+              }, tracks });
+          }
+          console.log(`Spotify returned 0 tracks but total=${totalTracks} — falling back to Make`);
         }
 
         // ── Fallback: Make webhook ──
