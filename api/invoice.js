@@ -120,10 +120,6 @@ function generateInvoicePDF(data) {
     let toY = 157;
     const billW = 245;
     doc.fillColor(GRAY).fontSize(9).font('Helvetica');
-    if (clienteNombreFiscal && clienteNombreFiscal !== artista) {
-      doc.text(artista, 300, toY, { width: billW });
-      toY += doc.heightOfString(artista, { width: billW }) + 2;
-    }
     if (clienteDireccion) {
       doc.text(clienteDireccion, 300, toY, { width: billW });
       toY += doc.heightOfString(clienteDireccion, { width: billW }) + 2;
@@ -287,8 +283,8 @@ module.exports = async (req, res) => {
       await transporter.sendMail({
         from: `Pane Agency <${gmailUser}>`,
         to: Array.isArray(to) ? to.join(', ') : to,
-        subject: `Factura ${invoiceNum} - Pane Agency`,
-        html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency LLC</h2><p>Hola,</p><p>Te enviamos tu factura <strong>${invoiceNum}</strong> adjunta a este email.</p>${gcsLine}<hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
+        subject: `Factura ${sendNombreFiscal || artista} - Pane Agency - ${issueDate}`,
+        html: `<div style="font-family:sans-serif;max-width:500px;margin:auto"><h2 style="color:#6366f1">Pane Agency</h2><p>Hola,</p><p>Te enviamos tu factura <strong>${invoiceNum}</strong> adjunta a este email.<br>${sendNombreFiscal || artista} - ${issueDate}</p>${gcsLine}<hr><p style="color:#888;font-size:12px">${AGENCY.address1}, ${AGENCY.address2} · ${AGENCY.email}</p></div>`,
         attachments: [{ filename: `${invoiceNum} - ${artista || 'Factura'}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }],
       });
 
