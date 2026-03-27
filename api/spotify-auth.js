@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id:     clientId,
-      scope:         'playlist-modify-public playlist-modify-private playlist-read-private playlist-read-collaborative user-read-private user-read-email',
+      scope:         'playlist-modify-public playlist-modify-private playlist-read-private playlist-read-collaborative ugc-image-upload user-read-private user-read-email',
       redirect_uri:  redirectUri,
       show_dialog:   'true',
     });
