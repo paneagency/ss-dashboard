@@ -40,6 +40,26 @@ async function kvScan(pattern) {
   return keys;
 }
 
+// Client credentials token (read-only, no OAuth needed) – used for tracks
+let _ccToken = null;
+let _ccExpiry = 0;
+async function getClientCredToken() {
+  if (_ccToken && Date.now() < _ccExpiry) return _ccToken;
+  const clientId     = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials',
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(`Spotify CC token error: ${data.error_description || data.error}`);
+  _ccToken  = data.access_token;
+  _ccExpiry = Date.now() + (data.expires_in - 60) * 1000;
+  return _ccToken;
+}
+
 async function getAccessToken(userId) {
   const clientId     = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
@@ -63,7 +83,7 @@ async function getAccessToken(userId) {
   });
   const data = await r.json();
   if (!r.ok) throw new Error(`Spotify token error: ${data.error_description || data.error}`);
-  return { accessToken: data.access_token, userId: resolvedUserId };
+  return { accessToken: data.access_token, userId: resolvedUserId, scope: data.scope || '' };
 }
 
 export default async function handler(req, res) {
@@ -76,6 +96,44 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const { action, userId: qUserId, playlistId } = req.query;
     try {
+
+      // Check token health — returns userId, displayName, scopes
+      if (action === 'check') {
+        const { accessToken, userId, scope } = await getAccessToken(qUserId || null);
+        const meRes = await fetch('https://api.spotify.com/v1/me', { headers: { Authorization: `Bearer ${accessToken}` } });
+        const me = await meRes.json();
+        if (!meRes.ok) return res.status(meRes.status).json({ error: me.error?.message || `HTTP ${meRes.status}`, scope });
+        const hasModify = scope.includes('playlist-modify-public') || scope.includes('playlist-modify-private');
+        return res.json({ ok: true, userId, displayName: me.display_name, email: me.email, scope, hasModify });
+      }
+
+      // Get all tracks — uses client credentials (no OAuth needed for public playlists)
+      if (action === 'tracks') {
+        if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
+        const ccToken = await getClientCredToken();
+        let tracks = [];
+        let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,artists,external_urls,album(images)))`;
+        while (url) {
+          const r = await fetch(url, { headers: { Authorization: `Bearer ${ccToken}` } });
+          const data = await r.json();
+          if (!r.ok) return res.status(r.status).json({ error: data.error?.message || `HTTP ${r.status}` });
+          (data.items || []).forEach(item => {
+            if (item.track?.id) {
+              tracks.push({
+                position: tracks.length + 1,
+                id: item.track.id,
+                name: item.track.name,
+                artist: item.track.artists?.[0]?.name || '',
+                image: item.track.album?.images?.[2]?.url || item.track.album?.images?.[0]?.url || null,
+                url: item.track.external_urls?.spotify || '',
+              });
+            }
+          });
+          url = data.next || null;
+        }
+        return res.json({ ok: true, tracks });
+      }
+
       const { accessToken, userId } = await getAccessToken(qUserId || null);
 
       // List all playlists (handles pagination)
@@ -102,32 +160,6 @@ export default async function handler(req, res) {
         })) });
       }
 
-      // Get all tracks of a playlist with 1-indexed positions
-      if (action === 'tracks') {
-        if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
-        let tracks = [];
-        let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(id,name,artists,external_urls,album(images)))`;
-        while (url) {
-          const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-          const data = await r.json();
-          if (!r.ok) return res.status(r.status).json({ error: data.error?.message || `HTTP ${r.status}` });
-          (data.items || []).forEach(item => {
-            if (item.track?.id) {
-              tracks.push({
-                position: tracks.length + 1,
-                id: item.track.id,
-                name: item.track.name,
-                artist: item.track.artists?.[0]?.name || '',
-                image: item.track.album?.images?.[2]?.url || item.track.album?.images?.[0]?.url || null,
-                url: item.track.external_urls?.spotify || '',
-              });
-            }
-          });
-          url = data.next || null;
-        }
-        return res.json({ ok: true, tracks });
-      }
-
       // Default: whoami
       const meRes = await fetch('https://api.spotify.com/v1/me', { headers: { Authorization: `Bearer ${accessToken}` } });
       const me = await meRes.json();
@@ -142,7 +174,8 @@ export default async function handler(req, res) {
   try {
     const { mode, userId: reqUserId, playlistId, name, description, public: isPublic, imageUrl, imageBase64 } = req.body;
 
-    const { accessToken, userId } = await getAccessToken(reqUserId || null);
+    const { accessToken, userId, scope } = await getAccessToken(reqUserId || null);
+    console.log(`spotify-manage POST mode=${mode} userId=${userId} scopes=${scope}`);
     const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
 
     // ── CREATE PLAYLIST ─────────────────────────────────────────────
@@ -158,7 +191,10 @@ export default async function handler(req, res) {
         }),
       });
       const data = await r.json();
-      if (!r.ok) return res.status(r.status).json({ error: data.error?.message || JSON.stringify(data) });
+      if (!r.ok) {
+        console.error(`Spotify create 403 details: userId=${userId} scope=${scope} body=${JSON.stringify(data)}`);
+        return res.status(r.status).json({ error: data.error?.message || JSON.stringify(data), scope, userId });
+      }
       return res.json({ ok: true, playlistId: data.id, url: data.external_urls?.spotify, name: data.name });
     }
 
