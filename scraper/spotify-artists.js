@@ -61,21 +61,11 @@ async function readReferenciasTracks(sheets) {
     .filter(r => r.artistId && r.trackId && r.artista);
 }
 
-async function appendStreamResults(sheets, results) {
-  if (!results.length) return;
-  const today = new Date().toISOString().slice(0, 10);
-  const rows = results.map(r => [
-    today,
-    r.artista,
-    r.trackName,
-    r.playlist,
-    r.posicion,
-    r.streams28d ?? '',
-    r.fuenteCompleta ?? '',
-  ]);
+async function appendStreamResults(sheets, rows) {
+  if (!rows.length) return;
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'StreamsPlaylists!A:G',
+    range: 'StreamsPlaylists!A:H',
     valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
     resource: { values: rows },
@@ -160,10 +150,10 @@ async function login(page) {
   const pwVisible = await passwordInput.isVisible({ timeout: 8000 }).catch(() => false);
   if (!pwVisible) {
     await screenshot(page, '04-no-password-input');
-    // Puede que ya estemos logueados o en una pantalla inesperada
     const url = page.url();
     console.log(`  URL actual: ${url}`);
-    if (url.includes('artists.spotify.com')) {
+    // Verificar hostname estricto (no basta con includes: accounts.spotify.com?continue=...artists.spotify.com...)
+    if (new URL(url).hostname === 'artists.spotify.com') {
       console.log('✅ Ya en artists.spotify.com (sin necesitar contraseña)');
       return;
     }
@@ -226,13 +216,14 @@ function parsePlaylistsText(rawText) {
     }
     if (!name) continue;
 
-    // Buscar streams: línea con patrón "—\t{número}" o "Spotify\t{número}"
+    // Buscar streams y fecha: línea con patrón "—\t{número}\t{fecha}" o "Spotify\t{número}\t..."
     let streams = null;
+    let fecha = '';
     for (let k = i + 1; k < Math.min(i + 7, lines.length); k++) {
-      // Formato con tabs: "—\t36,881\t..." o "Spotify\t301\t—"
-      const m = lines[k].match(/(?:—|Spotify)\t([\d,.]+)/);
+      const m = lines[k].match(/(?:—|Spotify)\t([\d,.]+)\t?(.*)?/);
       if (m) {
         streams = parseInt(m[1].replace(/[,.]/g, ''));
+        fecha = (m[2] || '').replace('—', '').trim();
         break;
       }
       // Fallback: línea que es solo un número con comas (ej: "36,881")
@@ -244,7 +235,7 @@ function parsePlaylistsText(rawText) {
     }
 
     if (streams !== null && streams > 0) {
-      playlists.push({ position, name, streams });
+      playlists.push({ position, name, streams, fecha });
     }
   }
 
@@ -276,63 +267,52 @@ async function navigateToTrackPlaylists(page, ref) {
 }
 
 // ── Scrape track sources ──────────────────────────────────────
-async function scrapeTrackSources(page, ref) {
+// Devuelve array de filas [fecha, artista, trackName, playlistName, posicion, streams, fecha_added]
+// Una fila por cada playlist encontrada en la página
+async function scrapeTrackSources(page, ref, today) {
   console.log(`\n🎵 ${ref.artista} — "${ref.trackName}"`);
 
   const currentHost = (() => { try { return new URL(page.url()).hostname; } catch { return ''; } })();
   if (currentHost !== 'artists.spotify.com') {
-    return { ...ref, streams28d: null, fuenteCompleta: 'sesión expirada' };
+    console.log('  ❌ No en artists.spotify.com — sesión expirada');
+    return [];
   }
 
-  // Navegar al track y abrir tab Playlists
-  const tabOpened = await navigateToTrackPlaylists(page, ref);
-  if (!tabOpened) {
-    return { ...ref, streams28d: null, fuenteCompleta: 'tab Playlists no encontrado' };
-  }
+  const ok = await navigateToTrackPlaylists(page, ref);
+  if (!ok) return [];
 
-  // Extraer innerText del área principal
+  // Extraer todo el texto de la página
   const rawText = await page.evaluate(() => {
-    const candidates = [
-      document.querySelector('main'),
-      document.querySelector('[role="main"]'),
-      document.body,
-    ];
-    for (const el of candidates) {
-      if (el?.innerText?.length > 200) return el.innerText;
-    }
-    return document.body.innerText;
+    const el = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+    return el?.innerText || document.body.innerText;
   });
 
-  // Parsear todas las playlists
   const allPlaylists = parsePlaylistsText(rawText);
   console.log(`  📋 ${allPlaylists.length} playlists encontradas`);
 
   if (!allPlaylists.length) {
-    await screenshot(page, `06-nodata-${ref.trackId}`);
-    console.log('  Primeras líneas del texto (diagnóstico):');
-    rawText.split('\n').slice(0, 25).forEach(l => l.trim() && console.log('    |' + l));
+    await screenshot(page, `nodata-${ref.trackId}`);
+    console.log('  Primeras líneas (diagnóstico):');
+    rawText.split('\n').slice(0, 30).forEach(l => l.trim() && console.log('    |' + l));
+    return [];
   }
 
-  // Buscar la playlist objetivo
-  const target = ref.playlist.toLowerCase();
-  const match = allPlaylists.find(p =>
-    p.name.toLowerCase() === target ||
-    p.name.toLowerCase().includes(target) ||
-    target.includes(p.name.toLowerCase().split(' ').slice(0, 4).join(' '))
-  );
+  // Una fila por playlist: Fecha | Artista | Track | Playlist | Posición | Streams | FechaAgregada
+  const rows = allPlaylists.map(p => [
+    today,
+    ref.artista,
+    ref.trackName,
+    p.name,
+    p.position,
+    p.streams,
+    p.fecha || '',
+  ]);
 
-  if (match) {
-    console.log(`  ✅ "${match.name}" pos.${match.position}: ${match.streams.toLocaleString()} streams`);
-  } else {
-    const top5 = allPlaylists.slice(0, 5).map(p => `${p.position}. ${p.name}`).join(' | ');
-    console.log(`  ℹ️  "${ref.playlist}" no encontrada. Top 5: ${top5 || 'ninguna'}`);
-  }
+  console.log(`  → ${rows.length} filas a guardar`);
+  rows.slice(0, 5).forEach(r => console.log(`     ${r[4]}. ${r[3]} — ${r[5].toLocaleString()} streams`));
+  if (rows.length > 5) console.log(`     ... y ${rows.length - 5} más`);
 
-  return {
-    ...ref,
-    streams28d: match?.streams ?? null,
-    fuenteCompleta: allPlaylists.slice(0, 30).map(p => `${p.position}|${p.name}|${p.streams}`).join('; '),
-  };
+  return rows;
 }
 
 // ── Main ──────────────────────────────────────────────────────
@@ -373,7 +353,6 @@ async function main() {
   });
 
   const page = await context.newPage();
-  const results = [];
 
   try {
     // Verificar si la sesión guardada sigue válida navegando a una ruta protegida
@@ -403,41 +382,29 @@ async function main() {
 
     // Esperar a que el dashboard cargue completamente
     await sleep(3000);
-    await screenshot(page, '00-dashboard');
 
-    // Agrupar referencias por artista para evitar relogins
-    const byArtist = {};
+    const today = new Date().toISOString().slice(0, 10);
+    const allRows = [];
+
     for (const ref of referencias) {
-      if (!byArtist[ref.artistId]) byArtist[ref.artistId] = [];
-      byArtist[ref.artistId].push(ref);
-    }
-
-    for (const [artistId, refs] of Object.entries(byArtist)) {
-      for (const ref of refs) {
-        try {
-          const result = await scrapeTrackSources(page, ref);
-          if (result) results.push(result);
-        } catch(e) {
-          console.log(`  ❌ Error en "${ref.trackName}": ${e.message}`);
-          await screenshot(page, `error-${ref.trackId}`);
-        }
-        await sleep(2000); // pausa entre tracks
+      try {
+        const rows = await scrapeTrackSources(page, ref, today);
+        for (const row of rows) allRows.push(row);
+      } catch(e) {
+        console.log(`  ❌ Error en "${ref.trackName}": ${e.message}`);
+        await screenshot(page, `error-${ref.trackId}`);
       }
+      await sleep(2000);
     }
 
-    // Guardar resultados
-    if (results.length) {
-      await appendStreamResults(sheets, results);
+    // Guardar todas las filas
+    if (allRows.length) {
+      await appendStreamResults(sheets, allRows);
     } else {
-      console.log('\n⚠️  No se obtuvieron resultados. Revisar screenshots en scraper/screenshots/');
+      console.log('\n⚠️  No se obtuvieron resultados.');
     }
 
-    // Resumen
-    console.log('\n📊 Resumen:');
-    for (const r of results) {
-      const streams = r.streams28d !== null ? r.streams28d.toLocaleString() + ' streams' : 'sin datos';
-      console.log(`  ${r.artista} — "${r.playlist}" pos.${r.posicion}: ${streams}`);
-    }
+    console.log(`\n✅ Total: ${allRows.length} filas guardadas en StreamsPlaylists`);
 
   } finally {
     await browser.close();
