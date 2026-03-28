@@ -107,6 +107,28 @@ export default async function handler(req, res) {
         return res.json({ ok: true, kvUserId: userId, meId: me.id, displayName: me.display_name, email: me.email, scope, hasModify, idsMatch: userId === me.id });
       }
 
+      // Get playlist metadata only (no tracks) via client credentials — no Make needed
+      if (action === 'meta') {
+        if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
+        const ccToken = await getClientCredToken();
+        const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,public,followers,tracks.total,images,external_urls,owner`, {
+          headers: { Authorization: `Bearer ${ccToken}` },
+        });
+        if (!metaRes.ok) {
+          const err = await metaRes.json().catch(() => ({}));
+          return res.status(metaRes.status).json({ error: err.error?.message || `HTTP ${metaRes.status}` });
+        }
+        const full = await metaRes.json();
+        return res.json({ ok: true, playlist: {
+          id: full.id, name: full.name, description: full.description || '',
+          public: full.public, followers: full.followers?.total || 0,
+          totalTracks: full.tracks?.total || 0,
+          image: full.images?.[0]?.url || null,
+          url: full.external_urls?.spotify || '',
+          owner: full.owner?.display_name || full.owner?.id || '',
+        }});
+      }
+
       // Get playlist detail + tracks
       if (action === 'tracks' || action === 'detail') {
         if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });

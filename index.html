@@ -7973,20 +7973,21 @@ async function runSnapshot(btn) {
   const orig = btn.textContent;
   btn.disabled = true;
   try {
-    // Fetch tracks for each playlist via spotify-manage (uses Make — already proven to work)
+    // Fetch metadata only (no tracks, no Make) via client credentials
     const playlists = [];
     for (let i = 0; i < _spPlaylists.length; i++) {
       const pl = _spPlaylists[i];
       btn.textContent = `⏳ ${i + 1}/${_spPlaylists.length}`;
       try {
-        const r = await fetch(`/api/spotify-manage?action=detail&playlistId=${pl.id}`);
+        const r = await fetch(`/api/spotify-manage?action=meta&playlistId=${pl.id}`);
         const d = await r.json();
         if (d.ok) playlists.push({
-          id: pl.id,
-          name: pl.name,
-          followers: d.playlist?.followers || 0,
-          totalTracks: d.playlist?.totalTracks || 0,
-          tracks: (d.tracks || []).map(t => ({ position: t.position, id: t.id })),
+          id: d.playlist.id,
+          name: d.playlist.name,
+          description: d.playlist.description || '',
+          image: d.playlist.image || '',
+          followers: d.playlist.followers || 0,
+          totalTracks: d.playlist.totalTracks || 0,
         });
       } catch(_) { /* skip on error */ }
     }
