@@ -108,63 +108,91 @@ async function login(page) {
     'https://accounts.spotify.com/en/login?continue=https%3A%2F%2Fartists.spotify.com%2F',
     { waitUntil: 'domcontentloaded', timeout: 30000 }
   );
-  await sleep(2000);
+  await sleep(3000);
 
   // 1. Ingresar email
   const emailInput = page.locator(
-    'input[data-testid="login-username"], input[name="username"], #login-username'
+    'input[data-testid="login-username"], input[name="username"], #login-username, input[autocomplete="username"]'
   ).first();
   await emailInput.waitFor({ state: 'visible', timeout: 15000 });
   await emailInput.fill(EMAIL);
-  await sleep(500);
+  await sleep(800);
+  await screenshot(page, '01-email-filled');
 
-  // 2. Hacer click en Continuar
+  // 2. Click en Continuar / Next
   const continueBtn = page.locator(
     'button[data-testid="login-button"], button[id="login-button"], button[type="submit"]'
   ).first();
   await continueBtn.click();
-  await sleep(3000);
-  await screenshot(page, '01-after-email');
+  await sleep(4000);
+  await screenshot(page, '02-after-email');
 
-  // 3. Spotify a veces muestra "Enviamos un link" → clickear "Ingresar con contraseña"
-  const passwordLink = page.locator([
+  // 3. Si Spotify muestra "Enviamos un link" → clickear "Ingresar con contraseña"
+  //    Probamos múltiples variantes del texto (ES/EN/PT)
+  const passwordLinkSelectors = [
     'a:has-text("password")',
     'button:has-text("password")',
     'a:has-text("contraseña")',
     'button:has-text("contraseña")',
-    '[data-testid*="password-login"]',
+    'a:has-text("senha")',
+    '[data-testid*="password"]',
     'a[href*="password"]',
-  ].join(', ')).first();
-
-  const passwordLinkVisible = await passwordLink.isVisible({ timeout: 4000 }).catch(() => false);
-  if (passwordLinkVisible) {
-    console.log('  → Clickeando "Ingresar con contraseña"...');
-    await passwordLink.click();
-    await sleep(2000);
+    'span:has-text("password")',
+  ];
+  for (const sel of passwordLinkSelectors) {
+    const el = page.locator(sel).first();
+    const visible = await el.isVisible({ timeout: 1500 }).catch(() => false);
+    if (visible) {
+      console.log(`  → Clickeando "Log in with password" (${sel})...`);
+      await el.click();
+      await sleep(3000);
+      await screenshot(page, '03-after-password-link');
+      break;
+    }
   }
 
-  // 4. Ingresar contraseña
+  // 4. Ingresar contraseña — esperar que el campo aparezca
   const passwordInput = page.locator(
     'input[data-testid="login-password"], input[name="password"], #login-password, input[type="password"]'
   ).first();
-  await passwordInput.waitFor({ state: 'visible', timeout: 10000 });
-  await passwordInput.fill(PASSWORD);
-  await sleep(500);
 
-  // 5. Submit
+  const pwVisible = await passwordInput.isVisible({ timeout: 8000 }).catch(() => false);
+  if (!pwVisible) {
+    await screenshot(page, '04-no-password-input');
+    // Puede que ya estemos logueados o en una pantalla inesperada
+    const url = page.url();
+    console.log(`  URL actual: ${url}`);
+    if (url.includes('artists.spotify.com')) {
+      console.log('✅ Ya en artists.spotify.com (sin necesitar contraseña)');
+      return;
+    }
+    throw new Error('No apareció el campo de contraseña — revisar screenshot 04-no-password-input.png');
+  }
+
+  await passwordInput.fill(PASSWORD);
+  await sleep(800);
+  await screenshot(page, '04-password-filled');
+
+  // 5. Submit — intentar click y también Enter como fallback
   const loginBtn = page.locator(
     'button[data-testid="login-button"], button[id="login-button"], button[type="submit"]'
   ).first();
-  await loginBtn.click();
-  await screenshot(page, '02-after-login-click');
+  const btnVisible = await loginBtn.isVisible({ timeout: 3000 }).catch(() => false);
+  if (btnVisible) {
+    await loginBtn.click();
+  } else {
+    await passwordInput.press('Enter');
+  }
+  await screenshot(page, '05-after-submit');
 
-  // 6. Esperar redirect a artists.spotify.com
+  // 6. Esperar redirect a artists.spotify.com (acepta cualquier path)
   try {
-    await page.waitForURL('*://artists.spotify.com/**', { timeout: 25000 });
-    console.log('✅ Login exitoso');
+    await page.waitForURL(/artists\.spotify\.com/, { timeout: 30000 });
+    console.log('✅ Login exitoso →', page.url());
   } catch(e) {
-    await screenshot(page, '02-login-error');
-    throw new Error('Login falló — revisar screenshot 02-login-error.png');
+    await screenshot(page, '06-login-error');
+    console.log('  URL actual al fallar:', page.url());
+    throw new Error('Login falló — revisar screenshots en artifacts de GitHub Actions');
   }
 }
 

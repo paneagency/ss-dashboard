@@ -39,8 +39,8 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: node spotify-artists.js
 
-      - name: Upload screenshots (solo si hay error)
-        if: failure()
+      - name: Upload screenshots (siempre, para debugging)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: scraper-screenshots
