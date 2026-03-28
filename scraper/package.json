@@ -1,0 +1,13 @@
+{
+  "name": "spotify-artists-scraper",
+  "version": "1.0.0",
+  "description": "Scraper de Spotify for Artists → Google Sheets",
+  "scripts": {
+    "scrape": "node spotify-artists.js",
+    "install-browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.42.0",
+    "googleapis": "^128.0.0"
+  }
+}
