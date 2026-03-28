@@ -251,77 +251,112 @@ function parsePlaylistsText(rawText) {
   return playlists;
 }
 
-// ── Scrape track sources ──────────────────────────────────────
-async function scrapeTrackSources(page, ref) {
-  console.log(`\n🎵 ${ref.artista} — "${ref.trackName}"`);
-
-  // Navegar directo al track
-  const trackUrl = `https://artists.spotify.com/c/artist/${ref.artistId}/music/songs/${ref.trackId}`;
-  await page.goto(trackUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+// ── Navegar al detalle del track y abrir tab Playlists ────────
+async function navigateToTrackPlaylists(page, ref) {
+  // Paso 1: ir a la lista de canciones del artista
+  const songsUrl = `https://artists.spotify.com/c/artist/${ref.artistId}/music/songs`;
+  await page.goto(songsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await sleep(4000);
-  await screenshot(page, `03-track-${ref.trackId}`);
+  await screenshot(page, `03-songslist-${ref.trackId}`);
+  console.log(`  URL songs list: ${page.url()}`);
 
-  // Verificar que llegamos a la página del track
-  if (!page.url().includes('artists.spotify.com')) {
-    console.log('  ⚠️  Redirigido fuera de artists.spotify.com, posible sesión expirada');
-    return { ...ref, streams28d: null, fuenteCompleta: 'sesión expirada' };
-  }
-
-  // Seleccionar período de 28 días si está disponible
-  const period28 = page.locator('button:has-text("28"), li:has-text("28 d"), [aria-label*="28"]').first();
-  if (await period28.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await period28.click();
-    await sleep(1500);
-    console.log('  → Período 28d seleccionado');
-  }
-
-  // Clickear tab "Playlists"
-  const playlistsTab = page.locator([
-    'button:has-text("Playlists")',
-    'a:has-text("Playlists")',
-    '[role="tab"]:has-text("Playlists")',
-    'li:has-text("Playlists")',
+  // Paso 2: clickear la canción por nombre en la lista
+  // Spotify for Artists muestra las canciones en filas clickeables
+  const trackRow = page.locator([
+    `a:has-text("${ref.trackName}")`,
+    `button:has-text("${ref.trackName}")`,
+    `tr:has-text("${ref.trackName}") td:first-child`,
+    `[data-testid*="track"]:has-text("${ref.trackName}")`,
+    `li:has-text("${ref.trackName}")`,
   ].join(', ')).first();
 
-  const tabFound = await playlistsTab.isVisible({ timeout: 8000 }).catch(() => false);
+  const rowFound = await trackRow.isVisible({ timeout: 8000 }).catch(() => false);
+  if (rowFound) {
+    console.log(`  → Clickeando "${ref.trackName}" en la lista`);
+    await trackRow.click();
+    await sleep(4000);
+    await screenshot(page, `03b-trackclick-${ref.trackId}`);
+    console.log(`  URL post-click: ${page.url()}`);
+  } else {
+    // Fallback: intentar URL directa igual
+    console.log(`  → Fila no encontrada en lista, intentando URL directa`);
+    const trackUrl = `https://artists.spotify.com/c/artist/${ref.artistId}/music/songs/${ref.trackId}`;
+    await page.goto(trackUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await sleep(4000);
+    console.log(`  URL directa: ${page.url()}`);
+  }
+
+  await screenshot(page, `04-trackpage-${ref.trackId}`);
+
+  // Diagnóstico: loguear todos los tabs/botones visibles para debugging
+  const allTabs = await page.evaluate(() => {
+    const tabs = [...document.querySelectorAll('[role="tab"], [data-testid*="tab"], nav a, nav button')];
+    return tabs.map(t => t.textContent?.trim()).filter(Boolean).slice(0, 10);
+  });
+  console.log(`  Tabs/nav disponibles: ${allTabs.join(' | ') || 'ninguno'}`);
+
+  // Paso 3: clickear tab "Playlists"
+  // Spotify for Artists puede usar distintas estructuras según la versión
+  const playlistsTab = page.locator([
+    '[role="tab"]:has-text("Playlists")',
+    'button:has-text("Playlists")',
+    'a:has-text("Playlists")',
+    'li:has-text("Playlists")',
+    'span:has-text("Playlists")',
+    '[data-testid*="playlist"]:not([data-testid*="item"])',
+  ].join(', ')).first();
+
+  const tabFound = await playlistsTab.isVisible({ timeout: 10000 }).catch(() => false);
   if (!tabFound) {
-    console.log('  ⚠️  Tab "Playlists" no encontrado');
-    await screenshot(page, `04-notab-${ref.trackId}`);
-    return { ...ref, streams28d: null, fuenteCompleta: 'tab Playlists no encontrado' };
+    console.log('  ⚠️  Tab "Playlists" no encontrado — revisá screenshot 04-trackpage');
+    return false;
   }
 
   await playlistsTab.click();
   console.log('  → Tab Playlists clickeado');
-  await sleep(4000); // esperar que cargue la lista completa
-  await screenshot(page, `04-playlists-${ref.trackId}`);
+  await sleep(5000);
+  await screenshot(page, `05-playlists-loaded-${ref.trackId}`);
+  return true;
+}
 
-  // Extraer innerText del área principal (donde están las playlists)
+// ── Scrape track sources ──────────────────────────────────────
+async function scrapeTrackSources(page, ref) {
+  console.log(`\n🎵 ${ref.artista} — "${ref.trackName}"`);
+
+  if (!page.url().includes('artists.spotify.com')) {
+    return { ...ref, streams28d: null, fuenteCompleta: 'sesión expirada' };
+  }
+
+  // Navegar al track y abrir tab Playlists
+  const tabOpened = await navigateToTrackPlaylists(page, ref);
+  if (!tabOpened) {
+    return { ...ref, streams28d: null, fuenteCompleta: 'tab Playlists no encontrado' };
+  }
+
+  // Extraer innerText del área principal
   const rawText = await page.evaluate(() => {
-    // Intentar el contenedor principal del contenido
     const candidates = [
       document.querySelector('main'),
       document.querySelector('[role="main"]'),
-      document.querySelector('table'),
       document.body,
     ];
     for (const el of candidates) {
-      if (el && el.innerText && el.innerText.length > 100) return el.innerText;
+      if (el?.innerText?.length > 200) return el.innerText;
     }
     return document.body.innerText;
   });
 
-  // Parsear todas las playlists del texto
+  // Parsear todas las playlists
   const allPlaylists = parsePlaylistsText(rawText);
-  console.log(`  📋 ${allPlaylists.length} playlists encontradas en el texto`);
+  console.log(`  📋 ${allPlaylists.length} playlists encontradas`);
 
   if (!allPlaylists.length) {
-    await screenshot(page, `05-nodata-${ref.trackId}`);
-    // Log primeras líneas del texto para diagnóstico
-    console.log('  Primeras líneas del texto:');
-    rawText.split('\n').slice(0, 20).forEach(l => l.trim() && console.log('    |' + l));
+    await screenshot(page, `06-nodata-${ref.trackId}`);
+    console.log('  Primeras líneas del texto (diagnóstico):');
+    rawText.split('\n').slice(0, 25).forEach(l => l.trim() && console.log('    |' + l));
   }
 
-  // Buscar la playlist objetivo (matching flexible)
+  // Buscar la playlist objetivo
   const target = ref.playlist.toLowerCase();
   const match = allPlaylists.find(p =>
     p.name.toLowerCase() === target ||
@@ -329,12 +364,11 @@ async function scrapeTrackSources(page, ref) {
     target.includes(p.name.toLowerCase().split(' ').slice(0, 4).join(' '))
   );
 
-  const top10 = allPlaylists.slice(0, 10).map(p => `${p.position}. ${p.name}: ${p.streams.toLocaleString()}`).join(' | ');
-
   if (match) {
     console.log(`  ✅ "${match.name}" pos.${match.position}: ${match.streams.toLocaleString()} streams`);
   } else {
-    console.log(`  ℹ️  "${ref.playlist}" no encontrada. Top: ${top10 || 'ninguna'}`);
+    const top5 = allPlaylists.slice(0, 5).map(p => `${p.position}. ${p.name}`).join(' | ');
+    console.log(`  ℹ️  "${ref.playlist}" no encontrada. Top 5: ${top5 || 'ninguna'}`);
   }
 
   return {
