@@ -223,27 +223,29 @@ module.exports = async (req, res) => {
       };
     });
 
-    // 3. Get playlists via OAuth
-    const oauthToken = await getOAuthToken();
-    const playlists = await fetchAllPlaylists(oauthToken);
+    // 3. Receive pre-fetched playlist data from client (tracks already resolved via Make)
+    // Body: { playlists: [{ id, name, followers, totalTracks, tracks: [{position, id}] }] }
+    const clientPlaylists = req.body?.playlists;
+    if (!clientPlaylists || !Array.isArray(clientPlaylists)) {
+      return res.status(400).json({ error: 'playlists[] requerido en el body' });
+    }
 
-    // 4. Build snapshot row per playlist
+    // 4. Build snapshot rows
     const rows = [];
-    for (const pl of playlists) {
-      const detail = await fetchPlaylistDetail(pl.id, oauthToken);
-      if (!detail) continue;
+    for (const pl of clientPlaylists) {
       const caps = plCaps[pl.id] || SP_DEFAULT_CAPS;
-      const inCampaign = detail.tracks.filter(t => campTrackMap[t.id]).length;
+      const tracks = pl.tracks || [];
+      const inCampaign = tracks.filter(t => campTrackMap[t.id]).length;
       const row = [
         today,
-        detail.id,
-        detail.name,
-        detail.followers,
-        detail.totalTracks,
+        pl.id,
+        pl.name,
+        pl.followers || 0,
+        pl.totalTracks || 0,
         inCampaign,
       ];
       SP_RANGES.forEach(range => {
-        row.push(detail.tracks.filter(t => t.position >= range.from && t.position <= range.to && campTrackMap[t.id]).length);
+        row.push(tracks.filter(t => t.position >= range.from && t.position <= range.to && campTrackMap[t.id]).length);
       });
       SP_RANGES.forEach(range => {
         row.push(caps[range.key]);

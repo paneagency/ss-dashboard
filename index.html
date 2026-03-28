@@ -7963,11 +7963,33 @@ function closeSpotifyAnalysis() {
 }
 
 async function runSnapshot(btn) {
+  if (!_spPlaylists?.length) { showToast('Cargá las playlists primero', true); return; }
   const orig = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '⏳ Guardando…';
   try {
-    const r = await fetch('/api/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    // Fetch tracks for each playlist via spotify-manage (uses Make — already proven to work)
+    const playlists = [];
+    for (let i = 0; i < _spPlaylists.length; i++) {
+      const pl = _spPlaylists[i];
+      btn.textContent = `⏳ ${i + 1}/${_spPlaylists.length}`;
+      try {
+        const r = await fetch(`/api/spotify-manage?action=detail&playlistId=${pl.id}`);
+        const d = await r.json();
+        if (d.ok) playlists.push({
+          id: pl.id,
+          name: pl.name,
+          followers: d.playlist?.followers || 0,
+          totalTracks: d.playlist?.totalTracks || 0,
+          tracks: (d.tracks || []).map(t => ({ position: t.position, id: t.id })),
+        });
+      } catch(_) { /* skip on error */ }
+    }
+    btn.textContent = '⏳ Guardando…';
+    const r = await fetch('/api/snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlists }),
+    });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error);
     showToast(`📸 Snapshot guardado: ${d.playlists} playlists — ${d.date}`, 'success');
