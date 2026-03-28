@@ -185,9 +185,13 @@ async function login(page) {
   }
   await screenshot(page, '05-after-submit');
 
-  // 6. Esperar redirect a artists.spotify.com (acepta cualquier path)
+  // 6. Esperar redirect REAL a artists.spotify.com
+  // (no alcanza con regex — la URL de accounts.spotify.com contiene "artists.spotify.com" en el query param)
   try {
-    await page.waitForURL(/artists\.spotify\.com/, { timeout: 30000 });
+    await page.waitForURL(
+      url => { try { return new URL(url).hostname === 'artists.spotify.com'; } catch { return false; } },
+      { timeout: 35000 }
+    );
     console.log('✅ Login exitoso →', page.url());
   } catch(e) {
     await screenshot(page, '06-login-error');
