@@ -7840,6 +7840,12 @@ async function analyzeSpotifyPlaylist(idx) {
       while ((m = re2.exec(c.pauta || '')) !== null) campTrackMap[m[1]] = c.artista;
     });
     renderSpotifyAnalysis(data.tracks, campTrackMap, data.playlist);
+    // Auto-snapshot: guarda metadata de esta playlist (fire & forget)
+    fetch('/api/snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlists: [{ id: data.playlist.id, name: data.playlist.name, followers: data.playlist.followers || 0, totalTracks: data.playlist.totalTracks || 0, image: data.playlist.image || '', description: data.playlist.description || '' }] }),
+    }).catch(() => {});
   } catch(e) {
     document.getElementById('sp-analysis-body').innerHTML = `<div style="color:#ef4444;padding:20px">Error: ${e.message}</div>`;
   }

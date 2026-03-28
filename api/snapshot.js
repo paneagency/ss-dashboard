@@ -192,50 +192,53 @@ module.exports = async (req, res) => {
     const sheets = getSheets();
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-    // 1. Build campTrackMap from active campaigns
-    const campResp = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${CAMPANAS_SHEET}!A:V`,
-    });
-    const campTrackMap = {};
-    (campResp.data.values || []).slice(1)
-      .filter(r => ACTIVE_STATES.includes(r[7]))
-      .forEach(r => {
-        const pauta = r[16] || '';
-        let m; const re = /open\.spotify\.com(?:\/intl-[^/]+)?\/track\/([A-Za-z0-9]+)/g;
-        while ((m = re.exec(pauta)) !== null) campTrackMap[m[1]] = r[0] || '';
-      });
-
-    // 2. Read capacities from CapacidadPlaylists
-    const capsResp = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'CapacidadPlaylists!A:G',
-    }).catch(() => ({ data: { values: [] } }));
-    const plCaps = {};
-    (capsResp.data.values || []).slice(1).forEach(r => {
-      if (!r[0]?.trim()) return;
-      plCaps[r[0].trim()] = {
-        TOP5_20:   parseInt(r[2]) || SP_DEFAULT_CAPS.TOP5_20,
-        TOP20_40:  parseInt(r[3]) || SP_DEFAULT_CAPS.TOP20_40,
-        TOP40_60:  parseInt(r[4]) || SP_DEFAULT_CAPS.TOP40_60,
-        TOP60_70:  parseInt(r[5]) || SP_DEFAULT_CAPS.TOP60_70,
-        TOP70_100: parseInt(r[6]) || SP_DEFAULT_CAPS.TOP70_100,
-      };
-    });
-
-    // 3. Receive pre-fetched playlist data from client (tracks already resolved via Make)
-    // Body: { playlists: [{ id, name, followers, totalTracks, tracks: [{position, id}] }] }
     const clientPlaylists = req.body?.playlists;
     if (!clientPlaylists || !Array.isArray(clientPlaylists)) {
       return res.status(400).json({ error: 'playlists[] requerido en el body' });
     }
 
-    // 4. Build snapshot rows
+    const hasTrackData = clientPlaylists.some(pl => pl.tracks?.length > 0);
+
+    let campTrackMap = {};
+    let plCaps = {};
+
+    if (hasTrackData) {
+      // Solo leer campañas y caps si hay datos de tracks
+      const campResp = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CAMPANAS_SHEET}!A:V`,
+      });
+      (campResp.data.values || []).slice(1)
+        .filter(r => ACTIVE_STATES.includes(r[7]))
+        .forEach(r => {
+          const pauta = r[16] || '';
+          let m; const re = /open\.spotify\.com(?:\/intl-[^/]+)?\/track\/([A-Za-z0-9]+)/g;
+          while ((m = re.exec(pauta)) !== null) campTrackMap[m[1]] = r[0] || '';
+        });
+
+      const capsResp = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'CapacidadPlaylists!A:G',
+      }).catch(() => ({ data: { values: [] } }));
+      (capsResp.data.values || []).slice(1).forEach(r => {
+        if (!r[0]?.trim()) return;
+        plCaps[r[0].trim()] = {
+          TOP5_20:   parseInt(r[2]) || SP_DEFAULT_CAPS.TOP5_20,
+          TOP20_40:  parseInt(r[3]) || SP_DEFAULT_CAPS.TOP20_40,
+          TOP40_60:  parseInt(r[4]) || SP_DEFAULT_CAPS.TOP40_60,
+          TOP60_70:  parseInt(r[5]) || SP_DEFAULT_CAPS.TOP60_70,
+          TOP70_100: parseInt(r[6]) || SP_DEFAULT_CAPS.TOP70_100,
+        };
+      });
+    }
+
+    // Build snapshot rows
+    // Columns: A=Fecha B=ID C=Nombre D=Seguidores E=TotalTracks F=EnCampaña G-K=VendidosPorRango L-P=Caps Q=Imagen R=Descripción
     const rows = [];
     for (const pl of clientPlaylists) {
       const caps = plCaps[pl.id] || SP_DEFAULT_CAPS;
       const tracks = pl.tracks || [];
-      const inCampaign = tracks.filter(t => campTrackMap[t.id]).length;
+      const inCampaign = hasTrackData ? tracks.filter(t => campTrackMap[t.id]).length : '';
       const row = [
         today,
         pl.id,
@@ -245,25 +248,27 @@ module.exports = async (req, res) => {
         inCampaign,
       ];
       SP_RANGES.forEach(range => {
-        row.push(tracks.filter(t => t.position >= range.from && t.position <= range.to && campTrackMap[t.id]).length);
+        row.push(hasTrackData ? tracks.filter(t => t.position >= range.from && t.position <= range.to && campTrackMap[t.id]).length : '');
       });
       SP_RANGES.forEach(range => {
-        row.push(caps[range.key]);
+        row.push(hasTrackData ? caps[range.key] : '');
       });
+      // Q: Imagen, R: Descripción
+      row.push(pl.image || '');
+      row.push(pl.description || '');
       rows.push(row);
     }
 
-    // 6. Append to HistorialPlaylists
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'HistorialPlaylists!A:P',
+      range: 'HistorialPlaylists!A:R',
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       resource: { values: rows },
     });
 
     console.log(`Snapshot ${today}: ${rows.length} playlists guardadas`);
-    return res.json({ ok: true, date: today, playlists: rows.length, tracksInCampaign: Object.keys(campTrackMap).length });
+    return res.json({ ok: true, date: today, playlists: rows.length });
 
   } catch(e) {
     console.error('snapshot error:', e.message);
