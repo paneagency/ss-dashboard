@@ -251,70 +251,26 @@ function parsePlaylistsText(rawText) {
   return playlists;
 }
 
-// ── Navegar al detalle del track y abrir tab Playlists ────────
+// ── Navegar directo a la vista de Playlists del track ─────────
+// URL formato: artists.spotify.com/c/es-419/artist/{artistId}/song/{trackId}/playlists
 async function navigateToTrackPlaylists(page, ref) {
-  // Paso 1: ir a la lista de canciones del artista
-  const songsUrl = `https://artists.spotify.com/c/artist/${ref.artistId}/music/songs`;
-  await page.goto(songsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await sleep(4000);
-  await screenshot(page, `03-songslist-${ref.trackId}`);
-  console.log(`  URL songs list: ${page.url()}`);
+  const playlistsUrl = `https://artists.spotify.com/c/es-419/artist/${ref.artistId}/song/${ref.trackId}/playlists`;
+  console.log(`  → Navegando a: ${playlistsUrl}`);
+  await page.goto(playlistsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await sleep(5000);
+  await screenshot(page, `04-playlists-${ref.trackId}`);
 
-  // Paso 2: clickear la canción por nombre en la lista
-  // Spotify for Artists muestra las canciones en filas clickeables
-  const trackRow = page.locator([
-    `a:has-text("${ref.trackName}")`,
-    `button:has-text("${ref.trackName}")`,
-    `tr:has-text("${ref.trackName}") td:first-child`,
-    `[data-testid*="track"]:has-text("${ref.trackName}")`,
-    `li:has-text("${ref.trackName}")`,
-  ].join(', ')).first();
+  const currentUrl = page.url();
+  console.log(`  URL actual: ${currentUrl}`);
 
-  const rowFound = await trackRow.isVisible({ timeout: 8000 }).catch(() => false);
-  if (rowFound) {
-    console.log(`  → Clickeando "${ref.trackName}" en la lista`);
-    await trackRow.click();
-    await sleep(4000);
-    await screenshot(page, `03b-trackclick-${ref.trackId}`);
-    console.log(`  URL post-click: ${page.url()}`);
-  } else {
-    // Fallback: intentar URL directa igual
-    console.log(`  → Fila no encontrada en lista, intentando URL directa`);
-    const trackUrl = `https://artists.spotify.com/c/artist/${ref.artistId}/music/songs/${ref.trackId}`;
-    await page.goto(trackUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await sleep(4000);
-    console.log(`  URL directa: ${page.url()}`);
-  }
-
-  await screenshot(page, `04-trackpage-${ref.trackId}`);
-
-  // Diagnóstico: loguear todos los tabs/botones visibles para debugging
-  const allTabs = await page.evaluate(() => {
-    const tabs = [...document.querySelectorAll('[role="tab"], [data-testid*="tab"], nav a, nav button')];
-    return tabs.map(t => t.textContent?.trim()).filter(Boolean).slice(0, 10);
-  });
-  console.log(`  Tabs/nav disponibles: ${allTabs.join(' | ') || 'ninguno'}`);
-
-  // Paso 3: clickear tab "Playlists"
-  // Spotify for Artists puede usar distintas estructuras según la versión
-  const playlistsTab = page.locator([
-    '[role="tab"]:has-text("Playlists")',
-    'button:has-text("Playlists")',
-    'a:has-text("Playlists")',
-    'li:has-text("Playlists")',
-    'span:has-text("Playlists")',
-    '[data-testid*="playlist"]:not([data-testid*="item"])',
-  ].join(', ')).first();
-
-  const tabFound = await playlistsTab.isVisible({ timeout: 10000 }).catch(() => false);
-  if (!tabFound) {
-    console.log('  ⚠️  Tab "Playlists" no encontrado — revisá screenshot 04-trackpage');
+  // Si redirigió a login, la sesión expiró
+  if (new URL(currentUrl).hostname !== 'artists.spotify.com' || currentUrl.includes('/login')) {
+    console.log('  ❌ Redirigido a login — sesión expirada');
     return false;
   }
 
-  await playlistsTab.click();
-  console.log('  → Tab Playlists clickeado');
-  await sleep(5000);
+  // Esperar a que cargue el contenido de playlists
+  await sleep(3000);
   await screenshot(page, `05-playlists-loaded-${ref.trackId}`);
   return true;
 }
@@ -323,7 +279,8 @@ async function navigateToTrackPlaylists(page, ref) {
 async function scrapeTrackSources(page, ref) {
   console.log(`\n🎵 ${ref.artista} — "${ref.trackName}"`);
 
-  if (!page.url().includes('artists.spotify.com')) {
+  const currentHost = (() => { try { return new URL(page.url()).hostname; } catch { return ''; } })();
+  if (currentHost !== 'artists.spotify.com') {
     return { ...ref, streams28d: null, fuenteCompleta: 'sesión expirada' };
   }
 
@@ -419,13 +376,17 @@ async function main() {
   const results = [];
 
   try {
-    // Verificar si la sesión guardada sigue válida
+    // Verificar si la sesión guardada sigue válida navegando a una ruta protegida
     let loggedIn = false;
     if (sessionExists) {
       console.log('🔄 Intentando sesión guardada...');
-      await page.goto('https://artists.spotify.com/', { waitUntil: 'domcontentloaded', timeout: 20000 });
-      await sleep(3000);
-      loggedIn = new URL(page.url()).hostname === 'artists.spotify.com';
+      await page.goto('https://artists.spotify.com/c/es-419/home', { waitUntil: 'domcontentloaded', timeout: 20000 });
+      await sleep(4000);
+      const currentUrl = page.url();
+      console.log(`  URL post-sesión: ${currentUrl}`);
+      loggedIn = new URL(currentUrl).hostname === 'artists.spotify.com' &&
+                 !currentUrl.includes('/login') &&
+                 !currentUrl.includes('accounts.spotify.com');
       if (loggedIn) {
         console.log('✅ Sesión reutilizada — sin nuevo login');
       } else {
