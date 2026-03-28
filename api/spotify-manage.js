@@ -111,7 +111,7 @@ export default async function handler(req, res) {
       if (action === 'meta') {
         if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
         const ccToken = await getClientCredToken();
-        const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,public,followers,tracks.total,images,external_urls,owner`, {
+        const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,public,followers,tracks(total),images,external_urls,owner`, {
           headers: { Authorization: `Bearer ${ccToken}` },
         });
         if (!metaRes.ok) {
