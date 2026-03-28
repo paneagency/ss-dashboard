@@ -108,19 +108,28 @@ export default async function handler(req, res) {
       }
 
       // Get playlist detail + tracks
-      // Tries client credentials first; if restricted (403), falls back to Make webhook
       if (action === 'tracks' || action === 'detail') {
         if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
 
-        // ── Try direct Spotify (client credentials) ──
-        const ccToken = await getClientCredToken();
-        const ccHeaders = { Authorization: `Bearer ${ccToken}` };
-        const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, { headers: ccHeaders });
+        const makeUrl = process.env.MAKE_SPOTIFY_READ_URL;
 
-        if (metaRes.ok) {
-          const full = await metaRes.json();
-          const totalTracks = full.tracks?.total || 0;
-          let tracks = [];
+        // ── Make (preferred: bypasses Development Mode restrictions) ──
+        if (makeUrl) {
+          const makeRes = await fetch(makeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playlistId }),
+          });
+          const makeText = await makeRes.text();
+          console.log(`Make response: status=${makeRes.status} body(500)=${makeText.slice(0,500)}`);
+          let full = {};
+          try { full = JSON.parse(makeText); } catch(_) {
+            return res.status(500).json({ error: `Make parse error: ${makeText.slice(0,200)}` });
+          }
+          if (!makeRes.ok || full.error) {
+            return res.status(makeRes.status || 500).json({ error: full.error?.message || full.error || `Make HTTP ${makeRes.status}` });
+          }
+          const tracks = [];
           (full.tracks?.items || []).forEach(item => {
             if (item.track?.id) tracks.push({
               position: tracks.length + 1,
@@ -130,60 +139,28 @@ export default async function handler(req, res) {
               url: item.track.external_urls?.spotify || '',
             });
           });
-          let nextUrl = full.tracks?.next || null;
-          while (nextUrl) {
-            const r = await fetch(nextUrl, { headers: ccHeaders });
-            if (!r.ok) break;
-            const d = await r.json();
-            (d.items || []).forEach(item => {
-              if (item.track?.id) tracks.push({
-                position: tracks.length + 1,
-                id: item.track.id, name: item.track.name,
-                artist: item.track.artists?.[0]?.name || '',
-                image: item.track.album?.images?.[2]?.url || item.track.album?.images?.[0]?.url || null,
-                url: item.track.external_urls?.spotify || '',
-              });
-            });
-            nextUrl = d.next || null;
-          }
-          console.log(`Spotify direct: totalTracks=${totalTracks} loaded=${tracks.length}`);
-          // If Spotify returned metadata but 0 tracks (restricted), fall through to Make
-          if (tracks.length > 0 || totalTracks === 0) {
-            return res.json({ ok: true, source: 'direct',
-              playlist: {
-                id: full.id, name: full.name, description: full.description || '',
-                public: full.public, followers: full.followers?.total || 0,
-                totalTracks,
-                image: full.images?.[0]?.url || null,
-                url: full.external_urls?.spotify || '',
-                owner: full.owner?.display_name || full.owner?.id || '',
-              }, tracks });
-          }
-          console.log(`Spotify returned 0 tracks but total=${totalTracks} — falling back to Make`);
+          console.log(`Make parsed: name=${full.name} totalTracks=${full.tracks?.total} loaded=${tracks.length}`);
+          return res.json({ ok: true, source: 'make',
+            playlist: {
+              id: full.id, name: full.name, description: full.description || '',
+              public: full.public, followers: full.followers?.total || 0,
+              totalTracks: full.tracks?.total || 0,
+              image: full.images?.[0]?.url || null,
+              url: full.external_urls?.spotify || '',
+              owner: full.owner?.display_name || full.owner?.id || '',
+            }, tracks });
         }
 
-        // ── Fallback: Make webhook ──
-        const makeUrl = process.env.MAKE_SPOTIFY_READ_URL;
-        if (!makeUrl) {
-          return res.status(403).json({ error: 'Spotify API restringida. Configurá MAKE_SPOTIFY_READ_URL para habilitar esta función.' });
+        // ── Direct Spotify via client credentials (fallback if no Make URL) ──
+        const ccToken = await getClientCredToken();
+        const ccHeaders = { Authorization: `Bearer ${ccToken}` };
+        const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, { headers: ccHeaders });
+        if (!metaRes.ok) {
+          const err = await metaRes.json().catch(() => ({}));
+          return res.status(metaRes.status).json({ error: err.error?.message || `HTTP ${metaRes.status} — configurá MAKE_SPOTIFY_READ_URL` });
         }
-        const makeRes = await fetch(makeUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playlistId }),
-        });
-        const makeText = await makeRes.text();
-        console.log(`Make raw response (first 500): ${makeText.slice(0,500)}`);
-        let full = {};
-        try { full = JSON.parse(makeText); } catch(_) {
-          return res.status(500).json({ error: `Make response parse error: ${makeText.slice(0,200)}` });
-        }
-        console.log(`Make parsed: name=${full.name} tracks.total=${full.tracks?.total} tracks.items.length=${full.tracks?.items?.length} tracks keys=${Object.keys(full.tracks||{}).join(',')}`);
-        if (!makeRes.ok || full.error) {
-          return res.status(makeRes.status || 500).json({ error: full.error?.message || full.error || `Make HTTP ${makeRes.status}` });
-        }
-        // Parse Spotify format from Make response
-        let tracks = [];
+        const full = await metaRes.json();
+        const tracks = [];
         (full.tracks?.items || []).forEach(item => {
           if (item.track?.id) tracks.push({
             position: tracks.length + 1,
@@ -193,7 +170,7 @@ export default async function handler(req, res) {
             url: item.track.external_urls?.spotify || '',
           });
         });
-        return res.json({ ok: true, source: 'make',
+        return res.json({ ok: true, source: 'direct',
           playlist: {
             id: full.id, name: full.name, description: full.description || '',
             public: full.public, followers: full.followers?.total || 0,
