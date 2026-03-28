@@ -110,11 +110,10 @@ async function fetchAllPlaylists(accessToken) {
   return playlists;
 }
 
-// ── Fetch playlist detail + tracks via CC (no Make credits) ──
-async function fetchPlaylistDetail(playlistId, ccToken) {
-  // Get metadata (includes followers)
+// ── Fetch playlist detail + tracks via OAuth ─────────────────
+async function fetchPlaylistDetail(playlistId, accessToken) {
   const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
-    headers: { Authorization: `Bearer ${ccToken}` },
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!metaRes.ok) return null;
   const meta = await metaRes.json();
@@ -130,7 +129,7 @@ async function fetchPlaylistDetail(playlistId, ccToken) {
   });
   let nextUrl = meta.tracks?.next || null;
   while (nextUrl && tracks.length < 100) {
-    const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${ccToken}` } });
+    const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     const d = await r.json();
     (d.items || []).forEach(item => {
       if (item.track?.id && tracks.length < 100) tracks.push({
@@ -203,13 +202,10 @@ module.exports = async (req, res) => {
     const oauthToken = await getOAuthToken();
     const playlists = await fetchAllPlaylists(oauthToken);
 
-    // 4. Get CC token for track fetching
-    const ccToken = await getCCToken();
-
-    // 5. Build snapshot row per playlist
+    // 4. Build snapshot row per playlist
     const rows = [];
     for (const pl of playlists) {
-      const detail = await fetchPlaylistDetail(pl.id, ccToken);
+      const detail = await fetchPlaylistDetail(pl.id, oauthToken);
       if (!detail) continue;
       const caps = plCaps[pl.id] || SP_DEFAULT_CAPS;
       const inCampaign = detail.tracks.filter(t => campTrackMap[t.id]).length;
