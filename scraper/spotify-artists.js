@@ -118,34 +118,35 @@ async function login(page) {
   await sleep(6000); // más tiempo para que cargue la pantalla de magic link
   await screenshot(page, '02-after-email');
 
-  // Diagnóstico: loguear todos los botones/links visibles para saber qué hay en pantalla
+  // Diagnóstico: loguear todos los botones/links visibles
   const visibleButtons = await page.evaluate(() => {
     const els = [...document.querySelectorAll('button, a, [role="button"]')];
     return els.map(e => e.textContent?.trim()).filter(t => t && t.length < 100).slice(0, 20);
   });
   console.log('  Elementos clickeables visibles:', visibleButtons.join(' | '));
 
-  // 3. Si Spotify muestra "Enviamos un link" → clickear "Ingresar con contraseña"
-  //    Usamos evaluación directa para encontrar cualquier elemento con texto relacionado
-  const clickedPasswordLink = await page.evaluate(() => {
-    const keywords = ['password', 'contraseña', 'senha', 'mot de passe', 'passwor'];
-    const candidates = [...document.querySelectorAll('button, a, [role="button"], span')];
-    for (const el of candidates) {
-      const text = (el.textContent || '').toLowerCase().trim();
-      if (keywords.some(k => text.includes(k)) && el.offsetParent !== null) {
-        el.click();
-        return text;
-      }
+  // 3. Si Spotify muestra pantalla de código → clickear "Ingresar con contraseña"
+  //    Probamos todos los textos posibles con click REAL de Playwright
+  const pwLinkTexts = [
+    'contraseña', 'password', 'senha', 'mot de passe',
+    'ingresar con', 'log in with', 'sign in with', 'usar contraseña',
+  ];
+  let clickedPwLink = false;
+  for (const txt of pwLinkTexts) {
+    const el = page.locator(`button:has-text("${txt}"), a:has-text("${txt}"), [role="button"]:has-text("${txt}")`).first();
+    const visible = await el.isVisible({ timeout: 1000 }).catch(() => false);
+    if (visible) {
+      const fullText = await el.textContent().catch(() => txt);
+      console.log(`  → Clickeando botón contraseña: "${fullText?.trim()}"`);
+      await el.click();
+      clickedPwLink = true;
+      await sleep(4000);
+      await screenshot(page, '03-after-password-link');
+      break;
     }
-    return null;
-  });
-
-  if (clickedPasswordLink) {
-    console.log(`  → Clickeado elemento con texto: "${clickedPasswordLink}"`);
-    await sleep(4000);
-    await screenshot(page, '03-after-password-link');
-  } else {
-    console.log('  → No se encontró link de contraseña (puede que ya esté en pantalla de password)');
+  }
+  if (!clickedPwLink) {
+    console.log('  → No se encontró link de contraseña (puede que el campo ya esté visible)');
   }
 
   // 4. Ingresar contraseña — esperar que el campo aparezca
