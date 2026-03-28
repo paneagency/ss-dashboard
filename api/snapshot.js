@@ -160,6 +160,75 @@ module.exports = async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // ── GET action=history: leer HistorialPlaylists para gráficos ──
+  if (req.method === 'GET' && req.query.action === 'history') {
+    try {
+      const sheets = getSheets();
+      const resp = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'HistorialPlaylists!A:R',
+      });
+      const rows = (resp.data.values || []).slice(1);
+      const data = rows.map(r => ({
+        date: r[0] || '',
+        id: r[1] || '',
+        name: r[2] || '',
+        followers: parseInt(r[3]) || 0,
+        totalTracks: parseInt(r[4]) || 0,
+        image: r[16] || '',
+      })).filter(r => r.date && r.id);
+      return res.json({ ok: true, data });
+    } catch(e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── GET action=cron: snapshot automático diario (Vercel cron) ──
+  if (req.method === 'GET' && req.query.action === 'cron') {
+    try {
+      const oauthToken = await getOAuthToken();
+      const rawPlaylists = await fetchAllPlaylists(oauthToken);
+      const ccToken = await getCCToken();
+      const playlists = [];
+      for (const pl of rawPlaylists) {
+        try {
+          const r = await fetch(
+            `https://api.spotify.com/v1/playlists/${pl.id}?fields=id,name,description,followers,tracks(total),images`,
+            { headers: { Authorization: `Bearer ${ccToken}` } }
+          );
+          if (!r.ok) continue;
+          const full = await r.json();
+          playlists.push({
+            id: full.id,
+            name: full.name,
+            description: full.description || '',
+            image: full.images?.[0]?.url || '',
+            followers: full.followers?.total || 0,
+            totalTracks: full.tracks?.total || 0,
+          });
+        } catch(_) {}
+      }
+      const sheets = getSheets();
+      const today = new Date().toISOString().slice(0, 10);
+      const rows = playlists.map(pl => [
+        today, pl.id, pl.name, pl.followers, pl.totalTracks,
+        '', '', '', '', '', '', '', '', '', '', '', pl.image, pl.description,
+      ]);
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'HistorialPlaylists!A:R',
+        valueInputOption: 'RAW',
+        insertDataOption: 'INSERT_ROWS',
+        resource: { values: rows },
+      });
+      console.log(`Cron snapshot ${today}: ${rows.length} playlists`);
+      return res.json({ ok: true, date: today, playlists: rows.length });
+    } catch(e) {
+      console.error('cron snapshot error:', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // ── DEBUG: ver respuesta cruda de Spotify para una playlist ──
   if (req.query.action === 'debug' && req.query.playlistId) {
     try {

@@ -483,6 +483,15 @@
     .sp-range-bar { height:8px;border-radius:4px;background:var(--border2);overflow:hidden;margin-bottom:3px; }
     .sp-range-fill { height:100%;border-radius:4px;transition:width 0.5s; }
     .sp-cover-preview { width:110px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--border);margin-top:8px;display:none; }
+    .sp-subtab { padding:7px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s; }
+    .sp-subtab.active { background:var(--indigo);color:#fff;border-color:var(--indigo); }
+    .sp-subtab:not(.active):hover { border-color:var(--indigo);color:var(--indigo); }
+    .sp-pl-chip { padding:4px 10px;font-size:11px;border-radius:20px;border:2px solid;background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s;white-space:nowrap; }
+    .sp-pl-chip.active { color:var(--text);background:rgba(255,255,255,0.07); }
+    .sp-growth-kpi { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px; }
+    .sp-growth-kpi-label { font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px; }
+    .sp-growth-kpi-value { font-size:24px;font-weight:700;color:var(--text);line-height:1; }
+    .sp-growth-kpi-sub { font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 
     /* Campañas list */
     .campania-card {
@@ -1767,12 +1776,42 @@
         <button class="btn-primary" style="font-size:13px;padding:7px 14px" onclick="openSpotifyModal(null)">+ Nueva Playlist</button>
       </div>
     </div>
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
-      <input id="sp-search" class="filter-control" placeholder="🔍 Buscar playlist..." oninput="filterSpotifyPlaylists()" style="max-width:300px">
-      <span id="sp-count" style="font-size:13px;color:var(--muted)"></span>
+    <!-- Sub-tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+      <button id="sp-subtab-grid" class="sp-subtab active" onclick="setSpSubTab('grid')">🎵 Playlists</button>
+      <button id="sp-subtab-growth" class="sp-subtab" onclick="setSpSubTab('growth')">📈 Crecimiento</button>
     </div>
-    <div id="sp-grid" class="sp-grid">
-      <div style="color:var(--muted);font-size:14px;padding:60px;text-align:center;grid-column:1/-1">Cargando playlists...</div>
+
+    <!-- Grid view -->
+    <div id="sp-view-grid">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+        <input id="sp-search" class="filter-control" placeholder="🔍 Buscar playlist..." oninput="filterSpotifyPlaylists()" style="max-width:300px">
+        <span id="sp-count" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+      <div id="sp-grid" class="sp-grid">
+        <div style="color:var(--muted);font-size:14px;padding:60px;text-align:center;grid-column:1/-1">Cargando playlists...</div>
+      </div>
+    </div>
+
+    <!-- Growth view -->
+    <div id="sp-view-growth" style="display:none">
+      <!-- KPI row -->
+      <div id="sp-growth-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
+        <div style="color:var(--muted);font-size:13px;padding:20px">Cargando historial...</div>
+      </div>
+      <!-- Main chart -->
+      <div class="chart-card" style="margin-bottom:20px">
+        <div class="chart-title">Evolución de Seguidores</div>
+        <div class="chart-subtitle">Crecimiento histórico por playlist · Hacé click en los chips para mostrar/ocultar</div>
+        <div id="sp-growth-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
+        <div class="chart-wrap"><canvas id="chart-sp-growth" style="max-height:380px"></canvas></div>
+      </div>
+      <!-- Rankings table -->
+      <div class="chart-card">
+        <div class="chart-title">Ranking de Playlists</div>
+        <div class="chart-subtitle">Seguidores actuales y crecimiento en el tiempo</div>
+        <div id="sp-growth-table"></div>
+      </div>
     </div>
   </section>
 
@@ -8006,6 +8045,259 @@ async function runSnapshot(btn) {
     btn.disabled = false;
     btn.textContent = orig;
   }
+}
+
+// ── Spotify sub-tabs ─────────────────────────────────────────
+function setSpSubTab(tab) {
+  document.getElementById('sp-view-grid').style.display = tab === 'grid' ? 'block' : 'none';
+  document.getElementById('sp-view-growth').style.display = tab === 'growth' ? 'block' : 'none';
+  document.getElementById('sp-subtab-grid').className = 'sp-subtab' + (tab === 'grid' ? ' active' : '');
+  document.getElementById('sp-subtab-growth').className = 'sp-subtab' + (tab === 'growth' ? ' active' : '');
+  if (tab === 'growth' && !_spGrowthData && !_spGrowthLoading) loadSpGrowthData();
+}
+
+// ── Growth chart ─────────────────────────────────────────────
+let _spGrowthData = null;
+let _spGrowthLoading = false;
+let _spGrowthChart = null;
+let _spActivePlaylistIds = new Set();
+
+async function loadSpGrowthData() {
+  _spGrowthLoading = true;
+  const kpis = document.getElementById('sp-growth-kpis');
+  if (kpis) kpis.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px">Cargando historial...</div>';
+  try {
+    const r = await fetch('/api/snapshot?action=history');
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    _spGrowthData = processSpGrowthData(d.data);
+    renderSpGrowth();
+  } catch(e) {
+    if (kpis) kpis.innerHTML = `<div style="color:#ef4444;font-size:13px;padding:20px">${e.message}</div>`;
+  } finally {
+    _spGrowthLoading = false;
+  }
+}
+
+function processSpGrowthData(rawData) {
+  const byId = {};
+  for (const row of rawData) {
+    if (!byId[row.id]) byId[row.id] = { id: row.id, name: row.name, image: row.image, snapshots: [] };
+    byId[row.id].snapshots.push({ date: row.date, followers: row.followers });
+    byId[row.id].name = row.name;
+    if (row.image) byId[row.id].image = row.image;
+  }
+  Object.values(byId).forEach(pl => {
+    pl.snapshots.sort((a, b) => a.date.localeCompare(b.date));
+    // Deduplicate same-date entries (keep last)
+    const seen = {};
+    pl.snapshots = pl.snapshots.filter(s => { const keep = !seen[s.date]; seen[s.date] = true; return keep; });
+  });
+  return byId;
+}
+
+function spFollowersNDaysAgo(snapshots, n) {
+  if (!snapshots.length) return null;
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  const target = d.toISOString().slice(0, 10);
+  const before = snapshots.filter(s => s.date <= target);
+  return before.length ? before[before.length - 1].followers : null;
+}
+
+function renderSpGrowth() {
+  const byId = _spGrowthData;
+  if (!byId) return;
+  const kpisEl = document.getElementById('sp-growth-kpis');
+  const playlists = Object.values(byId);
+
+  if (!playlists.length) {
+    if (kpisEl) kpisEl.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:1/-1">No hay datos de historial. Ejecutá el Snapshot primero (📸).</div>';
+    return;
+  }
+
+  // Enrich with deltas
+  const enriched = playlists.map(pl => {
+    const current = pl.snapshots[pl.snapshots.length - 1]?.followers || 0;
+    const prev7 = spFollowersNDaysAgo(pl.snapshots, 7);
+    const prev30 = spFollowersNDaysAgo(pl.snapshots, 30);
+    return { ...pl, current, prev7, prev30, delta7: prev7 !== null ? current - prev7 : null, delta30: prev30 !== null ? current - prev30 : null };
+  }).sort((a, b) => b.current - a.current);
+
+  // KPIs
+  const totalFollowers = enriched.reduce((s, p) => s + p.current, 0);
+  const bestGainer = enriched.filter(p => p.delta7 !== null).sort((a, b) => b.delta7 - a.delta7)[0];
+  const topPl = enriched[0];
+  const withData7 = enriched.filter(p => p.delta7 !== null && p.delta7 !== 0);
+  const avgGrowth7 = withData7.length ? Math.round(withData7.reduce((s, p) => s + p.delta7, 0) / withData7.length) : 0;
+
+  if (kpisEl) kpisEl.innerHTML = `
+    <div class="sp-growth-kpi">
+      <div class="sp-growth-kpi-label">Playlists monitoreadas</div>
+      <div class="sp-growth-kpi-value">${enriched.length}</div>
+    </div>
+    <div class="sp-growth-kpi">
+      <div class="sp-growth-kpi-label">Total seguidores</div>
+      <div class="sp-growth-kpi-value">${totalFollowers.toLocaleString('es-AR')}</div>
+    </div>
+    <div class="sp-growth-kpi" style="border-color:${bestGainer?.delta7 > 0 ? 'rgba(16,185,129,0.4)' : 'var(--border)'}">
+      <div class="sp-growth-kpi-label">Mayor ganancia 7d</div>
+      <div class="sp-growth-kpi-value" style="color:${bestGainer?.delta7 > 0 ? '#10b981' : 'var(--text)'}">
+        ${bestGainer?.delta7 > 0 ? '+' + bestGainer.delta7.toLocaleString('es-AR') : '—'}
+      </div>
+      <div class="sp-growth-kpi-sub">${bestGainer?.name || '—'}</div>
+    </div>
+    <div class="sp-growth-kpi">
+      <div class="sp-growth-kpi-label">Promedio crecimiento 7d</div>
+      <div class="sp-growth-kpi-value" style="color:${avgGrowth7 >= 0 ? '#10b981' : '#ef4444'}">
+        ${avgGrowth7 >= 0 ? '+' : ''}${avgGrowth7.toLocaleString('es-AR')}
+      </div>
+      <div class="sp-growth-kpi-sub">por playlist</div>
+    </div>
+    <div class="sp-growth-kpi" style="border-color:rgba(99,102,241,0.4)">
+      <div class="sp-growth-kpi-label">Top playlist</div>
+      <div class="sp-growth-kpi-value" style="color:var(--indigo)">${topPl?.current.toLocaleString('es-AR') || 0}</div>
+      <div class="sp-growth-kpi-sub">${topPl?.name || '—'}</div>
+    </div>
+  `;
+
+  // Chart: top 15 by followers, default show top 10
+  const top15 = enriched.slice(0, 15);
+  if (!_spActivePlaylistIds.size) top15.slice(0, 10).forEach(p => _spActivePlaylistIds.add(p.id));
+
+  renderSpGrowthSelector(top15);
+  renderSpGrowthChart(byId, top15);
+  renderSpGrowthTable(enriched);
+}
+
+function renderSpGrowthSelector(top15) {
+  const el = document.getElementById('sp-growth-selector');
+  if (!el) return;
+  el.innerHTML = top15.map((p, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const active = _spActivePlaylistIds.has(p.id);
+    return `<button class="sp-pl-chip${active ? ' active' : ''}" style="border-color:${color};${active ? 'color:' + color : ''}" onclick="toggleSpGrowthPlaylist('${p.id}')">${p.name.length > 24 ? p.name.slice(0,24)+'…' : p.name}</button>`;
+  }).join('');
+}
+
+function toggleSpGrowthPlaylist(id) {
+  if (_spActivePlaylistIds.has(id)) {
+    if (_spActivePlaylistIds.size <= 1) return;
+    _spActivePlaylistIds.delete(id);
+  } else {
+    _spActivePlaylistIds.add(id);
+  }
+  const top15 = Object.values(_spGrowthData).sort((a, b) => {
+    const ac = a.snapshots[a.snapshots.length-1]?.followers || 0;
+    const bc = b.snapshots[b.snapshots.length-1]?.followers || 0;
+    return bc - ac;
+  }).slice(0, 15);
+  renderSpGrowthSelector(top15);
+  renderSpGrowthChart(_spGrowthData, top15);
+}
+
+function renderSpGrowthChart(byId, top15) {
+  const allDates = new Set();
+  Object.values(byId).forEach(pl => pl.snapshots.forEach(s => allDates.add(s.date)));
+  const sortedDates = Array.from(allDates).sort();
+  const active = top15.filter(p => _spActivePlaylistIds.has(p.id));
+
+  const datasets = active.map((p, idx) => {
+    const color = PALETTE[top15.indexOf(p) % PALETTE.length];
+    const snapshotMap = Object.fromEntries(p.snapshots.map(s => [s.date, s.followers]));
+    let last = null;
+    const data = sortedDates.map(d => {
+      if (snapshotMap[d] !== undefined) last = snapshotMap[d];
+      return last;
+    });
+    return {
+      label: p.name.length > 32 ? p.name.slice(0, 32) + '…' : p.name,
+      data,
+      borderColor: color,
+      backgroundColor: idx === 0 ? color + '15' : 'transparent',
+      borderWidth: idx === 0 ? 2.5 : 1.8,
+      tension: 0.35,
+      fill: idx === 0,
+      pointRadius: sortedDates.length <= 20 ? 3 : 0,
+      pointHoverRadius: 5,
+    };
+  });
+
+  const ctx = document.getElementById('chart-sp-growth');
+  if (!ctx) return;
+  if (_spGrowthChart) { _spGrowthChart.destroy(); _spGrowthChart = null; }
+
+  _spGrowthChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: sortedDates.map(d => {
+        const [y, m, day] = d.split('-');
+        return `${day}/${m}/${y.slice(2)}`;
+      }),
+      datasets,
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${(ctx.raw || 0).toLocaleString('es-AR')} seg.`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#6b7280', callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: '#6b7280', maxTicksLimit: 12 },
+        },
+      },
+    },
+  });
+}
+
+function renderSpGrowthTable(enriched) {
+  const el = document.getElementById('sp-growth-table');
+  if (!el || !enriched.length) return;
+  const rows = enriched.map((p, i) => {
+    const d7 = p.delta7, d30 = p.delta30;
+    const c7 = d7 > 0 ? '#10b981' : d7 < 0 ? '#ef4444' : 'var(--muted)';
+    const c30 = d30 > 0 ? '#10b981' : d30 < 0 ? '#ef4444' : 'var(--muted)';
+    const pct7  = p.prev7  > 0 && d7  !== null ? ((d7  / p.prev7)  * 100).toFixed(1) : null;
+    const pct30 = p.prev30 > 0 && d30 !== null ? ((d30 / p.prev30) * 100).toFixed(1) : null;
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 8px;font-size:12px;color:var(--muted);text-align:center;width:32px">${medal}</td>
+      <td style="padding:9px 8px;display:flex;align-items:center;gap:8px">
+        ${p.image ? `<img src="${p.image}" style="width:30px;height:30px;border-radius:4px;object-fit:cover;flex-shrink:0">` : '<div style="width:30px;height:30px;border-radius:4px;background:var(--border);flex-shrink:0"></div>'}
+        <span style="font-size:13px;font-weight:500">${p.name.length > 38 ? p.name.slice(0,38)+'…' : p.name}</span>
+      </td>
+      <td style="padding:9px 8px;font-size:14px;font-weight:600;text-align:right;white-space:nowrap">${p.current.toLocaleString('es-AR')}</td>
+      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${c7}">
+        ${d7 !== null ? (d7 > 0 ? '+' : '') + d7.toLocaleString('es-AR') : '—'}
+        ${pct7 && d7 !== 0 ? `<span style="opacity:0.65"> (${d7>0?'+':''}${pct7}%)</span>` : ''}
+      </td>
+      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${c30}">
+        ${d30 !== null ? (d30 > 0 ? '+' : '') + d30.toLocaleString('es-AR') : '—'}
+        ${pct30 && d30 !== 0 ? `<span style="opacity:0.65"> (${d30>0?'+':''}${pct30}%)</span>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:8px;font-size:10px;font-weight:600;text-align:center;color:var(--muted)">#</th>
+      <th style="padding:8px;font-size:10px;font-weight:600;text-align:left;color:var(--muted)">PLAYLIST</th>
+      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">SEGUIDORES</th>
+      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">7 DÍAS</th>
+      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">30 DÍAS</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 </script>
