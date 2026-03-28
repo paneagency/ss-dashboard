@@ -115,31 +115,37 @@ async function login(page) {
     'button[data-testid="login-button"], button[id="login-button"], button[type="submit"]'
   ).first();
   await continueBtn.click();
-  await sleep(4000);
+  await sleep(6000); // más tiempo para que cargue la pantalla de magic link
   await screenshot(page, '02-after-email');
 
+  // Diagnóstico: loguear todos los botones/links visibles para saber qué hay en pantalla
+  const visibleButtons = await page.evaluate(() => {
+    const els = [...document.querySelectorAll('button, a, [role="button"]')];
+    return els.map(e => e.textContent?.trim()).filter(t => t && t.length < 100).slice(0, 20);
+  });
+  console.log('  Elementos clickeables visibles:', visibleButtons.join(' | '));
+
   // 3. Si Spotify muestra "Enviamos un link" → clickear "Ingresar con contraseña"
-  //    Probamos múltiples variantes del texto (ES/EN/PT)
-  const passwordLinkSelectors = [
-    'a:has-text("password")',
-    'button:has-text("password")',
-    'a:has-text("contraseña")',
-    'button:has-text("contraseña")',
-    'a:has-text("senha")',
-    '[data-testid*="password"]',
-    'a[href*="password"]',
-    'span:has-text("password")',
-  ];
-  for (const sel of passwordLinkSelectors) {
-    const el = page.locator(sel).first();
-    const visible = await el.isVisible({ timeout: 1500 }).catch(() => false);
-    if (visible) {
-      console.log(`  → Clickeando "Log in with password" (${sel})...`);
-      await el.click();
-      await sleep(3000);
-      await screenshot(page, '03-after-password-link');
-      break;
+  //    Usamos evaluación directa para encontrar cualquier elemento con texto relacionado
+  const clickedPasswordLink = await page.evaluate(() => {
+    const keywords = ['password', 'contraseña', 'senha', 'mot de passe', 'passwor'];
+    const candidates = [...document.querySelectorAll('button, a, [role="button"], span')];
+    for (const el of candidates) {
+      const text = (el.textContent || '').toLowerCase().trim();
+      if (keywords.some(k => text.includes(k)) && el.offsetParent !== null) {
+        el.click();
+        return text;
+      }
     }
+    return null;
+  });
+
+  if (clickedPasswordLink) {
+    console.log(`  → Clickeado elemento con texto: "${clickedPasswordLink}"`);
+    await sleep(4000);
+    await screenshot(page, '03-after-password-link');
+  } else {
+    console.log('  → No se encontró link de contraseña (puede que ya esté en pantalla de password)');
   }
 
   // 4. Ingresar contraseña — esperar que el campo aparezca
@@ -147,12 +153,14 @@ async function login(page) {
     'input[data-testid="login-password"], input[name="password"], #login-password, input[type="password"]'
   ).first();
 
-  const pwVisible = await passwordInput.isVisible({ timeout: 8000 }).catch(() => false);
+  const pwVisible = await passwordInput.isVisible({ timeout: 10000 }).catch(() => false);
   if (!pwVisible) {
     await screenshot(page, '04-no-password-input');
     const url = page.url();
     console.log(`  URL actual: ${url}`);
-    // Verificar hostname estricto (no basta con includes: accounts.spotify.com?continue=...artists.spotify.com...)
+    // Log adicional de diagnóstico
+    const pageText = await page.evaluate(() => document.body.innerText?.slice(0, 500));
+    console.log('  Texto en pantalla:', pageText?.replace(/\n+/g, ' '));
     if (new URL(url).hostname === 'artists.spotify.com') {
       console.log('✅ Ya en artists.spotify.com (sin necesitar contraseña)');
       return;
