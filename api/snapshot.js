@@ -1,0 +1,249 @@
+// api/snapshot.js
+// Daily snapshot of all Spotify playlists → appends rows to HistorialPlaylists sheet.
+// Called once per day by a Make scheduled scenario (1 Make operation total).
+// Optional security: set SNAPSHOT_SECRET env var; pass as ?secret=xxx or body.secret
+
+const { google } = require('googleapis');
+
+const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
+const CAMPANAS_SHEET = 'CampañasCalendario';
+const ACTIVE_STATES  = ['activa','pendiente_pago','prueba','regalo','pendiente_inicio'];
+
+const SP_RANGES = [
+  { key: 'TOP5_20',   from: 6,  to: 20  },
+  { key: 'TOP20_40',  from: 21, to: 40  },
+  { key: 'TOP40_60',  from: 41, to: 60  },
+  { key: 'TOP60_70',  from: 61, to: 70  },
+  { key: 'TOP70_100', from: 71, to: 100 },
+];
+const SP_DEFAULT_CAPS = { TOP5_20: 3, TOP20_40: 5, TOP40_60: 10, TOP60_70: 10, TOP70_100: 30 };
+
+// ── Google Sheets ────────────────────────────────────────────
+function getSheets() {
+  const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+  const auth = new google.auth.GoogleAuth({
+    credentials: creds,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  return google.sheets({ version: 'v4', auth });
+}
+
+// ── Spotify Client Credentials ───────────────────────────────
+let _ccToken = null, _ccExpiry = 0;
+async function getCCToken() {
+  if (_ccToken && Date.now() < _ccExpiry) return _ccToken;
+  const creds = Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString('base64');
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials',
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(`Spotify CC token: ${d.error_description || d.error}`);
+  _ccToken = d.access_token;
+  _ccExpiry = Date.now() + (d.expires_in - 60) * 1000;
+  return _ccToken;
+}
+
+// ── Spotify OAuth (for listing our playlists) ────────────────
+async function kvGet(key) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['GET', key]),
+  });
+  const d = await r.json();
+  return d.result || null;
+}
+
+async function kvScan(pattern) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return [];
+  const keys = [];
+  let cursor = 0;
+  do {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SCAN', cursor, 'MATCH', pattern, 'COUNT', 100]),
+    });
+    const d = await r.json();
+    cursor = parseInt(d.result?.[0] || 0);
+    keys.push(...(d.result?.[1] || []));
+  } while (cursor !== 0);
+  return keys;
+}
+
+async function getOAuthToken() {
+  const clientId     = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const keys = await kvScan('spotify:owner:*');
+  if (!keys.length) throw new Error('No hay cuentas Spotify autorizadas');
+  const userId = keys[0].replace('spotify:owner:', '');
+  const refreshToken = await kvGet(`spotify:owner:${userId}`);
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(`OAuth token: ${d.error_description || d.error}`);
+  return d.access_token;
+}
+
+// ── Fetch all playlists via OAuth ────────────────────────────
+async function fetchAllPlaylists(accessToken) {
+  const playlists = [];
+  let url = 'https://api.spotify.com/v1/me/playlists?limit=50';
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(`Spotify playlists: ${d.error?.message || r.status}`);
+    playlists.push(...(d.items || []));
+    url = d.next || null;
+  }
+  return playlists;
+}
+
+// ── Fetch playlist detail + tracks via CC (no Make credits) ──
+async function fetchPlaylistDetail(playlistId, ccToken) {
+  // Get metadata (includes followers)
+  const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,followers,tracks.total,tracks.items(track(id,artists,name))`, {
+    headers: { Authorization: `Bearer ${ccToken}` },
+  });
+  if (!metaRes.ok) return null;
+  const meta = await metaRes.json();
+
+  // Build tracks list, paginate if needed
+  const tracks = [];
+  (meta.tracks?.items || []).forEach(item => {
+    if (item.track?.id) tracks.push({
+      position: tracks.length + 1,
+      id: item.track.id,
+      artist: item.track.artists?.[0]?.name || '',
+    });
+  });
+  let nextUrl = meta.tracks?.next || null;
+  while (nextUrl && tracks.length < 100) {
+    const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${ccToken}` } });
+    const d = await r.json();
+    (d.items || []).forEach(item => {
+      if (item.track?.id && tracks.length < 100) tracks.push({
+        position: tracks.length + 1,
+        id: item.track.id,
+        artist: item.track.artists?.[0]?.name || '',
+      });
+    });
+    nextUrl = d.next || null;
+  }
+
+  return {
+    id: meta.id,
+    name: meta.name,
+    followers: meta.followers?.total || 0,
+    totalTracks: meta.tracks?.total || 0,
+    tracks,
+  };
+}
+
+// ── Main handler ─────────────────────────────────────────────
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // Optional secret check
+  const secret = req.query.secret || req.body?.secret;
+  if (process.env.SNAPSHOT_SECRET && secret !== process.env.SNAPSHOT_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const sheets = getSheets();
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // 1. Build campTrackMap from active campaigns
+    const campResp = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${CAMPANAS_SHEET}!A:V`,
+    });
+    const campTrackMap = {};
+    (campResp.data.values || []).slice(1)
+      .filter(r => ACTIVE_STATES.includes(r[7]))
+      .forEach(r => {
+        const pauta = r[16] || '';
+        let m; const re = /open\.spotify\.com(?:\/intl-[^/]+)?\/track\/([A-Za-z0-9]+)/g;
+        while ((m = re.exec(pauta)) !== null) campTrackMap[m[1]] = r[0] || '';
+      });
+
+    // 2. Read capacities from CapacidadPlaylists
+    const capsResp = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'CapacidadPlaylists!A:G',
+    }).catch(() => ({ data: { values: [] } }));
+    const plCaps = {};
+    (capsResp.data.values || []).slice(1).forEach(r => {
+      if (!r[0]?.trim()) return;
+      plCaps[r[0].trim()] = {
+        TOP5_20:   parseInt(r[2]) || SP_DEFAULT_CAPS.TOP5_20,
+        TOP20_40:  parseInt(r[3]) || SP_DEFAULT_CAPS.TOP20_40,
+        TOP40_60:  parseInt(r[4]) || SP_DEFAULT_CAPS.TOP40_60,
+        TOP60_70:  parseInt(r[5]) || SP_DEFAULT_CAPS.TOP60_70,
+        TOP70_100: parseInt(r[6]) || SP_DEFAULT_CAPS.TOP70_100,
+      };
+    });
+
+    // 3. Get playlists via OAuth
+    const oauthToken = await getOAuthToken();
+    const playlists = await fetchAllPlaylists(oauthToken);
+
+    // 4. Get CC token for track fetching
+    const ccToken = await getCCToken();
+
+    // 5. Build snapshot row per playlist
+    const rows = [];
+    for (const pl of playlists) {
+      const detail = await fetchPlaylistDetail(pl.id, ccToken);
+      if (!detail) continue;
+      const caps = plCaps[pl.id] || SP_DEFAULT_CAPS;
+      const inCampaign = detail.tracks.filter(t => campTrackMap[t.id]).length;
+      const row = [
+        today,
+        detail.id,
+        detail.name,
+        detail.followers,
+        detail.totalTracks,
+        inCampaign,
+      ];
+      SP_RANGES.forEach(range => {
+        row.push(detail.tracks.filter(t => t.position >= range.from && t.position <= range.to && campTrackMap[t.id]).length);
+      });
+      SP_RANGES.forEach(range => {
+        row.push(caps[range.key]);
+      });
+      rows.push(row);
+    }
+
+    // 6. Append to HistorialPlaylists
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'HistorialPlaylists!A:P',
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      resource: { values: rows },
+    });
+
+    console.log(`Snapshot ${today}: ${rows.length} playlists guardadas`);
+    return res.json({ ok: true, date: today, playlists: rows.length, tracksInCampaign: Object.keys(campTrackMap).length });
+
+  } catch(e) {
+    console.error('snapshot error:', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+};

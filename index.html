@@ -1763,6 +1763,7 @@
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <span id="sp-account-info" class="sp-account-chip">🎵 —</span>
         <button class="btn-secondary" style="font-size:13px;padding:7px 14px" onclick="loadSpotifyTab(true)">⟳ Refrescar</button>
+        <button class="btn-secondary" style="font-size:13px;padding:7px 14px" onclick="runSnapshot(this)" title="Guarda snapshot de posiciones en HistorialPlaylists">📸 Snapshot</button>
         <button class="btn-primary" style="font-size:13px;padding:7px 14px" onclick="openSpotifyModal(null)">+ Nueva Playlist</button>
       </div>
     </div>
@@ -7959,6 +7960,23 @@ async function savePlaylistCaps(playlistId, nombre) {
 
 function closeSpotifyAnalysis() {
   document.getElementById('sp-analysis-modal').style.display = 'none';
+}
+
+async function runSnapshot(btn) {
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Guardando…';
+  try {
+    const r = await fetch('/api/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    showToast(`📸 Snapshot guardado: ${d.playlists} playlists — ${d.date}`, 'success');
+  } catch(e) {
+    showToast(e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 </script>
