@@ -29,6 +29,7 @@ const EMAIL          = process.env.SPOTIFY_EMAIL;
 const PASSWORD       = process.env.SPOTIFY_PASSWORD;
 const HEADLESS       = process.env.DEBUG !== 'true';
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
+const SESSION_FILE   = path.join(__dirname, 'session.json');
 
 // ── Google Sheets ─────────────────────────────────────────────
 function getSheets() {
@@ -415,17 +416,39 @@ async function main() {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
 
+  // Cargar sesión guardada si existe (evita login y email de seguridad)
+  const sessionExists = fs.existsSync(SESSION_FILE);
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
     locale: 'es-AR',
+    ...(sessionExists ? { storageState: SESSION_FILE } : {}),
   });
 
   const page = await context.newPage();
   const results = [];
 
   try {
-    await login(page);
+    // Verificar si la sesión guardada sigue válida
+    let loggedIn = false;
+    if (sessionExists) {
+      console.log('🔄 Intentando sesión guardada...');
+      await page.goto('https://artists.spotify.com/', { waitUntil: 'domcontentloaded', timeout: 20000 });
+      await sleep(3000);
+      loggedIn = new URL(page.url()).hostname === 'artists.spotify.com';
+      if (loggedIn) {
+        console.log('✅ Sesión reutilizada — sin nuevo login');
+      } else {
+        console.log('  Sesión expirada, haciendo login nuevo...');
+      }
+    }
+
+    if (!loggedIn) {
+      await login(page);
+      // Guardar sesión para el próximo run
+      await context.storageState({ path: SESSION_FILE });
+      console.log('💾 Sesión guardada para el próximo run');
+    }
 
     // Esperar a que el dashboard cargue completamente
     await sleep(3000);

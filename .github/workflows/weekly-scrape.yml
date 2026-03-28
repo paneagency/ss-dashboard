@@ -31,6 +31,13 @@ jobs:
         working-directory: scraper
         run: npx playwright install chromium --with-deps
 
+      - name: Restaurar sesión Spotify guardada
+        uses: actions/cache@v4
+        with:
+          path: scraper/session.json
+          key: spotify-session-${{ runner.os }}
+          restore-keys: spotify-session-
+
       - name: Run scraper
         working-directory: scraper
         env:
@@ -38,6 +45,13 @@ jobs:
           SPOTIFY_PASSWORD: ${{ secrets.SPOTIFY_PASSWORD }}
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: node spotify-artists.js
+
+      - name: Guardar sesión Spotify para próximo run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: scraper/session.json
+          key: spotify-session-${{ runner.os }}-${{ github.run_id }}
 
       - name: Upload screenshots (siempre, para debugging)
         if: always()
