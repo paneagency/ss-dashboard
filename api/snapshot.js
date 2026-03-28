@@ -163,6 +163,30 @@ module.exports = async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // ── DEBUG: ver respuesta cruda de Spotify para una playlist ──
+  if (req.query.action === 'debug' && req.query.playlistId) {
+    try {
+      const oauthToken = await getOAuthToken();
+      const r = await fetch(`https://api.spotify.com/v1/playlists/${req.query.playlistId}`, {
+        headers: { Authorization: `Bearer ${oauthToken}` },
+      });
+      const raw = await r.json();
+      return res.json({
+        status: r.status,
+        hasFollowers: !!raw.followers,
+        followersTotal: raw.followers?.total,
+        hasTracks: !!raw.tracks,
+        tracksTotal: raw.tracks?.total,
+        tracksItemsCount: raw.tracks?.items?.length,
+        tracksNext: raw.tracks?.next,
+        firstTrack: raw.tracks?.items?.[0]?.track?.name || null,
+        error: raw.error || null,
+      });
+    } catch(e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   try {
     const sheets = getSheets();
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
