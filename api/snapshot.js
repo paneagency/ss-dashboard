@@ -113,7 +113,7 @@ async function fetchAllPlaylists(accessToken) {
 // ── Fetch playlist detail + tracks via CC (no Make credits) ──
 async function fetchPlaylistDetail(playlistId, ccToken) {
   // Get metadata (includes followers)
-  const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,followers,tracks.total,tracks.items(track(id,artists,name))`, {
+  const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
     headers: { Authorization: `Bearer ${ccToken}` },
   });
   if (!metaRes.ok) return null;
