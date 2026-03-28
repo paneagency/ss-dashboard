@@ -112,25 +112,22 @@ async function fetchAllPlaylists(accessToken) {
 
 // ── Fetch playlist detail + tracks via OAuth ─────────────────
 async function fetchPlaylistDetail(playlistId, accessToken) {
-  const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const headers = { Authorization: `Bearer ${accessToken}` };
+
+  // Metadata (followers, name) — tracks field may be null in some cases
+  const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, { headers });
   if (!metaRes.ok) return null;
   const meta = await metaRes.json();
 
-  // Build tracks list, paginate if needed
+  // Dedicated tracks endpoint — always works regardless of tracks field in meta
   const tracks = [];
-  (meta.tracks?.items || []).forEach(item => {
-    if (item.track?.id) tracks.push({
-      position: tracks.length + 1,
-      id: item.track.id,
-      artist: item.track.artists?.[0]?.name || '',
-    });
-  });
-  let nextUrl = meta.tracks?.next || null;
-  while (nextUrl && tracks.length < 100) {
-    const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  let tracksUrl = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=items(track(id,artists,name)),next,total`;
+  let totalTracks = 0;
+  while (tracksUrl && tracks.length < 100) {
+    const r = await fetch(tracksUrl, { headers });
+    if (!r.ok) break;
     const d = await r.json();
+    if (!totalTracks) totalTracks = d.total || 0;
     (d.items || []).forEach(item => {
       if (item.track?.id && tracks.length < 100) tracks.push({
         position: tracks.length + 1,
@@ -138,14 +135,14 @@ async function fetchPlaylistDetail(playlistId, accessToken) {
         artist: item.track.artists?.[0]?.name || '',
       });
     });
-    nextUrl = d.next || null;
+    tracksUrl = d.next || null;
   }
 
   return {
     id: meta.id,
     name: meta.name,
     followers: meta.followers?.total || 0,
-    totalTracks: meta.tracks?.total || 0,
+    totalTracks,
     tracks,
   };
 }
@@ -171,16 +168,20 @@ module.exports = async (req, res) => {
         headers: { Authorization: `Bearer ${oauthToken}` },
       });
       const raw = await r.json();
+      // Also test dedicated tracks endpoint
+      const tr = await fetch(`https://api.spotify.com/v1/playlists/${req.query.playlistId}/tracks?limit=3`, {
+        headers: { Authorization: `Bearer ${oauthToken}` },
+      });
+      const tracksData = await tr.json();
       return res.json({
-        status: r.status,
-        hasFollowers: !!raw.followers,
+        meta_status: r.status,
         followersTotal: raw.followers?.total,
-        hasTracks: !!raw.tracks,
-        tracksTotal: raw.tracks?.total,
-        tracksItemsCount: raw.tracks?.items?.length,
-        tracksNext: raw.tracks?.next,
-        firstTrack: raw.tracks?.items?.[0]?.track?.name || null,
-        error: raw.error || null,
+        meta_hasTracks: !!raw.tracks,
+        tracks_status: tr.status,
+        tracks_total: tracksData.total,
+        tracks_itemsCount: tracksData.items?.length,
+        firstTrack: tracksData.items?.[0]?.track?.name || null,
+        tracks_error: tracksData.error || null,
       });
     } catch(e) {
       return res.status(500).json({ error: e.message });
