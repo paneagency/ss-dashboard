@@ -53,6 +53,59 @@ module.exports = async (req, res) => {
   try {
     const sheets = getSheets();
 
+    // ── CAPACIDAD DE PLAYLISTS ─────────────────────────────────
+    if (req.method === 'GET' && req.query.mode === 'playlist-caps') {
+      const resp = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'CapacidadPlaylists!A:G',
+      }).catch(() => ({ data: { values: [] } }));
+      const rows = (resp.data.values || []).slice(1); // skip header
+      const caps = {};
+      rows.forEach(r => {
+        if (!r[0]?.trim()) return;
+        caps[r[0].trim()] = {
+          nombre: r[1]?.trim() || '',
+          TOP5_20:   parseInt(r[2]) || 5,
+          TOP20_40:  parseInt(r[3]) || 8,
+          TOP40_60:  parseInt(r[4]) || 10,
+          TOP60_70:  parseInt(r[5]) || 10,
+          TOP70_100: parseInt(r[6]) || 20,
+        };
+      });
+      return res.json({ caps });
+    }
+
+    if (req.method === 'POST' && req.body.mode === 'playlist-caps') {
+      const { playlistId, nombre, TOP5_20, TOP20_40, TOP40_60, TOP60_70, TOP70_100 } = req.body;
+      if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
+      // Read current rows to find if playlist already exists
+      const existing = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'CapacidadPlaylists!A:A',
+      }).catch(() => ({ data: { values: [] } }));
+      const rows = existing.data.values || [];
+      let rowIndex = rows.findIndex((r, i) => i > 0 && r[0]?.trim() === playlistId);
+      const newRow = [playlistId, nombre || '', TOP5_20 ?? 5, TOP20_40 ?? 8, TOP40_60 ?? 10, TOP60_70 ?? 10, TOP70_100 ?? 20];
+      if (rowIndex > 0) {
+        // Update existing row (rowIndex is 0-based array index, sheet row = rowIndex+1)
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `CapacidadPlaylists!A${rowIndex + 1}:G${rowIndex + 1}`,
+          valueInputOption: 'RAW',
+          resource: { values: [newRow] },
+        });
+      } else {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: 'CapacidadPlaylists!A:G',
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: { values: [newRow] },
+        });
+      }
+      return res.json({ ok: true });
+    }
+
     // ── LISTA DE VENDEDORES ────────────────────────────────────
     if (req.method === 'GET') {
       const [vendResp, provResp] = await Promise.all([

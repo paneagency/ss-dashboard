@@ -7659,13 +7659,14 @@ let _spEditingId = null;
 let _spCoverBase64 = null;
 
 const SP_RANGES = [
-  { label: 'Top 1–5',    from: 1,  to: 5,   color: '#f59e0b' },
-  { label: 'Top 5–20',   from: 6,  to: 20,  color: '#6366f1' },
-  { label: 'Top 20–40',  from: 21, to: 40,  color: '#8b5cf6' },
-  { label: 'Top 40–60',  from: 41, to: 60,  color: '#06b6d4' },
-  { label: 'Top 60–70',  from: 61, to: 70,  color: '#10b981' },
-  { label: 'Top 70–100', from: 71, to: 100, color: '#6b7280' },
+  { label: 'Top 5–20',   key: 'TOP5_20',   from: 6,  to: 20,  color: '#6366f1' },
+  { label: 'Top 20–40',  key: 'TOP20_40',  from: 21, to: 40,  color: '#8b5cf6' },
+  { label: 'Top 40–60',  key: 'TOP40_60',  from: 41, to: 60,  color: '#06b6d4' },
+  { label: 'Top 60–70',  key: 'TOP60_70',  from: 61, to: 70,  color: '#10b981' },
+  { label: 'Top 70–100', key: 'TOP70_100', from: 71, to: 100, color: '#6b7280' },
 ];
+const SP_DEFAULT_CAPS = { TOP5_20: 5, TOP20_40: 8, TOP40_60: 10, TOP60_70: 10, TOP70_100: 20 };
+let _playlistCaps = {};
 
 async function loadSpotifyTab(force = false) {
   if (_spLoaded && !force) return;
@@ -7673,9 +7674,13 @@ async function loadSpotifyTab(force = false) {
   if (!grid) return;
   grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:60px;grid-column:1/-1">Cargando playlists...</div>';
   try {
-    const r = await fetch('/api/spotify-manage?action=playlists');
+    const [r, capsR] = await Promise.all([
+      fetch('/api/spotify-manage?action=playlists'),
+      fetch('/api/sheets?mode=playlist-caps').catch(() => null),
+    ]);
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || 'Error al cargar playlists');
+    if (capsR) { const capsD = await capsR.json().catch(() => ({})); if (capsD.caps) _playlistCaps = capsD.caps; }
     _spPlaylists = data.playlists;
     _spLoaded = true;
     const chip = document.getElementById('sp-account-info');
@@ -7840,13 +7845,19 @@ async function analyzeSpotifyPlaylist(idx) {
 }
 
 function renderSpotifyAnalysis(tracks, campTrackMap, playlist) {
-  const total = tracks.length;
+  const playlistTotalTracks = playlist?.totalTracks || tracks.length;
+  const playlistId = playlist?.id || '';
   const playlistIds = new Set(tracks.map(t => t.id));
+  const caps = _playlistCaps[playlistId] || {};
   const followers = playlist?.followers ?? '—';
   const owner = playlist?.owner || '';
   const desc = playlist?.description || '';
   const purl = playlist?.url || '';
   const followersStr = typeof followers === 'number' ? followers.toLocaleString('es-AR') : followers;
+
+  // "En campaña" = solo tracks de esta playlist que están en campañas activas
+  const inCampaignCount = tracks.filter(t => campTrackMap[t.id]).length;
+
   let html = `
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap">
       ${playlist?.image ? `<img src="${playlist.image}" style="width:72px;height:72px;border-radius:8px;object-fit:cover;flex-shrink:0">` : ''}
@@ -7854,23 +7865,36 @@ function renderSpotifyAnalysis(tracks, campTrackMap, playlist) {
         ${desc ? `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.4">${desc}</div>` : ''}
         <div style="display:flex;gap:16px;flex-wrap:wrap">
           <div style="font-size:13px;color:var(--muted)">👥 Seguidores: <strong style="color:var(--text)">${followersStr}</strong></div>
-          <div style="font-size:13px;color:var(--muted)">🎵 Tracks: <strong style="color:var(--text)">${total}</strong></div>
-          <div style="font-size:13px;color:var(--muted)">💰 En campaña: <strong style="color:var(--indigo)">${Object.keys(campTrackMap).length}</strong></div>
+          <div style="font-size:13px;color:var(--muted)">🎵 Tracks: <strong style="color:var(--text)">${playlistTotalTracks}</strong></div>
+          <div style="font-size:13px;color:var(--muted)">💰 En campaña: <strong style="color:var(--indigo)">${inCampaignCount}</strong></div>
           ${owner ? `<div style="font-size:13px;color:var(--muted)">👤 ${owner}</div>` : ''}
           ${purl ? `<a href="${purl}" target="_blank" style="font-size:12px;color:var(--indigo)">Abrir en Spotify ↗</a>` : ''}
         </div>
       </div>
     </div>
     <div style="border-top:1px solid var(--border);margin-bottom:16px"></div>`;
+
   SP_RANGES.forEach(range => {
-    const rangeTracks = tracks.filter(t => t.position >= range.from && t.position <= range.to);
-    const slots = range.to - range.from + 1;
-    const used = rangeTracks.length;
-    const paidTracks = rangeTracks.filter(t => campTrackMap[t.id]);
-    const paid = paidTracks.length;
-    const available = Math.max(0, slots - used);
-    const pct = slots > 0 ? Math.round((used / slots) * 100) : 0;
-    const artistBadges = paidTracks.map(t =>
+    const capacity = caps[range.key] ?? SP_DEFAULT_CAPS[range.key];
+    // Fuera del alcance de la playlist
+    if (range.from > playlistTotalTracks) {
+      html += `
+      <div class="sp-range-row" style="opacity:0.38">
+        <div class="sp-range-label" style="color:var(--muted)">${range.label}</div>
+        <div class="sp-range-bar-wrap">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px">No disponible — la playlist tiene ${playlistTotalTracks} tracks</div>
+          <div class="sp-range-bar"></div>
+        </div>
+      </div>`;
+      return;
+    }
+    // Tracks de campaña en este rango
+    const campTracksInRange = tracks.filter(t => t.position >= range.from && t.position <= range.to && campTrackMap[t.id]);
+    const occupied = campTracksInRange.length;
+    const available = Math.max(0, capacity - occupied);
+    const pct = capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0;
+    const isFull = occupied >= capacity;
+    const artistBadges = campTracksInRange.map(t =>
       `<span style="background:rgba(99,102,241,0.15);color:var(--indigo);border-radius:4px;padding:2px 7px;font-size:11px;white-space:nowrap">${campTrackMap[t.id]} — ${t.name}</span>`
     ).join('');
     html += `
@@ -7878,16 +7902,36 @@ function renderSpotifyAnalysis(tracks, campTrackMap, playlist) {
         <div class="sp-range-label" style="color:${range.color}">${range.label}</div>
         <div class="sp-range-bar-wrap">
           <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:3px">
-            <span>${used}/${slots} ocupados · <strong style="color:${available > 0 ? '#10b981' : '#ef4444'}">${available} libre${available !== 1 ? 's' : ''}</strong></span>
-            ${paid > 0 ? `<span style="color:var(--indigo)">💰 ${paid} pago${paid !== 1 ? 's' : ''}</span>` : ''}
+            <span>${occupied}/${capacity} vendido${occupied !== 1 ? 's' : ''} · <strong style="color:${available > 0 ? '#10b981' : '#ef4444'}">${available} disponible${available !== 1 ? 's' : ''}</strong></span>
+            ${isFull ? `<span style="color:#ef4444;font-weight:600;font-size:11px">● LLENO</span>` : (occupied > 0 ? `<span style="color:var(--indigo);font-size:11px">💰 ${occupied} pago${occupied !== 1 ? 's' : ''}</span>` : '')}
           </div>
           <div class="sp-range-bar"><div class="sp-range-fill" style="width:${pct}%;background:${range.color}"></div></div>
-          ${paid > 0 ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${artistBadges}</div>` : ''}
+          ${artistBadges ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${artistBadges}</div>` : ''}
         </div>
       </div>`;
   });
-  const outOfRange = tracks.filter(t => t.position > 100);
-  if (outOfRange.length) html += `<div style="font-size:12px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">+ ${outOfRange.length} tracks fuera del Top 100</div>`;
+
+  // Editor de capacidades (toggle)
+  const capVals = SP_RANGES.map(r => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0">
+      <label style="font-size:12px;color:var(--muted);flex:1">${r.label}</label>
+      <input type="number" min="0" max="99" value="${caps[r.key] ?? SP_DEFAULT_CAPS[r.key]}"
+        data-cap-key="${r.key}"
+        style="width:60px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;text-align:center">
+    </div>`).join('');
+  html += `
+    <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">
+      <button onclick="toggleSpCapsEditor()" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;padding:0">⚙️ Editar capacidades</button>
+      <div id="sp-caps-editor" style="display:none;margin-top:12px;background:var(--surface-2,rgba(255,255,255,0.03));border:1px solid var(--border);border-radius:8px;padding:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Espacios disponibles para venta por tier</div>
+        ${capVals}
+        <button onclick="savePlaylistCaps('${playlistId}','${(playlist?.name||'').replace(/'/g,'')}')"
+          style="margin-top:10px;padding:6px 16px;border-radius:6px;background:var(--indigo);color:#fff;border:none;cursor:pointer;font-size:12px">
+          Guardar capacidades
+        </button>
+      </div>
+    </div>`;
+
   // Tracks de campañas activas que NO están en esta playlist
   const missing = Object.entries(campTrackMap).filter(([id]) => !playlistIds.has(id));
   if (missing.length) html += `
@@ -7896,6 +7940,28 @@ function renderSpotifyAnalysis(tracks, campTrackMap, playlist) {
       ${missing.map(([id, artista]) => `<div style="font-size:12px;color:var(--muted);margin-bottom:3px">• <strong>${artista}</strong> — <a href="https://open.spotify.com/track/${id}" target="_blank" style="color:var(--indigo)">${id}</a></div>`).join('')}
     </div>`;
   document.getElementById('sp-analysis-body').innerHTML = html;
+}
+
+function toggleSpCapsEditor() {
+  const el = document.getElementById('sp-caps-editor');
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function savePlaylistCaps(playlistId, nombre) {
+  const inputs = document.querySelectorAll('#sp-caps-editor [data-cap-key]');
+  const body = { mode: 'playlist-caps', playlistId, nombre };
+  inputs.forEach(inp => { body[inp.dataset.capKey] = parseInt(inp.value) || 0; });
+  try {
+    const r = await fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    // Update local cache
+    _playlistCaps[playlistId] = { nombre, ...Object.fromEntries(SP_RANGES.map(r2 => [r2.key, body[r2.key]])) };
+    showToast('Capacidades guardadas', 'success');
+    document.getElementById('sp-caps-editor').style.display = 'none';
+  } catch(e) {
+    showToast(e.message, true);
+  }
 }
 
 function closeSpotifyAnalysis() {
