@@ -201,191 +201,147 @@ async function login(page) {
   }
 }
 
+// ── Parser de texto de Spotify for Artists (tab "Playlists") ──
+// Formato real del innerText:
+//   "1\t\nCUMBIA ARGENTINA 2026\n—\t36,881\t20 may 2022\n"
+//   "18\t\nMixes\n\nSpotify\t301\t—\n"
+function parsePlaylistsText(rawText) {
+  const playlists = [];
+  const lines = rawText.split('\n').map(l => l.trim());
+
+  for (let i = 0; i < lines.length; i++) {
+    // Detectar línea de posición: número solo (con o sin tab al final)
+    const posMatch = lines[i].match(/^(\d+)\t?$/);
+    if (!posMatch) continue;
+    const position = parseInt(posMatch[1]);
+
+    // Siguiente línea no vacía y no especial = nombre de playlist
+    let name = '';
+    for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+      const l = lines[j];
+      if (l && l !== '—' && !/^Spotify$/.test(l) && !/^\d+\t?$/.test(l)) {
+        name = l.replace(/\t.*$/, '').trim();
+        break;
+      }
+    }
+    if (!name) continue;
+
+    // Buscar streams: línea con patrón "—\t{número}" o "Spotify\t{número}"
+    let streams = null;
+    for (let k = i + 1; k < Math.min(i + 7, lines.length); k++) {
+      // Formato con tabs: "—\t36,881\t..." o "Spotify\t301\t—"
+      const m = lines[k].match(/(?:—|Spotify)\t([\d,.]+)/);
+      if (m) {
+        streams = parseInt(m[1].replace(/[,.]/g, ''));
+        break;
+      }
+      // Fallback: línea que es solo un número con comas (ej: "36,881")
+      const numOnly = lines[k].match(/^([\d,.]+)$/);
+      if (numOnly && parseInt(numOnly[1].replace(/[,.]/g, '')) > 0) {
+        streams = parseInt(numOnly[1].replace(/[,.]/g, ''));
+        break;
+      }
+    }
+
+    if (streams !== null && streams > 0) {
+      playlists.push({ position, name, streams });
+    }
+  }
+
+  return playlists;
+}
+
 // ── Scrape track sources ──────────────────────────────────────
 async function scrapeTrackSources(page, ref) {
   console.log(`\n🎵 ${ref.artista} — "${ref.trackName}"`);
-  console.log(`   Playlist objetivo: "${ref.playlist}" (pos. ${ref.posicion})`);
 
-  // Navegar a la página de canciones del artista
-  const songsUrl = `https://artists.spotify.com/c/artist/${ref.artistId}/music/songs`;
-  await page.goto(songsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await sleep(3000);
-  await screenshot(page, `03-songs-${ref.artistId}`);
-
-  // Intentar ir directo al track
-  // Spotify for Artists puede tener URL directa al track
+  // Navegar directo al track
   const trackUrl = `https://artists.spotify.com/c/artist/${ref.artistId}/music/songs/${ref.trackId}`;
   await page.goto(trackUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await sleep(3000);
+  await sleep(4000);
+  await screenshot(page, `03-track-${ref.trackId}`);
 
-  // Si no navegó al track, buscar la canción en la lista y clickear
-  const currentUrl = page.url();
-  if (!currentUrl.includes(ref.trackId)) {
-    console.log('  → URL directa no funcionó, buscando en lista...');
-    await page.goto(songsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await sleep(3000);
-
-    // Buscar la fila de la canción por nombre
-    const trackRow = page.locator(`tr:has-text("${ref.trackName}"), li:has-text("${ref.trackName}")`).first();
-    const found = await trackRow.isVisible({ timeout: 8000 }).catch(() => false);
-    if (found) {
-      await trackRow.click();
-      await sleep(3000);
-    } else {
-      console.log(`  ⚠️  No se encontró "${ref.trackName}" en la lista`);
-      await screenshot(page, `04-track-notfound-${ref.trackId}`);
-      return null;
-    }
+  // Verificar que llegamos a la página del track
+  if (!page.url().includes('artists.spotify.com')) {
+    console.log('  ⚠️  Redirigido fuera de artists.spotify.com, posible sesión expirada');
+    return { ...ref, streams28d: null, fuenteCompleta: 'sesión expirada' };
   }
 
-  await screenshot(page, `04-track-${ref.trackId}`);
-
-  // Buscar sección de Sources / Fuentes
-  // Intentar selector del período 28 días
-  await setTimePeriod28d(page);
-  await sleep(2000);
-  await screenshot(page, `05-sources-${ref.trackId}`);
-
-  // Extraer la tabla de fuentes
-  return await extractSourceData(page, ref);
-}
-
-async function setTimePeriod28d(page) {
-  // Buscar un selector de período de tiempo y poner 28 días
-  const selectors = [
-    'button:has-text("28")',
-    '[data-testid*="timerange"]:has-text("28")',
-    'select option[value*="28"]',
-    'li:has-text("28 days")',
-    'li:has-text("28 días")',
-    'button:has-text("Last 28")',
-    'button:has-text("Últimos 28")',
-  ];
-  for (const sel of selectors) {
-    const el = page.locator(sel).first();
-    const visible = await el.isVisible({ timeout: 1500 }).catch(() => false);
-    if (visible) {
-      await el.click();
-      console.log('  → Período 28d seleccionado');
-      return;
-    }
+  // Seleccionar período de 28 días si está disponible
+  const period28 = page.locator('button:has-text("28"), li:has-text("28 d"), [aria-label*="28"]').first();
+  if (await period28.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await period28.click();
+    await sleep(1500);
+    console.log('  → Período 28d seleccionado');
   }
-  console.log('  ℹ️  No se encontró selector de período (usando default)');
-}
 
-async function extractSourceData(page, ref) {
-  // Buscar tabla/lista de fuentes de streams
-  // Spotify for Artists muestra una sección con el desglose por fuente
-  await page.waitForTimeout(2000);
-
-  // Intentar encontrar la sección de fuentes / sources
-  const sourcesHeading = page.locator([
-    'h2:has-text("Sources")',
-    'h2:has-text("Fuentes")',
-    '[data-testid*="sources"]',
-    'section:has-text("Playlists")',
-    'div:has-text("Spotify Playlists")',
+  // Clickear tab "Playlists"
+  const playlistsTab = page.locator([
+    'button:has-text("Playlists")',
+    'a:has-text("Playlists")',
+    '[role="tab"]:has-text("Playlists")',
+    'li:has-text("Playlists")',
   ].join(', ')).first();
 
-  const headingVisible = await sourcesHeading.isVisible({ timeout: 5000 }).catch(() => false);
-  if (!headingVisible) {
-    console.log('  ⚠️  No se encontró sección de fuentes');
-    await screenshot(page, `06-nosources-${ref.trackId}`);
-    // Intentar extraer de toda la página de todas formas
+  const tabFound = await playlistsTab.isVisible({ timeout: 8000 }).catch(() => false);
+  if (!tabFound) {
+    console.log('  ⚠️  Tab "Playlists" no encontrado');
+    await screenshot(page, `04-notab-${ref.trackId}`);
+    return { ...ref, streams28d: null, fuenteCompleta: 'tab Playlists no encontrado' };
   }
 
-  // Estrategia 1: buscar la playlist por nombre en la página completa
-  // y extraer el número de streams cercano
-  const pageContent = await page.content();
-  const streams28d = await findPlaylistStreamsInPage(page, ref.playlist);
+  await playlistsTab.click();
+  console.log('  → Tab Playlists clickeado');
+  await sleep(4000); // esperar que cargue la lista completa
+  await screenshot(page, `04-playlists-${ref.trackId}`);
 
-  if (streams28d !== null) {
-    console.log(`  ✅ "${ref.playlist}": ${streams28d.toLocaleString()} streams (28d)`);
-    return {
-      ...ref,
-      streams28d,
-      fuenteCompleta: await getAllSourcesText(page),
-    };
+  // Extraer innerText del área principal (donde están las playlists)
+  const rawText = await page.evaluate(() => {
+    // Intentar el contenedor principal del contenido
+    const candidates = [
+      document.querySelector('main'),
+      document.querySelector('[role="main"]'),
+      document.querySelector('table'),
+      document.body,
+    ];
+    for (const el of candidates) {
+      if (el && el.innerText && el.innerText.length > 100) return el.innerText;
+    }
+    return document.body.innerText;
+  });
+
+  // Parsear todas las playlists del texto
+  const allPlaylists = parsePlaylistsText(rawText);
+  console.log(`  📋 ${allPlaylists.length} playlists encontradas en el texto`);
+
+  if (!allPlaylists.length) {
+    await screenshot(page, `05-nodata-${ref.trackId}`);
+    // Log primeras líneas del texto para diagnóstico
+    console.log('  Primeras líneas del texto:');
+    rawText.split('\n').slice(0, 20).forEach(l => l.trim() && console.log('    |' + l));
   }
 
-  // Estrategia 2: volcar todas las fuentes y hacer matching flexible
-  const allSources = await extractAllSources(page);
-  console.log(`  📋 Fuentes encontradas: ${allSources.map(s => s.name).join(', ') || 'ninguna'}`);
-
-  const match = allSources.find(s =>
-    s.name.toLowerCase().includes(ref.playlist.toLowerCase()) ||
-    ref.playlist.toLowerCase().includes(s.name.toLowerCase().split(' ').slice(0, 3).join(' '))
+  // Buscar la playlist objetivo (matching flexible)
+  const target = ref.playlist.toLowerCase();
+  const match = allPlaylists.find(p =>
+    p.name.toLowerCase() === target ||
+    p.name.toLowerCase().includes(target) ||
+    target.includes(p.name.toLowerCase().split(' ').slice(0, 4).join(' '))
   );
 
+  const top10 = allPlaylists.slice(0, 10).map(p => `${p.position}. ${p.name}: ${p.streams.toLocaleString()}`).join(' | ');
+
   if (match) {
-    console.log(`  ✅ Match: "${match.name}" → ${match.streams?.toLocaleString()} streams`);
-    return {
-      ...ref,
-      streams28d: match.streams,
-      fuenteCompleta: allSources.map(s => `${s.name}: ${s.streams}`).join(' | '),
-    };
+    console.log(`  ✅ "${match.name}" pos.${match.position}: ${match.streams.toLocaleString()} streams`);
+  } else {
+    console.log(`  ℹ️  "${ref.playlist}" no encontrada. Top: ${top10 || 'ninguna'}`);
   }
 
-  console.log(`  ⚠️  Playlist "${ref.playlist}" no encontrada en fuentes`);
-  await screenshot(page, `06-nomatch-${ref.trackId}`);
   return {
     ...ref,
-    streams28d: null,
-    fuenteCompleta: allSources.map(s => `${s.name}: ${s.streams}`).join(' | ') || 'sin datos',
+    streams28d: match?.streams ?? null,
+    fuenteCompleta: allPlaylists.slice(0, 30).map(p => `${p.position}|${p.name}|${p.streams}`).join('; '),
   };
-}
-
-async function findPlaylistStreamsInPage(page, playlistName) {
-  try {
-    // Buscar el texto de la playlist en la página
-    const el = page.locator(`*:has-text("${playlistName}")`).last();
-    const visible = await el.isVisible({ timeout: 3000 }).catch(() => false);
-    if (!visible) return null;
-
-    // Buscar el número cercano a ese elemento
-    const parent = el.locator('..');
-    const text = await parent.textContent({ timeout: 2000 }).catch(() => '');
-    const nums = text.match(/[\d.,]+/g);
-    if (nums?.length) return parseStreams(nums[nums.length - 1]);
-    return null;
-  } catch { return null; }
-}
-
-async function extractAllSources(page) {
-  const sources = [];
-  try {
-    // Buscar todas las filas de la tabla de fuentes
-    // Los selectores varían por versión de Spotify for Artists
-    const rows = await page.locator([
-      'table tr',
-      '[data-testid*="row"]',
-      'li[class*="source"]',
-      'div[class*="source"]',
-    ].join(', ')).all();
-
-    for (const row of rows.slice(0, 30)) { // máximo 30 fuentes
-      const text = await row.textContent().catch(() => '');
-      if (!text?.trim()) continue;
-      // Intentar extraer nombre y número
-      const parts = text.trim().split(/\s{2,}|\t/);
-      if (parts.length >= 2) {
-        const name = parts[0].trim();
-        const numStr = parts.find(p => /^[\d.,]+$/.test(p.trim()));
-        const streams = numStr ? parseStreams(numStr) : null;
-        if (name && streams !== null) sources.push({ name, streams });
-      }
-    }
-  } catch(e) {
-    console.log('  ℹ️  Error extrayendo fuentes:', e.message);
-  }
-  return sources;
-}
-
-async function getAllSourcesText(page) {
-  try {
-    const sources = await extractAllSources(page);
-    return sources.map(s => `${s.name}: ${s.streams}`).join(' | ');
-  } catch { return ''; }
 }
 
 // ── Main ──────────────────────────────────────────────────────
