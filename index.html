@@ -8501,6 +8501,7 @@ function renderSpGrowthTable(enriched) {
 
 // ── Proveedores Spotify ───────────────────────────────────────
 let _spProviders = [];
+let _spProviderPreviews = {}; // grupo → { loading, playlists[] }
 
 function extractSpotifyUserId(input) {
   const m = input.match(/spotify\.com\/user\/([^?/\s]+)/);
@@ -8529,19 +8530,80 @@ function renderSpProviders() {
   }
   const byGrupo = {};
   _spProviders.forEach(p => { if (!byGrupo[p.grupo]) byGrupo[p.grupo] = []; byGrupo[p.grupo].push(p); });
-  el.innerHTML = Object.entries(byGrupo).map(([grupo, entries]) => `
+  el.innerHTML = Object.entries(byGrupo).map(([grupo, entries]) => {
+    const grupoKey = encodeURIComponent(grupo);
+    const preview = _spProviderPreviews[grupo];
+    const previewOpen = preview && !preview.loading;
+    return `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">${grupo}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:14px;font-weight:600;color:var(--text)">${grupo}</div>
+        <button onclick="toggleSpProviderPreview('${grupo.replace(/'/g,"\\'")}')"
+          style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:var(--indigo);border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;transition:background 0.15s"
+          onmouseenter="this.style.background='rgba(99,102,241,0.2)'" onmouseleave="this.style.background='rgba(99,102,241,0.1)'">
+          ${preview?.loading ? '⟳ Cargando...' : previewOpen ? '▲ Ocultar playlists' : '▶ Ver playlists'}
+        </button>
+      </div>
       ${entries.map(e => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--border2)">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border2)">
           <div style="font-size:12px;color:var(--muted)">
             <a href="https://open.spotify.com/user/${e.userId}" target="_blank" style="color:var(--indigo);text-decoration:none;font-family:monospace">${e.userId}</a>
           </div>
           <button onclick="deleteSpProvider(${e.row})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;line-height:1" title="Eliminar perfil">🗑️</button>
         </div>
       `).join('')}
+      ${previewOpen ? renderSpProviderPlaylistsHtml(preview.playlists) : ''}
     </div>
-  `).join('');
+  `}).join('');
+}
+
+function renderSpProviderPlaylistsHtml(playlists) {
+  if (!playlists.length) return '<div style="color:var(--muted);font-size:12px;margin-top:12px;padding:10px 0">Este usuario no tiene playlists públicas.</div>';
+  return `
+    <div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">${playlists.length} playlists públicas · seguidores disponibles desde el próximo snapshot</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
+        ${playlists.map(pl => `
+          <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:8px;padding:8px">
+            ${pl.image ? `<img src="${pl.image}" style="width:36px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0">` : '<div style="width:36px;height:36px;border-radius:5px;background:var(--border);flex-shrink:0"></div>'}
+            <div style="min-width:0">
+              <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name}</div>
+              <div style="font-size:11px;color:var(--muted)">${pl.totalTracks} canciones</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function toggleSpProviderPreview(grupo) {
+  const preview = _spProviderPreviews[grupo];
+  // Si ya está cargado, toggle show/hide
+  if (preview && !preview.loading) {
+    delete _spProviderPreviews[grupo];
+    renderSpProviders();
+    return;
+  }
+  // Fetch playlists de todos los userIds del grupo en paralelo
+  _spProviderPreviews[grupo] = { loading: true, playlists: [] };
+  renderSpProviders();
+  const byGrupo = {};
+  _spProviders.forEach(p => { if (!byGrupo[p.grupo]) byGrupo[p.grupo] = []; byGrupo[p.grupo].push(p); });
+  const entries = byGrupo[grupo] || [];
+  try {
+    const results = await Promise.all(entries.map(e =>
+      fetch(`/api/snapshot?action=preview&userId=${encodeURIComponent(e.userId)}`).then(r => r.json()).catch(() => ({ playlists: [] }))
+    ));
+    // Unir y deduplicar por id
+    const seen = new Set();
+    const playlists = [];
+    results.forEach(d => (d.playlists || []).forEach(pl => { if (!seen.has(pl.id)) { seen.add(pl.id); playlists.push(pl); } }));
+    _spProviderPreviews[grupo] = { loading: false, playlists };
+  } catch(e) {
+    _spProviderPreviews[grupo] = { loading: false, playlists: [] };
+  }
+  renderSpProviders();
 }
 
 async function addSpProvider() {

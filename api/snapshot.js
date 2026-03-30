@@ -280,6 +280,26 @@ module.exports = async (req, res) => {
     }
   }
 
+  // ── GET action=preview: playlists públicas de un usuario (sin snapshot) ──
+  if (req.method === 'GET' && req.query.action === 'preview') {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    try {
+      const ccToken = await getCCToken();
+      const rawPlaylists = await fetchUserPublicPlaylists(userId, ccToken);
+      const playlists = rawPlaylists.map(pl => ({
+        id: pl.id,
+        name: pl.name,
+        image: pl.images?.[0]?.url || '',
+        totalTracks: pl.tracks?.total || 0,
+        owner: pl.owner?.display_name || pl.owner?.id || '',
+      }));
+      return res.json({ ok: true, userId, total: playlists.length, playlists });
+    } catch(e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // ── CRUD ProveedoresSpotify ───────────────────────────────────
   if (req.query.action === 'providers') {
     const sheets = getSheets();
