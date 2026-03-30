@@ -286,7 +286,25 @@ module.exports = async (req, res) => {
     if (!userId) return res.status(400).json({ error: 'userId requerido' });
     try {
       const ccToken = await getCCToken();
-      const rawPlaylists = await fetchUserPublicPlaylists(userId, ccToken);
+      // Fetch raw con diagnóstico
+      const url = `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists?limit=50`;
+      const firstResp = await fetch(url, { headers: { Authorization: `Bearer ${ccToken}` } });
+      const firstBody = await firstResp.json();
+      if (!firstResp.ok) {
+        return res.json({ ok: false, userId, status: firstResp.status, spotifyError: firstBody, playlists: [] });
+      }
+      const rawPlaylists = [
+        ...(firstBody.items || []),
+      ];
+      // Paginar si hay más
+      let nextUrl = firstBody.next;
+      while (nextUrl) {
+        const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${ccToken}` } });
+        if (!r.ok) break;
+        const d = await r.json();
+        rawPlaylists.push(...(d.items || []));
+        nextUrl = d.next || null;
+      }
       const playlists = rawPlaylists.map(pl => ({
         id: pl.id,
         name: pl.name,

@@ -8552,13 +8552,14 @@ function renderSpProviders() {
           <button onclick="deleteSpProvider(${e.row})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;line-height:1" title="Eliminar perfil">🗑️</button>
         </div>
       `).join('')}
-      ${previewOpen ? renderSpProviderPlaylistsHtml(preview.playlists) : ''}
+      ${previewOpen ? renderSpProviderPlaylistsHtml(preview.playlists, preview.errors) : ''}
     </div>
   `}).join('');
 }
 
-function renderSpProviderPlaylistsHtml(playlists) {
-  if (!playlists.length) return '<div style="color:var(--muted);font-size:12px;margin-top:12px;padding:10px 0">Este usuario no tiene playlists públicas.</div>';
+function renderSpProviderPlaylistsHtml(playlists, errors) {
+  const errHtml = (errors || []).map(e => `<div style="color:#f59e0b;font-size:11px;margin-top:8px;padding:6px 10px;background:rgba(245,158,11,0.08);border-radius:6px;border:1px solid rgba(245,158,11,0.2)">⚠ ${e.userId}: ${e.msg} (HTTP ${e.status})</div>`).join('');
+  if (!playlists.length) return errHtml + '<div style="color:var(--muted);font-size:12px;margin-top:12px;padding:10px 0">Este usuario no tiene playlists públicas accesibles.</div>';
   return `
     <div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:12px">
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">${playlists.length} playlists públicas · seguidores disponibles desde el próximo snapshot</div>
@@ -8593,13 +8594,17 @@ async function toggleSpProviderPreview(grupo) {
   const entries = byGrupo[grupo] || [];
   try {
     const results = await Promise.all(entries.map(e =>
-      fetch(`/api/snapshot?action=preview&userId=${encodeURIComponent(e.userId)}`).then(r => r.json()).catch(() => ({ playlists: [] }))
+      fetch(`/api/snapshot?action=preview&userId=${encodeURIComponent(e.userId)}`).then(r => r.json()).catch(() => ({ ok: false, playlists: [] }))
     ));
-    // Unir y deduplicar por id
+    // Unir y deduplicar por id; capturar errores por userId
     const seen = new Set();
     const playlists = [];
-    results.forEach(d => (d.playlists || []).forEach(pl => { if (!seen.has(pl.id)) { seen.add(pl.id); playlists.push(pl); } }));
-    _spProviderPreviews[grupo] = { loading: false, playlists };
+    const errors = [];
+    results.forEach((d, i) => {
+      if (!d.ok && d.spotifyError) errors.push({ userId: entries[i].userId, status: d.status, msg: d.spotifyError?.error?.message || JSON.stringify(d.spotifyError) });
+      (d.playlists || []).forEach(pl => { if (!seen.has(pl.id)) { seen.add(pl.id); playlists.push(pl); } });
+    });
+    _spProviderPreviews[grupo] = { loading: false, playlists, errors };
   } catch(e) {
     _spProviderPreviews[grupo] = { loading: false, playlists: [] };
   }
