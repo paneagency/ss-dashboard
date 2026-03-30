@@ -316,7 +316,7 @@ module.exports = async (req, res) => {
           range: 'ProveedoresSpotify!A:B',
         }).catch(() => ({ data: { values: [] } }));
         const providers = (resp.data.values || []).slice(1)
-          .map((r, i) => ({ row: i + 2, grupo: r[0]?.trim() || '', userId: r[1]?.trim() || '', name: r[2]?.trim() || '', image: r[3]?.trim() || '', followers: parseInt(r[4]) || undefined }))
+          .map((r, i) => ({ row: i + 2, grupo: r[0]?.trim() || '', userId: r[1]?.trim() || '', name: r[2]?.trim() || '', image: r[3]?.trim() || '', followers: parseInt(r[4]) || undefined, owner: r[5]?.trim() || '' }))
           .filter(p => p.grupo && p.userId);
         return res.json({ ok: true, providers });
       } catch(e) {
@@ -324,17 +324,17 @@ module.exports = async (req, res) => {
       }
     }
 
-    // POST: agregar entrada (A=GRUPO, B=PLAYLIST_ID, C=NOMBRE, D=IMAGEN, E=SEGUIDORES)
+    // POST: agregar entrada (A=GRUPO, B=PLAYLIST_ID, C=NOMBRE, D=IMAGEN, E=SEGUIDORES, F=OWNER)
     if (req.method === 'POST') {
-      const { grupo, userId, name, image, followers } = req.body || {};
+      const { grupo, userId, name, image, followers, owner } = req.body || {};
       if (!grupo || !userId) return res.status(400).json({ error: 'grupo y userId requeridos' });
       try {
         await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
-          range: 'ProveedoresSpotify!A:E',
+          range: 'ProveedoresSpotify!A:F',
           valueInputOption: 'RAW',
           insertDataOption: 'INSERT_ROWS',
-          resource: { values: [[grupo.trim(), userId.trim(), name || '', image || '', followers || '']] },
+          resource: { values: [[grupo.trim(), userId.trim(), name || '', image || '', followers || '', owner || '']] },
         });
         return res.json({ ok: true });
       } catch(e) {

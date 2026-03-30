@@ -8550,7 +8550,7 @@ function renderSpProviders() {
             <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               <a href="https://open.spotify.com/playlist/${e.userId}" target="_blank" style="color:var(--text);text-decoration:none">${e.name || e.userId}</a>
             </div>
-            ${e.followers !== undefined ? `<div style="font-size:11px;color:var(--muted)">${(e.followers||0).toLocaleString('es-AR')} seguidores</div>` : ''}
+            <div style="font-size:11px;color:var(--muted)">${e.followers !== undefined ? (e.followers||0).toLocaleString('es-AR') + ' seg' : ''}${e.owner ? (e.followers !== undefined ? ' · ' : '') + '👤 ' + e.owner : ''}</div>
           </div>
           <button onclick="deleteSpProvider(${e.row})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;line-height:1;flex-shrink:0" title="Eliminar">🗑️</button>
         </div>
@@ -8594,7 +8594,7 @@ async function previewSpProviderUrls() {
       ${pl.image ? `<img src="${pl.image}" style="width:38px;height:38px;border-radius:5px;object-fit:cover;flex-shrink:0">` : '<div style="width:38px;height:38px;border-radius:5px;background:var(--border);flex-shrink:0"></div>'}
       <div style="min-width:0">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name}</div>
-        <div style="font-size:11px;color:var(--muted)">${(pl.followers||0).toLocaleString('es-AR')} seg · ${pl.totalTracks} canciones</div>
+        <div style="font-size:11px;color:var(--muted)">${(pl.followers||0).toLocaleString('es-AR')} seg · ${pl.totalTracks} canciones${pl.owner ? ' · 👤 ' + pl.owner : ''}</div>
       </div>
     </div>
   `).join('');
@@ -8610,7 +8610,7 @@ async function addSpProvider() {
       const r = await fetch('/api/snapshot?action=providers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grupo, userId: pl.id, name: pl.name, image: pl.image, followers: pl.followers }),
+        body: JSON.stringify({ grupo, userId: pl.id, name: pl.name, image: pl.image, followers: pl.followers, owner: pl.owner }),
       });
       const d = await r.json();
       if (!d.ok) throw new Error(d.error);
