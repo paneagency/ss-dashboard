@@ -1772,7 +1772,7 @@
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <span id="sp-account-info" class="sp-account-chip">🎵 —</span>
         <button class="btn-secondary" style="font-size:13px;padding:7px 14px" onclick="loadSpotifyTab(true)">⟳ Refrescar</button>
-        <button class="btn-secondary" style="font-size:13px;padding:7px 14px" onclick="runSnapshot(this)" title="Guarda snapshot de posiciones en HistorialPlaylists">📸 Snapshot</button>
+
         <button class="btn-primary" style="font-size:13px;padding:7px 14px" onclick="openSpotifyModal(null)">+ Nueva Playlist</button>
       </div>
     </div>
@@ -8139,7 +8139,7 @@ function renderSpGrowth() {
   const playlists = Object.values(byId);
 
   if (!playlists.length) {
-    if (kpisEl) kpisEl.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:1/-1">No hay datos de historial. Ejecutá el Snapshot primero (📸).</div>';
+    if (kpisEl) kpisEl.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:1/-1">No hay datos de historial todavía. Se actualizan automáticamente cada día.</div>';
     return;
   }
 
