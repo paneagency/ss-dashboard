@@ -488,6 +488,8 @@
     .sp-subtab:not(.active):hover { border-color:var(--indigo);color:var(--indigo); }
     .sp-pl-chip { padding:4px 10px;font-size:11px;border-radius:20px;border:2px solid;background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s;white-space:nowrap; }
     .sp-pl-chip.active { color:var(--text);background:rgba(255,255,255,0.07); }
+    .sp-grupo-chip { padding:5px 12px;font-size:12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s;white-space:nowrap; }
+    .sp-grupo-chip.active { border-color:var(--indigo);color:var(--indigo);background:rgba(99,102,241,0.12); }
     .sp-growth-kpi { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px; }
     .sp-growth-kpi-label { font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px; }
     .sp-growth-kpi-value { font-size:24px;font-weight:700;color:var(--text);line-height:1; }
@@ -1780,6 +1782,7 @@
     <div style="display:flex;gap:8px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">
       <button id="sp-subtab-grid" class="sp-subtab active" onclick="setSpSubTab('grid')">🎵 Playlists</button>
       <button id="sp-subtab-growth" class="sp-subtab" onclick="setSpSubTab('growth')">📈 Crecimiento</button>
+      <button id="sp-subtab-providers" class="sp-subtab" onclick="setSpSubTab('providers')">👥 Proveedores</button>
     </div>
 
     <!-- Grid view -->
@@ -1793,8 +1796,33 @@
       </div>
     </div>
 
+    <!-- Providers view -->
+    <div id="sp-view-providers" style="display:none">
+      <div class="chart-card" style="margin-bottom:20px">
+        <div class="chart-title" style="margin-bottom:4px">Agregar perfil de proveedor</div>
+        <div class="chart-subtitle" style="margin-bottom:16px">Pegá la URL del perfil de Spotify o el ID del usuario · Los grupos agrupan múltiples perfiles</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
+            <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">Nombre del grupo</label>
+            <input id="sp-prov-grupo" placeholder="Ej: Daniel Rios" class="filter-control" style="width:100%;box-sizing:border-box">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex:2;min-width:200px">
+            <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">URL o ID de Spotify</label>
+            <input id="sp-prov-userid" placeholder="https://open.spotify.com/user/..." class="filter-control" style="width:100%;box-sizing:border-box">
+          </div>
+          <button id="sp-prov-add-btn" onclick="addSpProvider()" class="btn-primary" style="font-size:13px;padding:8px 18px;white-space:nowrap;flex-shrink:0">+ Agregar</button>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" style="margin-bottom:16px">Perfiles configurados</div>
+        <div id="sp-providers-list"><div style="color:var(--muted);font-size:13px">Cargando...</div></div>
+      </div>
+    </div>
+
     <!-- Growth view -->
     <div id="sp-view-growth" style="display:none">
+      <!-- Filtro por grupo -->
+      <div id="sp-grupo-filter" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
       <!-- KPI row -->
       <div id="sp-growth-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
         <div style="color:var(--muted);font-size:13px;padding:20px">Cargando historial...</div>
@@ -8076,9 +8104,12 @@ async function runSnapshot(btn) {
 function setSpSubTab(tab) {
   document.getElementById('sp-view-grid').style.display = tab === 'grid' ? 'block' : 'none';
   document.getElementById('sp-view-growth').style.display = tab === 'growth' ? 'block' : 'none';
+  document.getElementById('sp-view-providers').style.display = tab === 'providers' ? 'block' : 'none';
   document.getElementById('sp-subtab-grid').className = 'sp-subtab' + (tab === 'grid' ? ' active' : '');
   document.getElementById('sp-subtab-growth').className = 'sp-subtab' + (tab === 'growth' ? ' active' : '');
+  document.getElementById('sp-subtab-providers').className = 'sp-subtab' + (tab === 'providers' ? ' active' : '');
   if (tab === 'growth' && !_spGrowthData && !_spGrowthLoading) loadSpGrowthData();
+  if (tab === 'providers') loadSpProviders();
 }
 
 // ── Growth chart ─────────────────────────────────────────────
@@ -8109,10 +8140,11 @@ async function loadSpGrowthData() {
 function processSpGrowthData(rawData) {
   const byId = {};
   for (const row of rawData) {
-    if (!byId[row.id]) byId[row.id] = { id: row.id, name: row.name, image: row.image, snapshots: [] };
+    if (!byId[row.id]) byId[row.id] = { id: row.id, name: row.name, image: row.image, grupo: row.grupo || '', snapshots: [] };
     byId[row.id].snapshots.push({ date: row.date, followers: row.followers });
     byId[row.id].name = row.name;
     if (row.image) byId[row.id].image = row.image;
+    if (row.grupo) byId[row.id].grupo = row.grupo; // usa el más reciente
   }
   Object.values(byId).forEach(pl => {
     pl.snapshots.sort((a, b) => a.date.localeCompare(b.date));
@@ -8132,11 +8164,34 @@ function spFollowersNDaysAgo(snapshots, n) {
   return before.length ? before[before.length - 1].followers : null;
 }
 
+function renderSpGrupoFilter(allPlaylists) {
+  const el = document.getElementById('sp-grupo-filter');
+  if (!el) return;
+  const grupos = [...new Set(allPlaylists.map(p => p.grupo).filter(Boolean))].sort();
+  if (!grupos.length) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  const chips = [
+    `<button class="sp-grupo-chip${_spGrupoFilter === null ? ' active' : ''}" onclick="setSpGrupoFilter(null)">Todos</button>`,
+    ...grupos.map(g => `<button class="sp-grupo-chip${_spGrupoFilter === g ? ' active' : ''}" onclick="setSpGrupoFilter('${g.replace(/'/g,"\\'")}')">· ${g}</button>`),
+  ];
+  el.innerHTML = chips.join('');
+}
+
+function setSpGrupoFilter(grupo) {
+  _spGrupoFilter = grupo;
+  _spActivePlaylistIds = new Set(); // reset chips al cambiar filtro
+  renderSpGrowth();
+}
+
 function renderSpGrowth() {
   const byId = _spGrowthData;
   if (!byId) return;
   const kpisEl = document.getElementById('sp-growth-kpis');
-  const playlists = Object.values(byId);
+  const allPlaylists = Object.values(byId);
+  renderSpGrupoFilter(allPlaylists);
+  const playlists = _spGrupoFilter === null
+    ? allPlaylists
+    : allPlaylists.filter(p => p.grupo === _spGrupoFilter);
 
   if (!playlists.length) {
     if (kpisEl) kpisEl.innerHTML = '<div style="color:var(--muted);font-size:13px;grid-column:1/-1">No hay datos de historial todavía. Se actualizan automáticamente cada día.</div>';
@@ -8426,6 +8481,7 @@ function closeSpDetail() {
 let _spRankingEnriched = [];
 let _spSortCol = null; // 'current' | 'delta1' | 'delta7' | 'delta30' | 'avgDaily7'
 let _spSortDir = 0;   // 0=natural, 1=desc, -1=asc
+let _spGrupoFilter = null; // null = todos
 
 function sortSpRanking(col) {
   if (_spSortCol === col) {
@@ -8441,6 +8497,94 @@ function sortSpRanking(col) {
 function renderSpGrowthTable(enriched) {
   _spRankingEnriched = enriched;
   filterSpRanking();
+}
+
+// ── Proveedores Spotify ───────────────────────────────────────
+let _spProviders = [];
+
+function extractSpotifyUserId(input) {
+  const m = input.match(/spotify\.com\/user\/([^?/\s]+)/);
+  return m ? m[1] : input.trim();
+}
+
+async function loadSpProviders() {
+  const el = document.getElementById('sp-providers-list');
+  if (el) el.innerHTML = '<div style="color:var(--muted);font-size:13px">Cargando...</div>';
+  try {
+    const r = await fetch('/api/snapshot?action=providers');
+    const d = await r.json();
+    _spProviders = d.providers || [];
+    renderSpProviders();
+  } catch(e) {
+    if (el) el.innerHTML = `<div style="color:#ef4444;font-size:13px">${e.message}</div>`;
+  }
+}
+
+function renderSpProviders() {
+  const el = document.getElementById('sp-providers-list');
+  if (!el) return;
+  if (!_spProviders.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No hay proveedores configurados todavía. Agregá el primero arriba.</div>';
+    return;
+  }
+  const byGrupo = {};
+  _spProviders.forEach(p => { if (!byGrupo[p.grupo]) byGrupo[p.grupo] = []; byGrupo[p.grupo].push(p); });
+  el.innerHTML = Object.entries(byGrupo).map(([grupo, entries]) => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">${grupo}</div>
+      ${entries.map(e => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--border2)">
+          <div style="font-size:12px;color:var(--muted)">
+            <a href="https://open.spotify.com/user/${e.userId}" target="_blank" style="color:var(--indigo);text-decoration:none;font-family:monospace">${e.userId}</a>
+          </div>
+          <button onclick="deleteSpProvider(${e.row})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;line-height:1" title="Eliminar perfil">🗑️</button>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+async function addSpProvider() {
+  const grupoInput = document.getElementById('sp-prov-grupo');
+  const userInput  = document.getElementById('sp-prov-userid');
+  const grupo = grupoInput?.value.trim();
+  const raw   = userInput?.value.trim();
+  if (!grupo || !raw) return alert('Completá el nombre del grupo y el usuario de Spotify');
+  const userId = extractSpotifyUserId(raw);
+  const btn = document.getElementById('sp-prov-add-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/snapshot?action=providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grupo, userId }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    grupoInput.value = '';
+    userInput.value = '';
+    await loadSpProviders();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function deleteSpProvider(row) {
+  if (!confirm('¿Eliminar este perfil de Spotify?')) return;
+  try {
+    const r = await fetch('/api/snapshot?action=providers', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ row }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    await loadSpProviders();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
 }
 
 function filterSpRanking() {
@@ -8490,7 +8634,10 @@ function filterSpRanking() {
       <td style="padding:9px 8px;font-size:12px;color:var(--muted);text-align:center;width:32px">${medal}</td>
       <td style="padding:9px 8px;display:flex;align-items:center;gap:8px">
         ${p.image ? `<img src="${p.image}" style="width:30px;height:30px;border-radius:4px;object-fit:cover;flex-shrink:0">` : '<div style="width:30px;height:30px;border-radius:4px;background:var(--border);flex-shrink:0"></div>'}
-        <span style="font-size:13px;font-weight:500">${p.name.length > 38 ? p.name.slice(0,38)+'…' : p.name}</span>
+        <div>
+          <div style="font-size:13px;font-weight:500">${p.name.length > 38 ? p.name.slice(0,38)+'…' : p.name}</div>
+          ${p.grupo ? `<div style="font-size:10px;color:var(--indigo);opacity:0.8;margin-top:1px">${p.grupo}</div>` : ''}
+        </div>
       </td>
       <td style="padding:9px 8px;font-size:14px;font-weight:600;text-align:right;white-space:nowrap">${p.current.toLocaleString('es-AR')}</td>
       <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(delta1)}">${fmtD(delta1)}</td>

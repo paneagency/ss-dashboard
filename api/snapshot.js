@@ -110,6 +110,27 @@ async function fetchAllPlaylists(accessToken) {
   return playlists;
 }
 
+// ── Fetch public playlists of any Spotify user (CC token) ────
+async function fetchUserPublicPlaylists(userId, ccToken) {
+  const playlists = [];
+  let url = `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists?limit=50`;
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${ccToken}` } });
+    if (!r.ok) break;
+    const d = await r.json();
+    playlists.push(...(d.items || []));
+    url = d.next || null;
+  }
+  return playlists;
+}
+
+// ── Get sheet ID by name ──────────────────────────────────────
+async function getSheetId(sheets, sheetName) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID, fields: 'sheets.properties' });
+  const sheet = (meta.data.sheets || []).find(s => s.properties.title === sheetName);
+  return sheet?.properties?.sheetId ?? null;
+}
+
 // ── Fetch playlist detail + tracks via OAuth ─────────────────
 async function fetchPlaylistDetail(playlistId, accessToken) {
   const headers = { Authorization: `Bearer ${accessToken}` };
@@ -166,7 +187,7 @@ module.exports = async (req, res) => {
       const sheets = getSheets();
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'HistorialPlaylists!A:R',
+        range: 'HistorialPlaylists!A:S',
       });
       const rows = (resp.data.values || []).slice(1);
       const data = rows.map(r => ({
@@ -176,6 +197,7 @@ module.exports = async (req, res) => {
         followers: parseInt(r[3]) || 0,
         totalTracks: parseInt(r[4]) || 0,
         image: r[16] || '',
+        grupo: r[18] || '',
       })).filter(r => r.date && r.id);
       return res.json({ ok: true, data });
     } catch(e) {
@@ -186,14 +208,42 @@ module.exports = async (req, res) => {
   // ── GET action=cron: snapshot automático diario (Vercel cron) ──
   if (req.method === 'GET' && req.query.action === 'cron') {
     try {
+      const sheets = getSheets();
+      const ccToken = await getCCToken();
+
+      // 1. Leer ProveedoresSpotify para mapear playlist → grupo
+      const provResp = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'ProveedoresSpotify!A:B',
+      }).catch(() => ({ data: { values: [] } }));
+      const providers = (provResp.data.values || []).slice(1)
+        .filter(r => r[0] && r[1])
+        .map(r => ({ grupo: r[0].trim(), userId: r[1].trim() }));
+
+      // 2. Construir mapa playlistId → grupo desde perfiles de proveedores
+      const playlistGrupoMap = {};
+      for (const prov of providers) {
+        try {
+          const provPls = await fetchUserPublicPlaylists(prov.userId, ccToken);
+          for (const pl of provPls) {
+            if (pl?.id && !playlistGrupoMap[pl.id]) playlistGrupoMap[pl.id] = prov.grupo;
+          }
+        } catch(_) {}
+      }
+
+      // 3. Traer playlists de la cuenta OAuth vinculada
       const oauthToken = await getOAuthToken();
       const rawPlaylists = await fetchAllPlaylists(oauthToken);
-      const ccToken = await getCCToken();
+
+      // 4. Unir IDs únicos (proveedores + cuenta propia)
+      const allIds = new Set([...rawPlaylists.map(p => p.id), ...Object.keys(playlistGrupoMap)]);
+
+      // 5. Fetch metadata completa para cada playlist
       const playlists = [];
-      for (const pl of rawPlaylists) {
+      for (const plId of allIds) {
         try {
           const r = await fetch(
-            `https://api.spotify.com/v1/playlists/${pl.id}?fields=id,name,description,followers,tracks(total),images`,
+            `https://api.spotify.com/v1/playlists/${plId}?fields=id,name,description,followers,tracks(total),images`,
             { headers: { Authorization: `Bearer ${ccToken}` } }
           );
           if (!r.ok) continue;
@@ -205,28 +255,93 @@ module.exports = async (req, res) => {
             image: full.images?.[0]?.url || '',
             followers: full.followers?.total || 0,
             totalTracks: full.tracks?.total || 0,
+            grupo: playlistGrupoMap[plId] || '',
           });
         } catch(_) {}
       }
-      const sheets = getSheets();
+
       const today = new Date().toISOString().slice(0, 10);
       const rows = playlists.map(pl => [
         today, pl.id, pl.name, pl.followers, pl.totalTracks,
-        '', '', '', '', '', '', '', '', '', '', '', pl.image, pl.description,
+        '', '', '', '', '', '', '', '', '', '', '', pl.image, pl.description, pl.grupo,
       ]);
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'HistorialPlaylists!A:R',
+        range: 'HistorialPlaylists!A:S',
         valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         resource: { values: rows },
       });
-      console.log(`Cron snapshot ${today}: ${rows.length} playlists`);
-      return res.json({ ok: true, date: today, playlists: rows.length });
+      console.log(`Cron snapshot ${today}: ${rows.length} playlists (${Object.keys(playlistGrupoMap).length} de proveedores)`);
+      return res.json({ ok: true, date: today, playlists: rows.length, byProvider: Object.keys(playlistGrupoMap).length });
     } catch(e) {
       console.error('cron snapshot error:', e.message);
       return res.status(500).json({ error: e.message });
     }
+  }
+
+  // ── CRUD ProveedoresSpotify ───────────────────────────────────
+  if (req.query.action === 'providers') {
+    const sheets = getSheets();
+
+    // GET: listar todos
+    if (req.method === 'GET') {
+      try {
+        const resp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID,
+          range: 'ProveedoresSpotify!A:B',
+        }).catch(() => ({ data: { values: [] } }));
+        const providers = (resp.data.values || []).slice(1)
+          .map((r, i) => ({ row: i + 2, grupo: r[0]?.trim() || '', userId: r[1]?.trim() || '' }))
+          .filter(p => p.grupo && p.userId);
+        return res.json({ ok: true, providers });
+      } catch(e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    // POST: agregar entrada
+    if (req.method === 'POST') {
+      const { grupo, userId } = req.body || {};
+      if (!grupo || !userId) return res.status(400).json({ error: 'grupo y userId requeridos' });
+      try {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: 'ProveedoresSpotify!A:B',
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          resource: { values: [[grupo.trim(), userId.trim()]] },
+        });
+        return res.json({ ok: true });
+      } catch(e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    // DELETE: eliminar fila por número de fila
+    if (req.method === 'DELETE') {
+      const { row } = req.body || {};
+      if (!row) return res.status(400).json({ error: 'row requerido' });
+      try {
+        const sheetId = await getSheetId(sheets, 'ProveedoresSpotify');
+        if (sheetId === null) return res.status(404).json({ error: 'Hoja ProveedoresSpotify no encontrada' });
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: SPREADSHEET_ID,
+          resource: {
+            requests: [{
+              deleteDimension: {
+                range: { sheetId, dimension: 'ROWS', startIndex: row - 1, endIndex: row },
+              },
+            }],
+          },
+        });
+        return res.json({ ok: true });
+      } catch(e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    return res.status(405).json({ error: 'Método no soportado' });
   }
 
   // ── DEBUG: ver respuesta cruda de Spotify para una playlist ──
