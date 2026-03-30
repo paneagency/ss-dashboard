@@ -210,6 +210,7 @@ module.exports = async (req, res) => {
     try {
       const sheets = getSheets();
       const ccToken = await getCCToken();
+      const oauthToken = await getOAuthToken(); // OAuth necesario para playlists de otros usuarios
 
       // 1. Leer ProveedoresSpotify para mapear playlist → grupo
       const provResp = await sheets.spreadsheets.values.get({
@@ -224,7 +225,7 @@ module.exports = async (req, res) => {
       const playlistGrupoMap = {};
       for (const prov of providers) {
         try {
-          const provPls = await fetchUserPublicPlaylists(prov.userId, ccToken);
+          const provPls = await fetchUserPublicPlaylists(prov.userId, oauthToken);
           for (const pl of provPls) {
             if (pl?.id && !playlistGrupoMap[pl.id]) playlistGrupoMap[pl.id] = prov.grupo;
           }
@@ -232,7 +233,6 @@ module.exports = async (req, res) => {
       }
 
       // 3. Traer playlists de la cuenta OAuth vinculada
-      const oauthToken = await getOAuthToken();
       const rawPlaylists = await fetchAllPlaylists(oauthToken);
 
       // 4. Unir IDs únicos (proveedores + cuenta propia)
@@ -285,10 +285,9 @@ module.exports = async (req, res) => {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: 'userId requerido' });
     try {
-      const ccToken = await getCCToken();
-      // Fetch raw con diagnóstico
+      const oauthToken = await getOAuthToken(); // OAuth requerido para leer playlists de otros usuarios
       const url = `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists?limit=50`;
-      const firstResp = await fetch(url, { headers: { Authorization: `Bearer ${ccToken}` } });
+      const firstResp = await fetch(url, { headers: { Authorization: `Bearer ${oauthToken}` } });
       const firstBody = await firstResp.json();
       if (!firstResp.ok) {
         return res.json({ ok: false, userId, status: firstResp.status, spotifyError: firstBody, playlists: [] });
@@ -299,7 +298,7 @@ module.exports = async (req, res) => {
       // Paginar si hay más
       let nextUrl = firstBody.next;
       while (nextUrl) {
-        const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${ccToken}` } });
+        const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${oauthToken}` } });
         if (!r.ok) break;
         const d = await r.json();
         rawPlaylists.push(...(d.items || []));
