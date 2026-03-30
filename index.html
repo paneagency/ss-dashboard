@@ -1806,11 +1806,23 @@
         <div id="sp-growth-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
         <div class="chart-wrap"><canvas id="chart-sp-growth" style="max-height:380px"></canvas></div>
       </div>
-      <!-- Rankings table -->
+      <!-- Rankings table + playlist detail -->
       <div class="chart-card">
-        <div class="chart-title">Ranking de Playlists</div>
-        <div class="chart-subtitle">Seguidores actuales y crecimiento en el tiempo</div>
-        <div id="sp-growth-table"></div>
+        <!-- Detail panel (visible when a playlist is selected) -->
+        <div id="sp-detail-panel" style="display:none">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <button onclick="closeSpDetail()" style="padding:5px 12px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">← Volver</button>
+            <div id="sp-detail-name" style="font-size:15px;font-weight:600;color:var(--text)"></div>
+          </div>
+          <div id="sp-detail-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px"></div>
+          <div class="chart-wrap"><canvas id="chart-sp-detail" style="max-height:310px"></canvas></div>
+        </div>
+        <!-- Ranking section (hidden when detail is open) -->
+        <div id="sp-ranking-section">
+          <div class="chart-title">Ranking de Playlists</div>
+          <div class="chart-subtitle">Seguidores actuales y crecimiento · click en una fila para ver el detalle</div>
+          <div id="sp-growth-table"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -8061,6 +8073,8 @@ let _spGrowthData = null;
 let _spGrowthLoading = false;
 let _spGrowthChart = null;
 let _spActivePlaylistIds = new Set();
+let _spDetailChart = null;
+let _spDetailId = null;
 
 async function loadSpGrowthData() {
   _spGrowthLoading = true;
@@ -8261,6 +8275,125 @@ function renderSpGrowthChart(byId, top15) {
   });
 }
 
+function openSpDetail(id) {
+  if (!_spGrowthData) return;
+  const pl = _spGrowthData[id];
+  if (!pl) return;
+  _spDetailId = id;
+
+  document.getElementById('sp-ranking-section').style.display = 'none';
+  const panel = document.getElementById('sp-detail-panel');
+  panel.style.display = 'block';
+  document.getElementById('sp-detail-name').textContent = pl.name;
+
+  // Calcular métricas
+  const snaps = pl.snapshots;
+  const current = snaps[snaps.length - 1]?.followers || 0;
+  const prev7  = spFollowersNDaysAgo(snaps, 7);
+  const prev30 = spFollowersNDaysAgo(snaps, 30);
+  const d7  = prev7  !== null ? current - prev7  : null;
+  const d30 = prev30 !== null ? current - prev30 : null;
+
+  // Deltas diarios
+  const dailyDeltas = snaps.map((s, i) => i === 0 ? 0 : s.followers - snaps[i-1].followers);
+  const recentDeltas = dailyDeltas.slice(-30).filter(d => d !== 0);
+  const avgDaily = recentDeltas.length ? Math.round(recentDeltas.reduce((a,b)=>a+b,0)/recentDeltas.length) : 0;
+  const bestDay  = { val: Math.max(...dailyDeltas), idx: dailyDeltas.indexOf(Math.max(...dailyDeltas)) };
+  const bestDate = snaps[bestDay.idx]?.date || '';
+
+  // KPIs
+  const kpiStyle = 'background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:110px';
+  const kpiLabel = 'font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:4px';
+  const kpiVal   = 'font-size:18px;font-weight:700;color:var(--text);line-height:1';
+  const kpiSub   = 'font-size:10px;color:var(--muted);margin-top:2px';
+  const fmtD = v => v !== null ? (v > 0 ? '+' : '') + v.toLocaleString('es-AR') : '—';
+  const col  = v => v > 0 ? '#10b981' : v < 0 ? '#ef4444' : 'var(--muted)';
+  document.getElementById('sp-detail-kpis').innerHTML = `
+    <div style="${kpiStyle}"><div style="${kpiLabel}">Seguidores</div><div style="${kpiVal}">${current.toLocaleString('es-AR')}</div></div>
+    <div style="${kpiStyle};border-color:${d7!==null?col(d7)+'66':'var(--border)'}"><div style="${kpiLabel}">Últ. 7 días</div><div style="${kpiVal};color:${d7!==null?col(d7):'var(--muted)'}">${fmtD(d7)}</div></div>
+    <div style="${kpiStyle};border-color:${d30!==null?col(d30)+'66':'var(--border)'}"><div style="${kpiLabel}">Últ. 30 días</div><div style="${kpiVal};color:${d30!==null?col(d30):'var(--muted)'}">${fmtD(d30)}</div></div>
+    <div style="${kpiStyle}"><div style="${kpiLabel}">Prom. diario (30d)</div><div style="${kpiVal};color:${col(avgDaily)}">${avgDaily > 0 ? '+' : ''}${avgDaily.toLocaleString('es-AR')}</div></div>
+    <div style="${kpiStyle}"><div style="${kpiLabel}">Mejor día</div><div style="${kpiVal};color:#10b981">+${bestDay.val.toLocaleString('es-AR')}</div><div style="${kpiSub}">${bestDate}</div></div>
+  `;
+
+  // Gráfico dual: línea (total) + barras (delta diario)
+  const dates = snaps.map(s => { const [y,m,d] = s.date.split('-'); return `${d}/${m}/${y.slice(2)}`; });
+  const totalData = snaps.map(s => s.followers);
+
+  const ctx = document.getElementById('chart-sp-detail');
+  if (!ctx) return;
+  if (_spDetailChart) { _spDetailChart.destroy(); _spDetailChart = null; }
+
+  _spDetailChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: dates,
+      datasets: [
+        {
+          type: 'line',
+          label: 'Total seguidores',
+          data: totalData,
+          yAxisID: 'y',
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99,102,241,0.08)',
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: true,
+          pointRadius: dates.length <= 60 ? 2 : 0,
+          pointHoverRadius: 5,
+          order: 1,
+        },
+        {
+          type: 'bar',
+          label: 'Crecimiento diario',
+          data: dailyDeltas,
+          yAxisID: 'y1',
+          backgroundColor: dailyDeltas.map(v => v >= 0 ? 'rgba(16,185,129,0.55)' : 'rgba(239,68,68,0.55)'),
+          borderRadius: 3,
+          order: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color: '#9ca3af', font: { size: 11 }, boxWidth: 14 } },
+        tooltip: {
+          callbacks: {
+            label: c => c.datasetIndex === 0
+              ? `Seguidores: ${(c.raw||0).toLocaleString('es-AR')}`
+              : `Diario: ${c.raw >= 0 ? '+' : ''}${(c.raw||0).toLocaleString('es-AR')}`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          position: 'left',
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#6b7280', callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v },
+        },
+        y1: {
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { color: '#6b7280', callback: v => (v > 0 ? '+' : '') + v },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: '#6b7280', maxTicksLimit: 20 },
+        },
+      },
+    },
+  });
+}
+
+function closeSpDetail() {
+  _spDetailId = null;
+  document.getElementById('sp-detail-panel').style.display = 'none';
+  document.getElementById('sp-ranking-section').style.display = 'block';
+  if (_spDetailChart) { _spDetailChart.destroy(); _spDetailChart = null; }
+}
+
 function renderSpGrowthTable(enriched) {
   const el = document.getElementById('sp-growth-table');
   if (!el || !enriched.length) return;
@@ -8271,7 +8404,7 @@ function renderSpGrowthTable(enriched) {
     const pct7  = p.prev7  > 0 && d7  !== null ? ((d7  / p.prev7)  * 100).toFixed(1) : null;
     const pct30 = p.prev30 > 0 && d30 !== null ? ((d30 / p.prev30) * 100).toFixed(1) : null;
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
-    return `<tr style="border-bottom:1px solid var(--border)">
+    return `<tr onclick="openSpDetail('${p.id}')" style="border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s" onmouseenter="this.style.background='rgba(255,255,255,0.03)'" onmouseleave="this.style.background='transparent'">
       <td style="padding:9px 8px;font-size:12px;color:var(--muted);text-align:center;width:32px">${medal}</td>
       <td style="padding:9px 8px;display:flex;align-items:center;gap:8px">
         ${p.image ? `<img src="${p.image}" style="width:30px;height:30px;border-radius:4px;object-fit:cover;flex-shrink:0">` : '<div style="width:30px;height:30px;border-radius:4px;background:var(--border);flex-shrink:0"></div>'}
