@@ -1801,8 +1801,8 @@
       </div>
       <!-- Main chart -->
       <div class="chart-card" style="margin-bottom:20px">
-        <div class="chart-title">Evolución de Seguidores</div>
-        <div class="chart-subtitle">Crecimiento histórico por playlist · Hacé click en los chips para mostrar/ocultar</div>
+        <div class="chart-title">Crecimiento diario de seguidores</div>
+        <div class="chart-subtitle">Seguidores ganados por día · Hacé click en los chips para mostrar/ocultar</div>
         <div id="sp-growth-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
         <div class="chart-wrap"><canvas id="chart-sp-growth" style="max-height:380px"></canvas></div>
       </div>
@@ -8230,21 +8230,26 @@ function renderSpGrowthChart(byId, top15) {
   const datasets = active.map((p, idx) => {
     const color = PALETTE[top15.indexOf(p) % PALETTE.length];
     const snapshotMap = Object.fromEntries(p.snapshots.map(s => [s.date, s.followers]));
-    let last = null;
-    const data = sortedDates.map(d => {
-      if (snapshotMap[d] !== undefined) last = snapshotMap[d];
-      return last;
+    // Calcular delta diario: solo para fechas donde hay snapshot real
+    const data = sortedDates.map((d, i) => {
+      if (snapshotMap[d] === undefined) return null;
+      // Buscar el snapshot anterior más cercano
+      const prev = sortedDates.slice(0, i).reverse().find(pd => snapshotMap[pd] !== undefined);
+      if (prev === undefined) return null;
+      return snapshotMap[d] - snapshotMap[prev];
     });
     return {
       label: p.name.length > 32 ? p.name.slice(0, 32) + '…' : p.name,
       data,
       borderColor: color,
-      backgroundColor: idx === 0 ? color + '15' : 'transparent',
-      borderWidth: idx === 0 ? 2.5 : 1.8,
-      tension: 0.35,
-      fill: idx === 0,
-      pointRadius: sortedDates.length <= 20 ? 3 : 0,
-      pointHoverRadius: 5,
+      backgroundColor: color + '18',
+      borderWidth: 2,
+      tension: 0.3,
+      fill: false,
+      spanGaps: false,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      pointBackgroundColor: color,
     };
   });
 
@@ -8268,14 +8273,19 @@ function renderSpGrowthChart(byId, top15) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${(ctx.raw || 0).toLocaleString('es-AR')} seg.`,
+            label: c => {
+              if (c.raw === null) return null;
+              const sign = c.raw > 0 ? '+' : '';
+              return `${c.dataset.label}: ${sign}${c.raw.toLocaleString('es-AR')} seg.`;
+            },
           },
+          filter: item => item.raw !== null,
         },
       },
       scales: {
         y: {
           grid: { color: 'rgba(255,255,255,0.05)' },
-          ticks: { color: '#6b7280', callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v },
+          ticks: { color: '#6b7280', callback: v => (v > 0 ? '+' : '') + (Math.abs(v) >= 1000 ? (v/1000).toFixed(1)+'k' : v) },
         },
         x: {
           grid: { display: false },
