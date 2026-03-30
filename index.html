@@ -1805,7 +1805,7 @@
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
             <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
               <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">Nombre del grupo</label>
-              <input id="sp-prov-grupo" placeholder="Ej: Daniel Rios" class="filter-control" style="width:100%;box-sizing:border-box">
+              <input id="sp-prov-grupo" placeholder="Ej: Daniel Rios" class="filter-control" list="list-providers" style="width:100%;box-sizing:border-box">
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px">
@@ -8614,6 +8614,11 @@ async function addSpProvider() {
       });
       const d = await r.json();
       if (!d.ok) throw new Error(d.error);
+    }
+    // Sincronizar datalist de proveedores si el grupo es nuevo
+    if (!window._providers.includes(grupo)) {
+      window._providers.push(grupo);
+      fillDatalist('list-providers', window._providers);
     }
     document.getElementById('sp-prov-grupo').value = '';
     document.getElementById('sp-prov-urls').value = '';
