@@ -8272,14 +8272,14 @@ function renderSpGrowthChart(byId, top15) {
       plugins: {
         legend: { display: false },
         tooltip: {
+          itemSort: (a, b) => (b.raw ?? -Infinity) - (a.raw ?? -Infinity),
+          filter: item => item.raw !== null,
           callbacks: {
             label: c => {
-              if (c.raw === null) return null;
               const sign = c.raw > 0 ? '+' : '';
               return `${c.dataset.label}: ${sign}${c.raw.toLocaleString('es-AR')} seg.`;
             },
           },
-          filter: item => item.raw !== null,
         },
       },
       scales: {
