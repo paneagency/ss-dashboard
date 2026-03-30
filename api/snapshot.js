@@ -210,35 +210,28 @@ module.exports = async (req, res) => {
     try {
       const sheets = getSheets();
       const ccToken = await getCCToken();
-      const oauthToken = await getOAuthToken(); // OAuth necesario para playlists de otros usuarios
 
-      // 1. Leer ProveedoresSpotify para mapear playlist → grupo
+      // 1. Leer ProveedoresSpotify: A=GRUPO, B=PLAYLIST_ID (CC token funciona para playlists públicas)
       const provResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: 'ProveedoresSpotify!A:B',
       }).catch(() => ({ data: { values: [] } }));
-      const providers = (provResp.data.values || []).slice(1)
+      const providerPlaylists = (provResp.data.values || []).slice(1)
         .filter(r => r[0] && r[1])
-        .map(r => ({ grupo: r[0].trim(), userId: r[1].trim() }));
+        .map(r => ({ grupo: r[0].trim(), playlistId: r[1].trim() }));
 
-      // 2. Construir mapa playlistId → grupo desde perfiles de proveedores
+      // 2. Mapa playlistId → grupo para playlists de proveedores
       const playlistGrupoMap = {};
-      for (const prov of providers) {
-        try {
-          const provPls = await fetchUserPublicPlaylists(prov.userId, oauthToken);
-          for (const pl of provPls) {
-            if (pl?.id && !playlistGrupoMap[pl.id]) playlistGrupoMap[pl.id] = prov.grupo;
-          }
-        } catch(_) {}
-      }
+      providerPlaylists.forEach(p => { if (!playlistGrupoMap[p.playlistId]) playlistGrupoMap[p.playlistId] = p.grupo; });
 
       // 3. Traer playlists de la cuenta OAuth vinculada
+      const oauthToken = await getOAuthToken();
       const rawPlaylists = await fetchAllPlaylists(oauthToken);
 
-      // 4. Unir IDs únicos (proveedores + cuenta propia)
+      // 4. Unir IDs únicos (playlists de proveedores + cuenta propia)
       const allIds = new Set([...rawPlaylists.map(p => p.id), ...Object.keys(playlistGrupoMap)]);
 
-      // 5. Fetch metadata completa para cada playlist
+      // 5. Fetch metadata completa para cada playlist via CC token (funciona para playlists públicas)
       const playlists = [];
       for (const plId of allIds) {
         try {
@@ -280,38 +273,32 @@ module.exports = async (req, res) => {
     }
   }
 
-  // ── GET action=preview: playlists públicas de un usuario (sin snapshot) ──
+  // ── GET action=preview: metadata de una playlist por ID (CC token, sin snapshot) ──
   if (req.method === 'GET' && req.query.action === 'preview') {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId requerido' });
+    const { playlistId } = req.query;
+    if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
     try {
-      const oauthToken = await getOAuthToken(); // OAuth requerido para leer playlists de otros usuarios
-      const url = `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists?limit=50`;
-      const firstResp = await fetch(url, { headers: { Authorization: `Bearer ${oauthToken}` } });
-      const firstBody = await firstResp.json();
-      if (!firstResp.ok) {
-        return res.json({ ok: false, userId, status: firstResp.status, spotifyError: firstBody, playlists: [] });
+      const ccToken = await getCCToken();
+      const r = await fetch(
+        `https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,followers,tracks(total),images,owner`,
+        { headers: { Authorization: `Bearer ${ccToken}` } }
+      );
+      const body = await r.json();
+      if (!r.ok) {
+        return res.json({ ok: false, playlistId, status: r.status, spotifyError: body });
       }
-      const rawPlaylists = [
-        ...(firstBody.items || []),
-      ];
-      // Paginar si hay más
-      let nextUrl = firstBody.next;
-      while (nextUrl) {
-        const r = await fetch(nextUrl, { headers: { Authorization: `Bearer ${oauthToken}` } });
-        if (!r.ok) break;
-        const d = await r.json();
-        rawPlaylists.push(...(d.items || []));
-        nextUrl = d.next || null;
-      }
-      const playlists = rawPlaylists.map(pl => ({
-        id: pl.id,
-        name: pl.name,
-        image: pl.images?.[0]?.url || '',
-        totalTracks: pl.tracks?.total || 0,
-        owner: pl.owner?.display_name || pl.owner?.id || '',
-      }));
-      return res.json({ ok: true, userId, total: playlists.length, playlists });
+      return res.json({
+        ok: true,
+        playlist: {
+          id: body.id,
+          name: body.name,
+          image: body.images?.[0]?.url || '',
+          followers: body.followers?.total || 0,
+          totalTracks: body.tracks?.total || 0,
+          owner: body.owner?.display_name || body.owner?.id || '',
+          description: body.description || '',
+        },
+      });
     } catch(e) {
       return res.status(500).json({ error: e.message });
     }
@@ -329,7 +316,7 @@ module.exports = async (req, res) => {
           range: 'ProveedoresSpotify!A:B',
         }).catch(() => ({ data: { values: [] } }));
         const providers = (resp.data.values || []).slice(1)
-          .map((r, i) => ({ row: i + 2, grupo: r[0]?.trim() || '', userId: r[1]?.trim() || '' }))
+          .map((r, i) => ({ row: i + 2, grupo: r[0]?.trim() || '', userId: r[1]?.trim() || '', name: r[2]?.trim() || '', image: r[3]?.trim() || '', followers: parseInt(r[4]) || undefined }))
           .filter(p => p.grupo && p.userId);
         return res.json({ ok: true, providers });
       } catch(e) {
@@ -337,17 +324,17 @@ module.exports = async (req, res) => {
       }
     }
 
-    // POST: agregar entrada
+    // POST: agregar entrada (A=GRUPO, B=PLAYLIST_ID, C=NOMBRE, D=IMAGEN, E=SEGUIDORES)
     if (req.method === 'POST') {
-      const { grupo, userId } = req.body || {};
+      const { grupo, userId, name, image, followers } = req.body || {};
       if (!grupo || !userId) return res.status(400).json({ error: 'grupo y userId requeridos' });
       try {
         await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
-          range: 'ProveedoresSpotify!A:B',
+          range: 'ProveedoresSpotify!A:E',
           valueInputOption: 'RAW',
           insertDataOption: 'INSERT_ROWS',
-          resource: { values: [[grupo.trim(), userId.trim()]] },
+          resource: { values: [[grupo.trim(), userId.trim(), name || '', image || '', followers || '']] },
         });
         return res.json({ ok: true });
       } catch(e) {
