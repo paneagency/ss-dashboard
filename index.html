@@ -1810,8 +1810,8 @@
       <div class="chart-card">
         <!-- Detail panel (visible when a playlist is selected) -->
         <div id="sp-detail-panel" style="display:none">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-            <button onclick="closeSpDetail()" style="padding:5px 12px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">← Volver</button>
+          <div onclick="closeSpDetail()" style="display:flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer;padding:6px 8px;border-radius:8px;transition:background 0.15s" onmouseenter="this.style.background='rgba(255,255,255,0.04)'" onmouseleave="this.style.background='transparent'">
+            <span style="color:var(--muted);font-size:13px">▼</span>
             <div id="sp-detail-name" style="font-size:15px;font-weight:600;color:var(--text)"></div>
           </div>
           <div id="sp-detail-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px"></div>
@@ -1819,8 +1819,13 @@
         </div>
         <!-- Ranking section (hidden when detail is open) -->
         <div id="sp-ranking-section">
-          <div class="chart-title">Ranking de Playlists</div>
-          <div class="chart-subtitle">Seguidores actuales y crecimiento · click en una fila para ver el detalle</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+            <div>
+              <div class="chart-title" style="margin-bottom:2px">Ranking de Playlists</div>
+              <div class="chart-subtitle">Click en una fila para ver el detalle</div>
+            </div>
+            <input id="sp-rank-search" class="filter-control" placeholder="🔍 Buscar playlist..." oninput="filterSpRanking()" style="max-width:240px;font-size:13px">
+          </div>
           <div id="sp-growth-table"></div>
         </div>
       </div>
@@ -8132,10 +8137,16 @@ function renderSpGrowth() {
 
   // Enrich with deltas
   const enriched = playlists.map(pl => {
-    const current = pl.snapshots[pl.snapshots.length - 1]?.followers || 0;
-    const prev7 = spFollowersNDaysAgo(pl.snapshots, 7);
-    const prev30 = spFollowersNDaysAgo(pl.snapshots, 30);
-    return { ...pl, current, prev7, prev30, delta7: prev7 !== null ? current - prev7 : null, delta30: prev30 !== null ? current - prev30 : null };
+    const snaps = pl.snapshots;
+    const current = snaps[snaps.length - 1]?.followers || 0;
+    const prev1  = spFollowersNDaysAgo(snaps, 1);
+    const prev7  = spFollowersNDaysAgo(snaps, 7);
+    const prev30 = spFollowersNDaysAgo(snaps, 30);
+    const delta1  = prev1  !== null ? current - prev1  : null;
+    const delta7  = prev7  !== null ? current - prev7  : null;
+    const delta30 = prev30 !== null ? current - prev30 : null;
+    const avgDaily7 = delta7 !== null ? Math.round(delta7 / 7) : null;
+    return { ...pl, current, prev1, prev7, prev30, delta1, delta7, delta30, avgDaily7 };
   }).sort((a, b) => b.current - a.current);
 
   // KPIs
@@ -8394,16 +8405,28 @@ function closeSpDetail() {
   if (_spDetailChart) { _spDetailChart.destroy(); _spDetailChart = null; }
 }
 
+let _spRankingEnriched = [];
+
 function renderSpGrowthTable(enriched) {
+  _spRankingEnriched = enriched;
+  filterSpRanking();
+}
+
+function filterSpRanking() {
   const el = document.getElementById('sp-growth-table');
-  if (!el || !enriched.length) return;
-  const rows = enriched.map((p, i) => {
-    const d7 = p.delta7, d30 = p.delta30;
-    const c7 = d7 > 0 ? '#10b981' : d7 < 0 ? '#ef4444' : 'var(--muted)';
-    const c30 = d30 > 0 ? '#10b981' : d30 < 0 ? '#ef4444' : 'var(--muted)';
-    const pct7  = p.prev7  > 0 && d7  !== null ? ((d7  / p.prev7)  * 100).toFixed(1) : null;
-    const pct30 = p.prev30 > 0 && d30 !== null ? ((d30 / p.prev30) * 100).toFixed(1) : null;
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
+  if (!el || !_spRankingEnriched.length) return;
+  const q = (document.getElementById('sp-rank-search')?.value || '').toLowerCase().trim();
+  const filtered = q ? _spRankingEnriched.filter(p => p.name.toLowerCase().includes(q)) : _spRankingEnriched;
+
+  const fmtD = (v) => v !== null ? (v > 0 ? '+' : '') + v.toLocaleString('es-AR') : '—';
+  const col  = (v) => v !== null && v > 0 ? '#10b981' : v !== null && v < 0 ? '#ef4444' : 'var(--muted)';
+
+  const rows = filtered.map((p, i) => {
+    const { delta1, delta7, delta30, avgDaily7, prev7, prev30 } = p;
+    const pct7  = prev7  > 0 && delta7  !== null ? ((delta7  / prev7)  * 100).toFixed(1) : null;
+    const pct30 = prev30 > 0 && delta30 !== null ? ((delta30 / prev30) * 100).toFixed(1) : null;
+    const rank  = _spRankingEnriched.indexOf(p);
+    const medal = rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : `${rank+1}`;
     return `<tr onclick="openSpDetail('${p.id}')" style="border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s" onmouseenter="this.style.background='rgba(255,255,255,0.03)'" onmouseleave="this.style.background='transparent'">
       <td style="padding:9px 8px;font-size:12px;color:var(--muted);text-align:center;width:32px">${medal}</td>
       <td style="padding:9px 8px;display:flex;align-items:center;gap:8px">
@@ -8411,25 +8434,30 @@ function renderSpGrowthTable(enriched) {
         <span style="font-size:13px;font-weight:500">${p.name.length > 38 ? p.name.slice(0,38)+'…' : p.name}</span>
       </td>
       <td style="padding:9px 8px;font-size:14px;font-weight:600;text-align:right;white-space:nowrap">${p.current.toLocaleString('es-AR')}</td>
-      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${c7}">
-        ${d7 !== null ? (d7 > 0 ? '+' : '') + d7.toLocaleString('es-AR') : '—'}
-        ${pct7 && d7 !== 0 ? `<span style="opacity:0.65"> (${d7>0?'+':''}${pct7}%)</span>` : ''}
+      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(delta1)}">${fmtD(delta1)}</td>
+      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(delta7)}">
+        ${fmtD(delta7)}${pct7 && delta7 !== 0 ? `<span style="opacity:0.6"> (${delta7>0?'+':''}${pct7}%)</span>` : ''}
       </td>
-      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${c30}">
-        ${d30 !== null ? (d30 > 0 ? '+' : '') + d30.toLocaleString('es-AR') : '—'}
-        ${pct30 && d30 !== 0 ? `<span style="opacity:0.65"> (${d30>0?'+':''}${pct30}%)</span>` : ''}
+      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(delta30)}">
+        ${fmtD(delta30)}${pct30 && delta30 !== 0 ? `<span style="opacity:0.6"> (${delta30>0?'+':''}${pct30}%)</span>` : ''}
       </td>
+      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(avgDaily7)}">${avgDaily7 !== null ? (avgDaily7 > 0 ? '+' : '') + avgDaily7.toLocaleString('es-AR') : '—'}</td>
     </tr>`;
   }).join('');
+
+  const noResults = filtered.length === 0 ? `<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Sin resultados</td></tr>` : '';
+
   el.innerHTML = `<table style="width:100%;border-collapse:collapse">
     <thead><tr style="border-bottom:1px solid var(--border)">
       <th style="padding:8px;font-size:10px;font-weight:600;text-align:center;color:var(--muted)">#</th>
       <th style="padding:8px;font-size:10px;font-weight:600;text-align:left;color:var(--muted)">PLAYLIST</th>
       <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">SEGUIDORES</th>
+      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">24HS</th>
       <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">7 DÍAS</th>
       <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">30 DÍAS</th>
+      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">PROM/DÍA</th>
     </tr></thead>
-    <tbody>${rows}</tbody>
+    <tbody>${rows || noResults}</tbody>
   </table>`;
 }
 
