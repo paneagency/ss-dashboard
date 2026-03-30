@@ -1819,13 +1819,21 @@
         </div>
         <!-- Ranking section (hidden when detail is open) -->
         <div id="sp-ranking-section">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
             <div>
               <div class="chart-title" style="margin-bottom:2px">Ranking de Playlists</div>
               <div class="chart-subtitle">Click en una fila para ver el detalle</div>
             </div>
-            <input id="sp-rank-search" class="filter-control" placeholder="🔍 Buscar playlist..." oninput="filterSpRanking()" style="max-width:240px;font-size:13px">
+            <div style="position:relative;width:280px;flex-shrink:0">
+              <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);pointer-events:none;opacity:0.45" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="sp-rank-search" placeholder="Buscar playlist..." oninput="filterSpRanking()" autocomplete="off"
+                style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:9px 36px 9px 36px;border-radius:10px;font-size:13px;outline:none;transition:border-color 0.2s,box-shadow 0.2s"
+                onfocus="this.style.borderColor='var(--indigo)';this.style.boxShadow='0 0 0 3px rgba(99,102,241,0.15)'"
+                onblur="this.style.borderColor='var(--border2)';this.style.boxShadow='none'">
+              <button id="sp-rank-clear" onclick="document.getElementById('sp-rank-search').value='';filterSpRanking();this.style.display='none'" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;border-radius:4px" title="Limpiar">✕</button>
+            </div>
           </div>
+          <div id="sp-rank-count" style="font-size:12px;color:var(--muted);margin-bottom:10px;display:none"></div>
           <div id="sp-growth-table"></div>
         </div>
       </div>
@@ -8440,6 +8448,19 @@ function filterSpRanking() {
   if (!el || !_spRankingEnriched.length) return;
   const q = (document.getElementById('sp-rank-search')?.value || '').toLowerCase().trim();
   let rows = q ? _spRankingEnriched.filter(p => p.name.toLowerCase().includes(q)) : [..._spRankingEnriched];
+
+  // Clear button y contador
+  const clearBtn = document.getElementById('sp-rank-clear');
+  const countEl  = document.getElementById('sp-rank-count');
+  if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+  if (countEl) {
+    if (q) {
+      countEl.style.display = 'block';
+      countEl.textContent = rows.length === 0 ? 'Sin resultados' : `${rows.length} playlist${rows.length !== 1 ? 's' : ''} encontrada${rows.length !== 1 ? 's' : ''}`;
+    } else {
+      countEl.style.display = 'none';
+    }
+  }
 
   // Ordenar si hay columna activa
   if (_spSortCol && _spSortDir !== 0) {
