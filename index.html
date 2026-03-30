@@ -1817,7 +1817,7 @@
           </div>
           <div style="display:flex;gap:10px;align-items:center">
             <button id="sp-prov-preview-btn" onclick="previewSpProviderUrls()" class="btn-secondary" style="font-size:13px;padding:8px 16px">🔍 Vista previa</button>
-            <button id="sp-prov-add-btn" onclick="addSpProvider()" class="btn-primary" style="font-size:13px;padding:8px 18px" disabled>+ Guardar</button>
+            <button id="sp-prov-add-btn" onclick="addSpProvider()" class="btn-primary" style="font-size:13px;padding:8px 18px">+ Guardar</button>
             <span id="sp-prov-preview-status" style="font-size:12px;color:var(--muted)"></span>
           </div>
           <div id="sp-prov-preview-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:4px"></div>
@@ -8616,7 +8616,12 @@ async function previewSpProviderUrls() {
 
 async function addSpProvider() {
   const grupo = document.getElementById('sp-prov-grupo')?.value.trim();
-  if (!grupo || !_spPendingPlaylists.length) return alert('Primero hacé la vista previa');
+  if (!grupo) return alert('Ingresá un nombre de grupo primero');
+  const urlsRaw = document.getElementById('sp-prov-urls')?.value.trim();
+  if (!urlsRaw && !_spPendingPlaylists.length) return alert('Pegá al menos una URL de playlist');
+  // Si no se hizo preview todavía, correrlo automáticamente
+  if (!_spPendingPlaylists.length) await previewSpProviderUrls();
+  if (!_spPendingPlaylists.length) return; // preview falló o no encontró playlists
   const btn = document.getElementById('sp-prov-add-btn');
   if (btn) btn.disabled = true;
   try {
