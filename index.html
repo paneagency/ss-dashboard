@@ -8406,6 +8406,19 @@ function closeSpDetail() {
 }
 
 let _spRankingEnriched = [];
+let _spSortCol = null; // 'current' | 'delta1' | 'delta7' | 'delta30' | 'avgDaily7'
+let _spSortDir = 0;   // 0=natural, 1=desc, -1=asc
+
+function sortSpRanking(col) {
+  if (_spSortCol === col) {
+    _spSortDir = _spSortDir === 1 ? -1 : _spSortDir === -1 ? 0 : 1;
+    if (_spSortDir === 0) _spSortCol = null;
+  } else {
+    _spSortCol = col;
+    _spSortDir = 1;
+  }
+  filterSpRanking();
+}
 
 function renderSpGrowthTable(enriched) {
   _spRankingEnriched = enriched;
@@ -8416,12 +8429,27 @@ function filterSpRanking() {
   const el = document.getElementById('sp-growth-table');
   if (!el || !_spRankingEnriched.length) return;
   const q = (document.getElementById('sp-rank-search')?.value || '').toLowerCase().trim();
-  const filtered = q ? _spRankingEnriched.filter(p => p.name.toLowerCase().includes(q)) : _spRankingEnriched;
+  let rows = q ? _spRankingEnriched.filter(p => p.name.toLowerCase().includes(q)) : [..._spRankingEnriched];
+
+  // Ordenar si hay columna activa
+  if (_spSortCol && _spSortDir !== 0) {
+    rows.sort((a, b) => {
+      const av = a[_spSortCol] ?? -Infinity;
+      const bv = b[_spSortCol] ?? -Infinity;
+      return _spSortDir === 1 ? bv - av : av - bv;
+    });
+  }
 
   const fmtD = (v) => v !== null ? (v > 0 ? '+' : '') + v.toLocaleString('es-AR') : '—';
   const col  = (v) => v !== null && v > 0 ? '#10b981' : v !== null && v < 0 ? '#ef4444' : 'var(--muted)';
+  const thStyle = (c) => {
+    const active = _spSortCol === c;
+    const icon = !active || _spSortDir === 0 ? '↕' : _spSortDir === 1 ? '↓' : '↑';
+    const color = active && _spSortDir !== 0 ? 'var(--indigo)' : 'var(--muted)';
+    return `padding:8px;font-size:10px;font-weight:600;text-align:right;color:${color};cursor:pointer;user-select:none;white-space:nowrap" onclick="sortSpRanking('${c}')"><span>${icon} `;
+  };
 
-  const rows = filtered.map((p, i) => {
+  const tableRows = rows.map((p) => {
     const { delta1, delta7, delta30, avgDaily7, prev7, prev30 } = p;
     const pct7  = prev7  > 0 && delta7  !== null ? ((delta7  / prev7)  * 100).toFixed(1) : null;
     const pct30 = prev30 > 0 && delta30 !== null ? ((delta30 / prev30) * 100).toFixed(1) : null;
@@ -8441,23 +8469,31 @@ function filterSpRanking() {
       <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(delta30)}">
         ${fmtD(delta30)}${pct30 && delta30 !== 0 ? `<span style="opacity:0.6"> (${delta30>0?'+':''}${pct30}%)</span>` : ''}
       </td>
-      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(avgDaily7)}">${avgDaily7 !== null ? (avgDaily7 > 0 ? '+' : '') + avgDaily7.toLocaleString('es-AR') : '—'}</td>
+      <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(avgDaily7)}">${fmtD(avgDaily7)}</td>
     </tr>`;
   }).join('');
 
-  const noResults = filtered.length === 0 ? `<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Sin resultados</td></tr>` : '';
+  const noResults = rows.length === 0 ? `<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Sin resultados</td></tr>` : '';
+
+  const thBase = 'padding:8px;font-size:10px;font-weight:600;cursor:pointer;user-select:none;white-space:nowrap';
+  const thH = (c, label, align='right') => {
+    const active = _spSortCol === c && _spSortDir !== 0;
+    const icon = _spSortCol !== c || _spSortDir === 0 ? '↕' : _spSortDir === 1 ? '↓' : '↑';
+    const color = active ? 'var(--indigo)' : 'var(--muted)';
+    return `<th style="${thBase};text-align:${align};color:${color}" onclick="sortSpRanking('${c}')">${icon} ${label}</th>`;
+  };
 
   el.innerHTML = `<table style="width:100%;border-collapse:collapse">
     <thead><tr style="border-bottom:1px solid var(--border)">
       <th style="padding:8px;font-size:10px;font-weight:600;text-align:center;color:var(--muted)">#</th>
       <th style="padding:8px;font-size:10px;font-weight:600;text-align:left;color:var(--muted)">PLAYLIST</th>
-      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">SEGUIDORES</th>
-      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">24HS</th>
-      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">7 DÍAS</th>
-      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">30 DÍAS</th>
-      <th style="padding:8px;font-size:10px;font-weight:600;text-align:right;color:var(--muted)">PROM/DÍA</th>
+      ${thH('current','SEGUIDORES')}
+      ${thH('delta1','24HS')}
+      ${thH('delta7','7 DÍAS')}
+      ${thH('delta30','30 DÍAS')}
+      ${thH('avgDaily7','PROM/DÍA')}
     </tr></thead>
-    <tbody>${rows || noResults}</tbody>
+    <tbody>${tableRows || noResults}</tbody>
   </table>`;
 }
 
