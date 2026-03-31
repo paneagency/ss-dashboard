@@ -47,34 +47,42 @@ export default async function handler(req, res) {
       const token = await getAccessToken();
 
       // Info básica de la playlist
-      const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
+      // Obtener nombre de playlist y primer página de tracks en una sola llamada
+      const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=0`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!plRes.ok) return res.status(404).json({ error: 'Playlist no encontrada o es privada' });
       const plData = await plRes.json();
-      const total = plData.tracks?.total ?? 0;
-      const playlistName = plData.name;
+      const total = plData.total ?? 0;
 
-      // Paginar tracks hasta encontrar el track o llegar al final (máx 1000)
+      // Obtener nombre de playlist por separado
+      const nameRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const nameData = nameRes.ok ? await nameRes.json() : {};
+      const playlistName = nameData.name || 'Playlist';
+
+      // Buscar en primera página
       let position = null;
-      let offset = 0;
-      const limit = 100;
-      while (offset < total && offset < 1000) {
+      const firstItems = plData.items || [];
+      for (let i = 0; i < firstItems.length; i++) {
+        if (firstItems[i]?.track?.id === trackId) { position = i + 1; break; }
+      }
+
+      // Seguir paginando si no encontró
+      let offset = 100;
+      while (position === null && offset < total && offset < 1000) {
         const r = await fetch(
-          `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(id))&limit=${limit}&offset=${offset}`,
+          `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!r.ok) break;
         const data = await r.json();
         const items = data.items || [];
         for (let i = 0; i < items.length; i++) {
-          if (items[i]?.track?.id === trackId) {
-            position = offset + i + 1;
-            break;
-          }
+          if (items[i]?.track?.id === trackId) { position = offset + i + 1; break; }
         }
-        if (position !== null) break;
-        offset += limit;
+        offset += 100;
       }
 
       return res.json({ ok: true, position, total, playlistName });
