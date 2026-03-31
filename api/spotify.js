@@ -33,7 +33,56 @@ function extractSpotifyId(url, type) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  const { url } = req.query;
+  const { url, mode, trackUrl, playlistUrl } = req.query;
+
+  // Modo: buscar posición de un track en una playlist
+  if (mode === 'position') {
+    if (!trackUrl || !playlistUrl) return res.status(400).json({ error: 'trackUrl y playlistUrl requeridos' });
+    const trackId = extractSpotifyId(trackUrl, 'track');
+    const playlistId = extractSpotifyId(playlistUrl, 'playlist');
+    if (!trackId) return res.status(400).json({ error: 'URL de track inválida' });
+    if (!playlistId) return res.status(400).json({ error: 'URL de playlist inválida' });
+
+    try {
+      const token = await getAccessToken();
+
+      // Info básica de la playlist
+      const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,tracks.total`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!plRes.ok) return res.status(404).json({ error: 'Playlist no encontrada o es privada' });
+      const plData = await plRes.json();
+      const total = plData.tracks.total;
+      const playlistName = plData.name;
+
+      // Paginar tracks hasta encontrar el track o llegar al final (máx 1000)
+      let position = null;
+      let offset = 0;
+      const limit = 100;
+      while (offset < total && offset < 1000) {
+        const r = await fetch(
+          `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(id))&limit=${limit}&offset=${offset}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!r.ok) break;
+        const data = await r.json();
+        const items = data.items || [];
+        for (let i = 0; i < items.length; i++) {
+          if (items[i]?.track?.id === trackId) {
+            position = offset + i + 1;
+            break;
+          }
+        }
+        if (position !== null) break;
+        offset += limit;
+      }
+
+      return res.json({ ok: true, position, total, playlistName });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   if (!url) return res.status(400).json({ error: 'url requerida' });
 
   try {
