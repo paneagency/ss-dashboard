@@ -8656,7 +8656,8 @@ async function openSongstatsModal(artistId, artistName) {
   try {
     const r = await fetch(`/api/songstats?action=history&spotifyArtistId=${encodeURIComponent(artistId)}`);
     const d = await r.json();
-    document.getElementById('ss-modal-body').innerHTML = buildSongstatsHistoryPanel(d.rows || [], artistName);
+    const artistImage = window._clientesMap?.[artistName.toLowerCase().trim()]?.imagen || '';
+    document.getElementById('ss-modal-body').innerHTML = buildSongstatsHistoryPanel(d.rows || [], artistName, artistImage);
     // Render charts after DOM is ready
     renderSongstatsCharts(d.rows || []);
   } catch(e) {
@@ -8664,7 +8665,7 @@ async function openSongstatsModal(artistId, artistName) {
   }
 }
 
-function buildSongstatsHistoryPanel(rows, artistName) {
+function buildSongstatsHistoryPanel(rows, artistName, artistImage) {
   if (!rows.length) {
     return `<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">
       <div style="font-size:32px;margin-bottom:12px">📊</div>
@@ -8704,8 +8705,12 @@ function buildSongstatsHistoryPanel(rows, artistName) {
     { url: latest.youtube,   label: 'YouTube',   color: '#ff0000' },
     { url: latest.twitter,   label: 'Twitter/X', color: '#1da1f2' },
   ].filter(l => l.url);
-  const linksHtml = links.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
-    ${links.map(l => `<a href="${l.url}" target="_blank" rel="noopener" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;background:${l.color}18;color:${l.color};border:1px solid ${l.color}33;text-decoration:none">${l.label}</a>`).join('')}
+  const photoHtml = artistImage ? `<img src="${artistImage}" alt="${artistName}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid rgba(29,185,84,0.4);flex-shrink:0">` : '';
+  const linksHtml = (links.length || photoHtml) ? `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+    ${photoHtml}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${links.map(l => `<a href="${l.url}" target="_blank" rel="noopener" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;background:${l.color}18;color:${l.color};border:1px solid ${l.color}33;text-decoration:none">${l.label}</a>`).join('')}
+    </div>
   </div>` : '';
 
   // Bio
