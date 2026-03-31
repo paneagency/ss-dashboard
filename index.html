@@ -1818,12 +1818,19 @@
 
     <!-- Grid view -->
     <div id="sp-view-grid">
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
-        <input id="sp-search" class="filter-control" placeholder="🔍 Buscar playlist..." oninput="filterSpotifyPlaylists()" style="max-width:280px">
-        <select id="sp-filter-grupo" class="filter-control" onchange="filterSpotifyPlaylists()" style="max-width:200px">
-          <option value="">Todos los proveedores</option>
-        </select>
-        <span id="sp-count" style="font-size:13px;color:var(--muted)"></span>
+      <!-- Search bar -->
+      <div style="position:relative;margin-bottom:14px">
+        <svg style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;opacity:0.4" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="sp-search" placeholder="Buscar playlist..." oninput="filterSpotifyPlaylists()" autocomplete="off"
+          style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 36px 10px 38px;border-radius:12px;font-size:13px;outline:none;transition:border-color 0.2s,box-shadow 0.2s"
+          onfocus="this.style.borderColor='var(--indigo)';this.style.boxShadow='0 0 0 3px rgba(99,102,241,0.15)'"
+          onblur="this.style.borderColor='var(--border2)';this.style.boxShadow='none'">
+        <button id="sp-search-clear" onclick="document.getElementById('sp-search').value='';filterSpotifyPlaylists();this.style.display='none'" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;border-radius:4px" title="Limpiar">✕</button>
+      </div>
+      <!-- Provider chips -->
+      <div id="sp-playlist-grupo-filter" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <span id="sp-count" style="font-size:12px;color:var(--muted)"></span>
       </div>
       <div id="sp-grid" class="sp-grid">
         <div style="color:var(--muted);font-size:14px;padding:60px;text-align:center;grid-column:1/-1">Cargando playlists...</div>
@@ -7918,26 +7925,42 @@ async function loadSpotifyTab(force = false) {
       return b.delta - a.delta;
     });
     _spLoaded = true;
-    // Populate provider filter
-    const sel = document.getElementById('sp-filter-grupo');
-    if (sel) {
-      const grupos = [...new Set(_spPlaylists.map(p => p.grupo).filter(Boolean))].sort();
-      sel.innerHTML = '<option value="">Todos los proveedores</option>' +
-        grupos.map(g => `<option value="${g}">${g}</option>`).join('');
-    }
+    renderSpPlaylistGrupoFilter();
     renderSpotifyPlaylists(_spPlaylists);
   } catch(e) {
     if (grid) grid.innerHTML = `<div style="color:#ef4444;text-align:center;padding:60px;grid-column:1/-1">Error: ${e.message}</div>`;
   }
 }
 
+let _spPlaylistGrupoFilter = null;
+
+function renderSpPlaylistGrupoFilter() {
+  const el = document.getElementById('sp-playlist-grupo-filter');
+  if (!el || !_spPlaylists) return;
+  const grupos = [...new Set(_spPlaylists.map(p => p.grupo).filter(Boolean))].sort();
+  if (!grupos.length) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  const chips = [
+    `<button class="sp-grupo-chip${_spPlaylistGrupoFilter === null ? ' active' : ''}" onclick="setSpPlaylistGrupoFilter(null)">Todos</button>`,
+    ...grupos.map(g => `<button class="sp-grupo-chip${_spPlaylistGrupoFilter === g ? ' active' : ''}" onclick="setSpPlaylistGrupoFilter('${g.replace(/'/g,"\\'")}')">· ${g}</button>`),
+  ];
+  el.innerHTML = chips.join('');
+}
+
+function setSpPlaylistGrupoFilter(grupo) {
+  _spPlaylistGrupoFilter = grupo;
+  renderSpPlaylistGrupoFilter();
+  filterSpotifyPlaylists();
+}
+
 function filterSpotifyPlaylists() {
   if (!_spPlaylists) return;
-  const q     = (document.getElementById('sp-search')?.value || '').toLowerCase();
-  const grupo = document.getElementById('sp-filter-grupo')?.value || '';
+  const q = (document.getElementById('sp-search')?.value || '').toLowerCase();
+  const clearBtn = document.getElementById('sp-search-clear');
+  if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
   let filtered = _spPlaylists;
-  if (grupo)  filtered = filtered.filter(p => p.grupo === grupo);
-  if (q)      filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) || (p.grupo || '').toLowerCase().includes(q));
+  if (_spPlaylistGrupoFilter) filtered = filtered.filter(p => p.grupo === _spPlaylistGrupoFilter);
+  if (q) filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || (p.grupo || '').toLowerCase().includes(q));
   renderSpotifyPlaylists(filtered);
 }
 
@@ -8995,7 +9018,10 @@ function spFollowersNDaysAgo(snapshots, n) {
 function renderSpGrupoFilter(allPlaylists) {
   const el = document.getElementById('sp-grupo-filter');
   if (!el) return;
-  const grupos = [...new Set(allPlaylists.map(p => p.grupo).filter(Boolean))].sort();
+  // Merge grupos from history data + all providers (so every group appears even without history)
+  const fromHistory = allPlaylists.map(p => p.grupo).filter(Boolean);
+  const fromProviders = (_spPlaylists || []).map(p => p.grupo).filter(Boolean);
+  const grupos = [...new Set([...fromHistory, ...fromProviders])].sort();
   if (!grupos.length) { el.style.display = 'none'; return; }
   el.style.display = 'flex';
   const chips = [
