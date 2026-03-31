@@ -262,6 +262,7 @@ module.exports = async (req, res) => {
       const allIds = new Set([...rawPlaylists.map(p => p.id), ...Object.keys(playlistGrupoMap)]);
 
       // 5. Fetch metadata completa para cada playlist via CC token (funciona para playlists públicas)
+      const delay = ms => new Promise(r => setTimeout(r, ms));
       const playlists = [];
       for (const plId of allIds) {
         try {
@@ -269,8 +270,14 @@ module.exports = async (req, res) => {
             `https://api.spotify.com/v1/playlists/${plId}?fields=id,name,description,followers,tracks(total),images`,
             { headers: { Authorization: `Bearer ${ccToken}` } }
           );
+          if (r.status === 429) {
+            const retryAfter = parseInt(r.headers.get('Retry-After') || '10') + 1;
+            await delay(retryAfter * 1000);
+            continue; // skip this one rather than block the whole cron
+          }
           if (!r.ok) continue;
           const full = await r.json();
+          await delay(200); // 200ms entre llamadas → ~5 req/s, bien bajo el límite
           playlists.push({
             id: full.id,
             name: full.name,
@@ -317,7 +324,10 @@ module.exports = async (req, res) => {
       if (!r.ok) {
         let spotifyError = null;
         try { spotifyError = JSON.parse(text); } catch(_) {}
-        const errorMsg = spotifyError?.error?.message || text.slice(0, 100);
+        const retryAfter = r.headers.get('Retry-After');
+        const errorMsg = r.status === 429
+          ? `Rate limit de Spotify${retryAfter ? ` — esperá ${retryAfter}s` : ' — intentá en unos segundos'}`
+          : (spotifyError?.error?.message || text.slice(0, 100));
         return res.json({ ok: false, playlistId, status: r.status, error: errorMsg });
       }
       const body = JSON.parse(text);
