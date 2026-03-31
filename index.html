@@ -7836,6 +7836,41 @@ function renderSpotifyPlaylists(playlists) {
   `).join('');
 }
 
+// ── AI description autofill ───────────────────────────────────
+let _spDescTimer = null;
+
+function spDescDebounce(name) {
+  clearTimeout(_spDescTimer);
+  const desc = document.getElementById('sp-modal-desc');
+  // Solo autofill si la descripción está vacía o fue generada por IA (no editada manualmente)
+  if (desc?.dataset.userEdited === '1') return;
+  if (!name || name.trim().length < 4) return;
+  _spDescTimer = setTimeout(() => spGenerateDescription(name.trim()), 900);
+}
+
+async function spGenerateDescription(name) {
+  const statusEl = document.getElementById('sp-ai-status');
+  const descEl = document.getElementById('sp-modal-desc');
+  if (!statusEl || !descEl) return;
+  statusEl.textContent = '✦ Generando descripción...';
+  statusEl.style.display = 'block';
+  try {
+    const r = await fetch('/api/ai-describe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    descEl.value = d.description;
+    descEl.dataset.aiGenerated = '1';
+    document.getElementById('sp-desc-count').textContent = d.description.length + '/300';
+    statusEl.textContent = '✦ Descripción generada por IA';
+    setTimeout(() => { statusEl.style.display = 'none'; }, 2500);
+  } catch(e) {
+    statusEl.style.display = 'none';
+  }
+}
+
 function openSpotifyModal(idxOrNull) {
   const pl = idxOrNull !== null ? (_spPlaylists || [])[idxOrNull] : null;
   _spEditingId = pl?.id || null;
@@ -7854,6 +7889,11 @@ function openSpotifyModal(idxOrNull) {
   document.getElementById('sp-modal-cover-file').value = '';
   if (pl?.image) spSetCoverPreview(pl.image);
   else spClearCover();
+  // Reset AI flags
+  const descEl2 = document.getElementById('sp-modal-desc');
+  if (descEl2) { delete descEl2.dataset.userEdited; delete descEl2.dataset.aiGenerated; }
+  document.getElementById('sp-ai-status').style.display = 'none';
+  clearTimeout(_spDescTimer);
   // Re-trigger animation
   const box = document.querySelector('#sp-modal .modal-box');
   if (box) { box.classList.remove('sp-modal-animated'); void box.offsetWidth; box.classList.add('sp-modal-animated'); }
@@ -8867,7 +8907,7 @@ function filterSpRanking() {
       <!-- Nombre -->
       <div>
         <input id="sp-modal-name" placeholder="Nombre de la playlist" maxlength="100"
-          oninput="const c=document.getElementById('sp-name-count');c.textContent=this.value.length+'/100';c.className='sp-char-count'+(this.value.length>85?' warn':'')"
+          oninput="const c=document.getElementById('sp-name-count');c.textContent=this.value.length+'/100';c.className='sp-char-count'+(this.value.length>85?' warn':'');spDescDebounce(this.value)"
           style="width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-size:21px;font-weight:700;padding:4px 0 10px;outline:none;transition:border-color 0.2s;font-family:inherit"
           onfocus="this.style.borderBottomColor='#1db954'" onblur="this.style.borderBottomColor='var(--border2)'">
         <div id="sp-name-count" class="sp-char-count">0/100</div>
@@ -8875,10 +8915,13 @@ function filterSpRanking() {
       <!-- Descripción -->
       <div>
         <textarea id="sp-modal-desc" placeholder="Añadí una descripción opcional..." maxlength="300" rows="2"
-          oninput="document.getElementById('sp-desc-count').textContent=this.value.length+'/300'"
+          oninput="document.getElementById('sp-desc-count').textContent=this.value.length+'/300';if(this.dataset.aiGenerated!=='1')this.dataset.userEdited='1';delete this.dataset.aiGenerated"
           style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-size:13px;padding:10px 12px;outline:none;resize:none;font-family:inherit;transition:border-color 0.2s"
           onfocus="this.style.borderColor='#1db954'" onblur="this.style.borderColor='var(--border2)'"></textarea>
-        <div id="sp-desc-count" class="sp-char-count">0/300</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
+          <span id="sp-ai-status" style="font-size:11px;color:#1db954;display:none"></span>
+          <div id="sp-desc-count" class="sp-char-count" style="margin-top:0">0/300</div>
+        </div>
       </div>
       <!-- Toggle público -->
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surface2);border-radius:12px">
