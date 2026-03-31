@@ -38,10 +38,23 @@ async function kvIncr(key) {
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 function rateKey()  { return `songstats:calls:${todayStr()}`; }
 
+const QUOTA_KV_KEY = 'songstats:quota';
+
+async function saveQuotaFromHeaders(headers) {
+  const limit     = parseInt(headers.get('x-ratelimit-requests-limit')     || '0');
+  const remaining = parseInt(headers.get('x-ratelimit-requests-remaining') || '0');
+  if (limit > 0) await kvSet(QUOTA_KV_KEY, { limit, remaining, updatedAt: new Date().toISOString() }, 90000);
+}
+
 async function getRateStatus() {
+  const quota = await kvGetJson(QUOTA_KV_KEY);
+  if (quota && quota.limit > 0) {
+    return { limit: quota.limit, remaining: quota.remaining, used: quota.limit - quota.remaining, source: 'rapidapi' };
+  }
+  // Fallback al contador manual si no hay datos reales aún
   const key  = rateKey();
   const used = await kvGetNum(key);
-  return { key, used, limit: RATE_LIMIT, remaining: Math.max(0, RATE_LIMIT - used) };
+  return { key, used, limit: RATE_LIMIT, remaining: Math.max(0, RATE_LIMIT - used), source: 'counter' };
 }
 
 // ── Google Sheets ───────────────────────────────────────────────
@@ -123,6 +136,7 @@ async function ss(path) {
   const r = await fetch(`https://${SONGSTATS_HOST}${path}`, {
     headers: { 'x-rapidapi-host': SONGSTATS_HOST, 'x-rapidapi-key': apiKey },
   });
+  await saveQuotaFromHeaders(r.headers).catch(() => {});
   const text = await r.text();
   if (!r.ok) throw new Error(`Songstats ${r.status}: ${text.slice(0, 200)}`);
   try { return JSON.parse(text); } catch { throw new Error(`Parse error: ${text.slice(0,100)}`); }
@@ -255,7 +269,6 @@ module.exports = async (req, res) => {
       },
     };
     await kvSet(artistKey, artistData, 86400);
-    for (let i = 0; i < raw.callsUsed; i++) { await kvIncr(rl.key); }
   } catch(e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
@@ -270,11 +283,11 @@ module.exports = async (req, res) => {
     })();
   }
 
-  const finalUsed = rl.used + 2;
+  const rlFinal = await getRateStatus();
   return res.json({
     ok: true,
     artist: artistData,
     artistCached: false,
-    credits: { used: finalUsed, limit: RATE_LIMIT, remaining: Math.max(0, RATE_LIMIT - finalUsed) },
+    credits: { used: rlFinal.used, limit: rlFinal.limit, remaining: rlFinal.remaining },
   });
 };
