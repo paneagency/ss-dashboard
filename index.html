@@ -563,10 +563,23 @@
       color: var(--indigo);
     }
     /* Detalle cliente */
-    .detalle-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px }
-    .detalle-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px }
-    .detalle-field { background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px }
-    .detalle-field-label { font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px }
+    .detalle-section { border-radius:12px;padding:14px 16px;margin-bottom:12px;border-left:3px solid transparent }
+    .detalle-section-info    { background:rgba(99,102,241,0.07);border-left-color:#6366f1 }
+    .detalle-section-contacto{ background:rgba(6,182,212,0.07);border-left-color:#06b6d4 }
+    .detalle-section-comercial{ background:rgba(16,185,129,0.07);border-left-color:#10b981 }
+    .detalle-section-facturacion{ background:rgba(245,158,11,0.07);border-left-color:#f59e0b }
+    .detalle-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:6px }
+    .detalle-section-info .detalle-section-title    { color:#818cf8 }
+    .detalle-section-contacto .detalle-section-title{ color:#22d3ee }
+    .detalle-section-comercial .detalle-section-title{ color:#34d399 }
+    .detalle-section-facturacion .detalle-section-title{ color:#fbbf24 }
+    .detalle-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px }
+    .detalle-field { background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px 12px }
+    .detalle-field-label { font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;color:var(--muted) }
+    .detalle-section-info .detalle-field-label    { color:#a5b4fc }
+    .detalle-section-contacto .detalle-field-label{ color:#67e8f9 }
+    .detalle-section-comercial .detalle-field-label{ color:#86efac }
+    .detalle-section-facturacion .detalle-field-label{ color:#fcd34d }
     .detalle-field-value { font-size:14px;font-weight:500;word-break:break-word }
     .detalle-field-value a { color:var(--indigo);text-decoration:none }
     .detalle-field-value a:hover { text-decoration:underline }
@@ -1312,59 +1325,67 @@
       <div style="overflow-y:auto;max-height:60vh;padding:20px 28px 4px">
         <input type="hidden" id="dd-row">
 
-        <div class="detalle-section-title">Información</div>
-        <div class="detalle-grid" style="margin-bottom:16px">
-          <div class="detalle-field"><div class="detalle-field-label">Género</div><input id="dd-genero" class="dd-input" list="list-generos" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">País</div><input id="dd-pais" class="dd-input" list="list-paises" placeholder="—"></div>
-          <datalist id="list-paises"><option>Argentina</option><option>México</option><option>Colombia</option><option>Chile</option><option>España</option><option>Uruguay</option><option>Perú</option><option>Venezuela</option><option>Ecuador</option><option>Bolivia</option><option>Paraguay</option><option>Cuba</option><option>República Dominicana</option><option>Guatemala</option><option>Honduras</option><option>El Salvador</option><option>Nicaragua</option><option>Costa Rica</option><option>Panamá</option><option>Puerto Rico</option><option>Brasil</option><option>Estados Unidos</option><option>Canadá</option><option>Reino Unido</option><option>Francia</option><option>Alemania</option><option>Italia</option><option>Portugal</option><option>Países Bajos</option><option>Bélgica</option><option>Suecia</option><option>Noruega</option><option>Dinamarca</option><option>Finlandia</option><option>Suiza</option><option>Austria</option><option>Polonia</option><option>Rusia</option><option>Australia</option><option>Nueva Zelanda</option><option>Japón</option><option>Corea del Sur</option><option>China</option><option>India</option><option>Israel</option><option>Turquía</option><option>Sudáfrica</option><option>Marruecos</option><option>Egipto</option></datalist>
-          <div class="detalle-field"><div class="detalle-field-label">Nombre</div><input id="dd-nombre" class="dd-input" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">Apodo</div><input id="dd-apodo" class="dd-input" placeholder="—"></div>
-        </div>
-
-        <div class="detalle-section-title">Contacto</div>
-        <div class="detalle-grid" style="margin-bottom:16px">
-          <div class="detalle-field"><div class="detalle-field-label">Teléfono</div><input id="dd-telefono" class="dd-input" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="dd-email" class="dd-input" placeholder="uno@mail.com, dos@mail.com"></div>
-          <div class="detalle-field full"><div class="detalle-field-label">Spotify</div><input id="dd-spotify" class="dd-input" placeholder="—"></div>
-        </div>
-
-        <div class="detalle-section-title">Comercial</div>
-        <div class="detalle-grid" style="margin-bottom:16px">
-          <div class="detalle-field"><div class="detalle-field-label">Representante</div><input id="dd-representante" class="dd-input" list="list-representantes" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">Vendedor</div>
-            <select id="dd-vendedor" class="dd-input" style="cursor:pointer"><option value="">—</option></select>
-          </div>
-          <div class="detalle-field"><div class="detalle-field-label">Método de pago</div>
-            <select id="dd-metodo" class="dd-input" style="cursor:pointer">
-              <option value="">—</option><option>PayPal</option><option>Wise</option>
-              <option>Mercado Pago</option><option>Transferencia Ars</option><option>Sin Comision</option>
-            </select>
-          </div>
-          <div class="detalle-field"><div class="detalle-field-label">Estado</div>
-            <select id="dd-estado" class="dd-input" style="cursor:pointer">
-              <option value="Activa">Activa</option><option value="Sin pauta">Sin pauta</option>
-            </select>
+        <div class="detalle-section detalle-section-info">
+          <div class="detalle-section-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Información</div>
+          <div class="detalle-grid">
+            <div class="detalle-field"><div class="detalle-field-label">Género</div><input id="dd-genero" class="dd-input" list="list-generos" placeholder="—"></div>
+            <div class="detalle-field"><div class="detalle-field-label">País</div><input id="dd-pais" class="dd-input" list="list-paises" placeholder="—"></div>
+            <datalist id="list-paises"><option>Argentina</option><option>México</option><option>Colombia</option><option>Chile</option><option>España</option><option>Uruguay</option><option>Perú</option><option>Venezuela</option><option>Ecuador</option><option>Bolivia</option><option>Paraguay</option><option>Cuba</option><option>República Dominicana</option><option>Guatemala</option><option>Honduras</option><option>El Salvador</option><option>Nicaragua</option><option>Costa Rica</option><option>Panamá</option><option>Puerto Rico</option><option>Brasil</option><option>Estados Unidos</option><option>Canadá</option><option>Reino Unido</option><option>Francia</option><option>Alemania</option><option>Italia</option><option>Portugal</option><option>Países Bajos</option><option>Bélgica</option><option>Suecia</option><option>Noruega</option><option>Dinamarca</option><option>Finlandia</option><option>Suiza</option><option>Austria</option><option>Polonia</option><option>Rusia</option><option>Australia</option><option>Nueva Zelanda</option><option>Japón</option><option>Corea del Sur</option><option>China</option><option>India</option><option>Israel</option><option>Turquía</option><option>Sudáfrica</option><option>Marruecos</option><option>Egipto</option></datalist>
+            <div class="detalle-field"><div class="detalle-field-label">Nombre</div><input id="dd-nombre" class="dd-input" placeholder="—"></div>
+            <div class="detalle-field"><div class="detalle-field-label">Apodo</div><input id="dd-apodo" class="dd-input" placeholder="—"></div>
           </div>
         </div>
 
-        <div class="detalle-section-title">Facturación</div>
-        <div class="detalle-grid" style="margin-bottom:8px">
-          <div class="detalle-field"><div class="detalle-field-label">Tipo</div>
-            <select id="dd-tipo" class="dd-input" style="cursor:pointer">
-              <option value="Artista">Artista</option>
-              <option value="Representante">Representante</option>
-            </select>
+        <div class="detalle-section detalle-section-contacto">
+          <div class="detalle-section-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.14 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.07 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L7.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 21 16.92z"/></svg>Contacto</div>
+          <div class="detalle-grid">
+            <div class="detalle-field"><div class="detalle-field-label">Teléfono</div><input id="dd-telefono" class="dd-input" placeholder="—"></div>
+            <div class="detalle-field"><div class="detalle-field-label">Email</div><input id="dd-email" class="dd-input" placeholder="uno@mail.com, dos@mail.com"></div>
+            <div class="detalle-field full"><div class="detalle-field-label">Spotify</div><input id="dd-spotify" class="dd-input" placeholder="—"></div>
           </div>
-          <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="dd-taxid" class="dd-input" placeholder="—"></div>
-          <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="dd-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
-          <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal</div><input id="dd-nombre-fiscal" class="dd-input" placeholder="Nombre en factura (si difiere del artista)"></div>
-          <div class="detalle-field full">
-            <div id="dd-auto-factura-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none">
-              <div id="dd-auto-factura-toggle" onclick="toggleAutoFactura()" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
-                <div id="dd-auto-factura-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+        </div>
+
+        <div class="detalle-section detalle-section-comercial">
+          <div class="detalle-section-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>Comercial</div>
+          <div class="detalle-grid">
+            <div class="detalle-field"><div class="detalle-field-label">Representante</div><input id="dd-representante" class="dd-input" list="list-representantes" placeholder="—"></div>
+            <div class="detalle-field"><div class="detalle-field-label">Vendedor</div>
+              <select id="dd-vendedor" class="dd-input" style="cursor:pointer"><option value="">—</option></select>
+            </div>
+            <div class="detalle-field"><div class="detalle-field-label">Método de pago</div>
+              <select id="dd-metodo" class="dd-input" style="cursor:pointer">
+                <option value="">—</option><option>PayPal</option><option>Wise</option>
+                <option>Mercado Pago</option><option>Transferencia Ars</option><option>Sin Comision</option>
+              </select>
+            </div>
+            <div class="detalle-field"><div class="detalle-field-label">Estado</div>
+              <select id="dd-estado" class="dd-input" style="cursor:pointer">
+                <option value="Activa">Activa</option><option value="Sin pauta">Sin pauta</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="detalle-section detalle-section-facturacion">
+          <div class="detalle-section-title"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Facturación</div>
+          <div class="detalle-grid">
+            <div class="detalle-field"><div class="detalle-field-label">Tipo</div>
+              <select id="dd-tipo" class="dd-input" style="cursor:pointer">
+                <option value="Artista">Artista</option>
+                <option value="Representante">Representante</option>
+              </select>
+            </div>
+            <div class="detalle-field"><div class="detalle-field-label">Tax ID</div><input id="dd-taxid" class="dd-input" placeholder="—"></div>
+            <div class="detalle-field full"><div class="detalle-field-label">Dirección</div><input id="dd-direccion" class="dd-input" placeholder="Dirección de facturación"></div>
+            <div class="detalle-field full"><div class="detalle-field-label">Nombre Fiscal</div><input id="dd-nombre-fiscal" class="dd-input" placeholder="Nombre en factura (si difiere del artista)"></div>
+            <div class="detalle-field full">
+              <div id="dd-auto-factura-label" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none">
+                <div id="dd-auto-factura-toggle" onclick="toggleAutoFactura()" style="width:36px;height:20px;border-radius:10px;background:var(--border2);position:relative;transition:background 0.2s;flex-shrink:0">
+                  <div id="dd-auto-factura-thumb" style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+                </div>
+                <input type="checkbox" id="dd-auto-factura" style="display:none">
+                <span style="font-size:13px;font-weight:500">Auto Factura</span>
               </div>
-              <input type="checkbox" id="dd-auto-factura" style="display:none">
-              <span style="font-size:16px">🧾</span>
             </div>
           </div>
         </div>
