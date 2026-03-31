@@ -47,12 +47,12 @@ export default async function handler(req, res) {
       const token = await getAccessToken();
 
       // Info básica de la playlist
-      const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,tracks.total`, {
+      const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!plRes.ok) return res.status(404).json({ error: 'Playlist no encontrada o es privada' });
       const plData = await plRes.json();
-      const total = plData.tracks.total;
+      const total = plData.tracks?.total ?? 0;
       const playlistName = plData.name;
 
       // Paginar tracks hasta encontrar el track o llegar al final (máx 1000)
