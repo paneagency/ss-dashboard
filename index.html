@@ -1814,7 +1814,10 @@
     <!-- Grid view -->
     <div id="sp-view-grid">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
-        <input id="sp-search" class="filter-control" placeholder="🔍 Buscar playlist..." oninput="filterSpotifyPlaylists()" style="max-width:300px">
+        <input id="sp-search" class="filter-control" placeholder="🔍 Buscar playlist..." oninput="filterSpotifyPlaylists()" style="max-width:280px">
+        <select id="sp-filter-grupo" class="filter-control" onchange="filterSpotifyPlaylists()" style="max-width:200px">
+          <option value="">Todos los proveedores</option>
+        </select>
         <span id="sp-count" style="font-size:13px;color:var(--muted)"></span>
       </div>
       <div id="sp-grid" class="sp-grid">
@@ -7888,16 +7891,31 @@ async function loadSpotifyTab(force = false) {
   grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:60px;grid-column:1/-1">Cargando playlists...</div>';
   try {
     const [r, capsR] = await Promise.all([
-      fetch('/api/spotify-manage?action=playlists'),
+      fetch('/api/snapshot?action=providers'),
       fetch('/api/sheets?mode=playlist-caps').catch(() => null),
     ]);
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || 'Error al cargar playlists');
     if (capsR) { const capsD = await capsR.json().catch(() => ({})); if (capsD.caps) _playlistCaps = capsD.caps; }
-    _spPlaylists = data.playlists;
+    // Normalise sheet rows to the card format
+    _spPlaylists = (data.providers || []).map(p => ({
+      id:          p.userId,
+      name:        p.name || p.userId,
+      description: p.owner || '',
+      image:       p.image || '',
+      url:         `https://open.spotify.com/playlist/${p.userId}`,
+      followers:   p.followers || null,
+      grupo:       p.grupo || '',
+      row:         p.row,
+    }));
     _spLoaded = true;
-    const chip = document.getElementById('sp-account-info');
-    if (chip) chip.style.display = 'inline-block';
+    // Populate provider filter
+    const sel = document.getElementById('sp-filter-grupo');
+    if (sel) {
+      const grupos = [...new Set(_spPlaylists.map(p => p.grupo).filter(Boolean))].sort();
+      sel.innerHTML = '<option value="">Todos los proveedores</option>' +
+        grupos.map(g => `<option value="${g}">${g}</option>`).join('');
+    }
     renderSpotifyPlaylists(_spPlaylists);
   } catch(e) {
     if (grid) grid.innerHTML = `<div style="color:#ef4444;text-align:center;padding:60px;grid-column:1/-1">Error: ${e.message}</div>`;
@@ -7906,8 +7924,11 @@ async function loadSpotifyTab(force = false) {
 
 function filterSpotifyPlaylists() {
   if (!_spPlaylists) return;
-  const q = (document.getElementById('sp-search')?.value || '').toLowerCase();
-  const filtered = q ? _spPlaylists.filter(p => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)) : _spPlaylists;
+  const q     = (document.getElementById('sp-search')?.value || '').toLowerCase();
+  const grupo = document.getElementById('sp-filter-grupo')?.value || '';
+  let filtered = _spPlaylists;
+  if (grupo)  filtered = filtered.filter(p => p.grupo === grupo);
+  if (q)      filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) || (p.grupo || '').toLowerCase().includes(q));
   renderSpotifyPlaylists(filtered);
 }
 
@@ -7929,11 +7950,10 @@ function renderSpotifyPlaylists(playlists) {
         <div class="sp-card-name" title="${p.name.replace(/"/g,'')}">${p.name}</div>
         <div class="sp-card-desc">${p.description || '<span style="opacity:0.4">Sin descripción</span>'}</div>
         <div class="sp-card-meta">
-          <span>🎵 ${p.tracks}</span>
-          <span>${p.public ? '🌐 Pública' : '🔒 Privada'}</span>
+          ${p.grupo ? `<span style="color:#1db954;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">${p.grupo}</span>` : ''}
+          ${p.followers ? `<span>👥 ${p.followers.toLocaleString()}</span>` : ''}
         </div>
         <div class="sp-card-actions" onclick="event.stopPropagation()">
-          <button class="sp-btn" onclick="openSpotifyModal(${i})" title="Editar">✏️</button>
           <button class="sp-btn" onclick="spCopyLink(${i})" title="Copiar link">🔗</button>
           <a href="${p.url}" target="_blank" class="sp-btn" title="Abrir en Spotify">↗</a>
         </div>
