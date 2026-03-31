@@ -747,7 +747,7 @@ module.exports = async (req, res) => {
         fetch(`${baseUrl}/api/songstats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'artist', spotifyArtistId, artistName: artista, save: true }),
+          body: JSON.stringify({ spotifyArtistId, artistName: artista, save: true }),
         }).catch(() => {});
       }
 
@@ -1246,6 +1246,30 @@ module.exports = async (req, res) => {
         }
       } catch (e) {
         console.error('Error actualizando hoja ventas:', e.message);
+      }
+
+      // Fire & forget: snapshot Songstats al renovar campaña (si hay spotify ID en Clientes)
+      if (!esEdicion) {
+        (async () => {
+          try {
+            const clientResp = await sheets.spreadsheets.values.get({
+              spreadsheetId: SPREADSHEET_ID,
+              range: 'Clientes!B:G',
+            });
+            const clientRows = (clientResp.data.values || []).slice(1);
+            const clientRow = clientRows.find(r => (r[0] || '').toLowerCase().trim() === artista.toLowerCase().trim());
+            const spotifyUrl = clientRow?.[5] || '';
+            const match = spotifyUrl.match(/artist\/([A-Za-z0-9]+)/);
+            if (match) {
+              const baseUrl = `https://${req.headers.host}`;
+              fetch(`${baseUrl}/api/songstats`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ spotifyArtistId: match[1], artistName: artista, save: true }),
+              }).catch(() => {});
+            }
+          } catch(e) { /* non-fatal */ }
+        })();
       }
 
       return res.json({ ok: true, nuevaFechaVenc, newCampaignRow, campaignId });

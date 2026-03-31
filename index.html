@@ -1915,8 +1915,6 @@
           <div id="sp-az-position-result" style="margin-top:14px;font-size:14px;display:none"></div>
         </div>
 
-        <!-- Songstats panel -->
-        <div id="sp-az-stats" style="display:none;margin-top:20px"></div>
       </div>
 
       <!-- Loading -->
@@ -3369,7 +3367,7 @@ function openClientDetail(row) {
   const artistIdMatch = spotifyUrl.match(/artist\/([A-Za-z0-9]+)/);
   const clientArtistId = artistIdMatch ? artistIdMatch[1] : null;
   const statsBtn = clientArtistId
-    ? `<button class="btn btn-ghost" style="display:flex;align-items:center;gap:5px" onclick="openSongstatsModal('${clientArtistId}',null,'${esc(c.artista||'')}','')">📊 Stats</button>`
+    ? `<button class="btn btn-ghost" style="display:flex;align-items:center;gap:5px" onclick="openSongstatsModal('${clientArtistId}','${esc(c.artista||'')}')">📊 Stats</button>`
     : '';
 
   const footer = document.getElementById('detalle-footer');
@@ -8388,11 +8386,7 @@ async function analyzeSpTrack() {
     resultEl.style.display = 'block';
     spPopulatePositionDropdown();
 
-    // Songstats (fire & forget — auto-trigger)
-    document.getElementById('sp-az-stats').style.display = 'none';
-    if (d.artistSpotifyId || _spAnalyzeData.trackId) {
-      fetchSpAzSongstats(d.artistSpotifyId, _spAnalyzeData.trackId, d.allArtists || d.artist, d.track);
-    }
+
     if (genres.length) {
       renderSpGenreBadges(genresEl, genres, false);
       renderSpAnalyzePlaylists(genres);
@@ -8595,25 +8589,7 @@ function buildSongstatsPanel(data, fallbackArtistName, fallbackTrackName) {
   </div>`;
 }
 
-async function fetchSpAzSongstats(artistId, trackId, artistName, trackName) {
-  const el = document.getElementById('sp-az-stats');
-  if (!el) return;
-  const mode = artistId && trackId ? 'both' : artistId ? 'artist' : 'track';
-  el.innerHTML = `<div class="ss-panel"><div class="ss-panel-header"><div style="display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#1db954"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.759-8.785-.964a.623.623 0 01-.277-1.215c3.809-.87 7.077-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 01-.973-.516.781.781 0 01.517-.972c3.632-1.102 8.147-.568 11.236 1.325a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.794c3.532-1.072 9.404-.865 13.115 1.338a.936.936 0 11-.955 1.613z"/></svg><span style="font-size:13px;font-weight:700">Songstats</span></div></div><div style="padding:24px;text-align:center;color:var(--muted);font-size:13px" class="ss-loading">Cargando perfil completo...</div></div>`;
-  el.style.display = 'block';
-  try {
-    const r = await fetch('/api/songstats', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName, save: true }),
-    });
-    const d = await r.json();
-    el.innerHTML = buildSongstatsPanel(d, artistName, trackName);
-  } catch(e) {
-    el.innerHTML = `<div class="ss-panel"><div style="padding:16px;color:var(--muted);font-size:12px">No se pudieron obtener estadísticas: ${e.message}</div></div>`;
-  }
-}
-
-async function openSongstatsModal(artistId, trackId, artistName, trackName) {
+async function openSongstatsModal(artistId, artistName) {
   const existing = document.getElementById('ss-modal-overlay');
   if (existing) existing.remove();
 
@@ -8622,31 +8598,149 @@ async function openSongstatsModal(artistId, trackId, artistName, trackName) {
   overlay.className = 'ss-modal-overlay';
   overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
 
-  const mode = artistId && trackId ? 'both' : artistId ? 'artist' : 'track';
+  const svgSpotify = `<svg width="16" height="16" viewBox="0 0 24 24" fill="#1db954"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.759-8.785-.964a.623.623 0 01-.277-1.215c3.809-.87 7.077-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 01-.973-.516.781.781 0 01.517-.972c3.632-1.102 8.147-.568 11.236 1.325a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.794c3.532-1.072 9.404-.865 13.115 1.338a.936.936 0 11-.955 1.613z"/></svg>`;
+
   overlay.innerHTML = `<div class="ss-modal-box">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(29,185,84,0.08),rgba(99,102,241,0.06))">
       <div style="display:flex;align-items:center;gap:10px">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="#1db954"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.759-8.785-.964a.623.623 0 01-.277-1.215c3.809-.87 7.077-.496 9.712 1.115a.623.623 0 01.207.857zm1.223-2.722a.78.78 0 01-1.072.257c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 01-.973-.516.781.781 0 01.517-.972c3.632-1.102 8.147-.568 11.236 1.325a.78.78 0 01.257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 11-.543-1.794c3.532-1.072 9.404-.865 13.115 1.338a.936.936 0 11-.955 1.613z"/></svg>
-        <div style="font-size:15px;font-weight:700">Songstats — ${artistName}</div>
+        ${svgSpotify}
+        <div style="font-size:15px;font-weight:700">Estadísticas — ${artistName}</div>
       </div>
-      <button onclick="document.getElementById('ss-modal-overlay').remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:4px 8px;border-radius:6px;transition:color 0.15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">✕</button>
+      <button onclick="document.getElementById('ss-modal-overlay').remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:4px 8px;border-radius:6px">✕</button>
     </div>
-    <div id="ss-modal-body" style="overflow-y:auto;max-height:70vh;padding:20px">
-      <div style="text-align:center;color:var(--muted);padding:30px;font-size:13px" class="ss-loading">Cargando perfil completo...</div>
+    <div id="ss-modal-body" style="overflow-y:auto;max-height:72vh;padding:20px">
+      <div style="text-align:center;color:var(--muted);padding:30px;font-size:13px">Cargando historial...</div>
     </div>
   </div>`;
   document.body.appendChild(overlay);
 
   try {
-    const r = await fetch('/api/songstats', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName }),
-    });
+    const r = await fetch(`/api/songstats?action=history&spotifyArtistId=${encodeURIComponent(artistId)}`);
     const d = await r.json();
-    document.getElementById('ss-modal-body').innerHTML = buildSongstatsPanel(d, artistName, trackName);
+    document.getElementById('ss-modal-body').innerHTML = buildSongstatsHistoryPanel(d.rows || [], artistName);
+    // Render charts after DOM is ready
+    renderSongstatsCharts(d.rows || []);
   } catch(e) {
     document.getElementById('ss-modal-body').innerHTML = `<div style="color:var(--muted);font-size:13px">Error: ${e.message}</div>`;
   }
+}
+
+function buildSongstatsHistoryPanel(rows, artistName) {
+  if (!rows.length) {
+    return `<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">
+      <div style="font-size:32px;margin-bottom:12px">📊</div>
+      <div style="font-weight:600;margin-bottom:8px">Sin datos históricos aún</div>
+      <div>Los datos se guardan automáticamente al crear o renovar campañas.</div>
+    </div>`;
+  }
+
+  const latest = rows[rows.length - 1];
+  const fmt = n => n == null ? '—' : n >= 1e9 ? (n/1e9).toFixed(1)+'B' : n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'K' : n.toLocaleString();
+
+  // Latest info
+  const infoHtml = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Monthly Listeners</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${fmt(latest.monthlyListeners)}</div>
+      </div>
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Followers</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${fmt(latest.followers)}</div>
+      </div>
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Playlists</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${fmt(latest.playlistCount)}</div>
+      </div>
+      <div style="flex:1;min-width:140px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Streams totales</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${fmt(latest.streamsTotal)}</div>
+      </div>
+    </div>`;
+
+  // Links sociales
+  const links = [
+    { url: latest.instagram, label: 'Instagram', color: '#e1306c' },
+    { url: latest.tiktok,    label: 'TikTok',    color: '#010101' },
+    { url: latest.youtube,   label: 'YouTube',   color: '#ff0000' },
+    { url: latest.twitter,   label: 'Twitter/X', color: '#1da1f2' },
+  ].filter(l => l.url);
+  const linksHtml = links.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+    ${links.map(l => `<a href="${l.url}" target="_blank" rel="noopener" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;background:${l.color}18;color:${l.color};border:1px solid ${l.color}33;text-decoration:none">${l.label}</a>`).join('')}
+  </div>` : '';
+
+  // Bio
+  const bioHtml = latest.bio ? `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:20px;font-size:13px;color:var(--muted);line-height:1.6;max-height:120px;overflow-y:auto">${latest.bio.replace(/\n/g,'<br>')}</div>` : '';
+
+  // Géneros
+  const generosBadges = latest.generos ? latest.generos.split(',').map(g => g.trim()).filter(Boolean)
+    .map(g => `<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(99,102,241,0.12);color:var(--indigo);border:1px solid rgba(99,102,241,0.25)">${g}</span>`).join('') : '';
+  const generosHtml = generosBadges ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">${generosBadges}</div>` : '';
+
+  // Charts (solo si hay 2+ puntos)
+  const chartsHtml = rows.length >= 2 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">Evolución histórica</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Monthly Listeners</div>
+          <canvas id="ss-chart-listeners" height="120"></canvas>
+        </div>
+        <div style="flex:1;min-width:240px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Followers</div>
+          <canvas id="ss-chart-followers" height="120"></canvas>
+        </div>
+      </div>
+    </div>` : '';
+
+  // Tabla historial
+  const tableRows = [...rows].reverse().slice(0, 20).map(r => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 10px;font-size:12px;color:var(--muted)">${r.fecha}</td>
+      <td style="padding:8px 10px;font-size:13px">${fmt(r.monthlyListeners)}</td>
+      <td style="padding:8px 10px;font-size:13px">${fmt(r.followers)}</td>
+      <td style="padding:8px 10px;font-size:13px">${fmt(r.playlistCount)}</td>
+      <td style="padding:8px 10px;font-size:13px">${fmt(r.streamsTotal)}</td>
+    </tr>`).join('');
+
+  const tableHtml = `
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">Historial de snapshots (${rows.length})</div>
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:12px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--card)">
+          <th style="padding:8px 10px;font-size:11px;font-weight:700;text-align:left;color:var(--muted)">Fecha</th>
+          <th style="padding:8px 10px;font-size:11px;font-weight:700;text-align:left;color:var(--muted)">Listeners/mes</th>
+          <th style="padding:8px 10px;font-size:11px;font-weight:700;text-align:left;color:var(--muted)">Followers</th>
+          <th style="padding:8px 10px;font-size:11px;font-weight:700;text-align:left;color:var(--muted)">Playlists</th>
+          <th style="padding:8px 10px;font-size:11px;font-weight:700;text-align:left;color:var(--muted)">Streams</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
+
+  return infoHtml + linksHtml + bioHtml + generosHtml + chartsHtml + tableHtml;
+}
+
+function renderSongstatsCharts(rows) {
+  if (rows.length < 2) return;
+  const labels = rows.map(r => r.fecha);
+  const chartOpts = (label, color) => ({
+    type: 'line',
+    data: { labels, datasets: [{ label, data: [], borderColor: color, backgroundColor: color + '18', fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 6, font: { size: 10 } } }, y: { ticks: { font: { size: 10 }, callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v } } } },
+  });
+
+  const listenersEl = document.getElementById('ss-chart-listeners');
+  const followersEl = document.getElementById('ss-chart-followers');
+  if (!listenersEl || !followersEl) return;
+
+  const lOpts = chartOpts('Monthly Listeners', '#1db954');
+  lOpts.data.datasets[0].data = rows.map(r => r.monthlyListeners);
+  new Chart(listenersEl, lOpts);
+
+  const fOpts = chartOpts('Followers', '#6366f1');
+  fOpts.data.datasets[0].data = rows.map(r => r.followers);
+  new Chart(followersEl, fOpts);
 }
 
 function renderSpGenreBadges(el, genres, fromAI) {
