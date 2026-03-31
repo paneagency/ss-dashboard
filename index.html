@@ -8323,23 +8323,43 @@ async function analyzeSpTrack() {
 
     // Géneros como badges
     const genresEl = document.getElementById('sp-az-genres');
-    const genres = d.genres || [];
-    if (genres.length) {
-      const colors = ['#1db954','#3b82f6','#8b5cf6','#f59e0b','#ec4899','#06b6d4'];
-      genresEl.innerHTML = genres.map((g, i) => `<span style="padding:4px 10px;border-radius:100px;font-size:11px;font-weight:600;background:${colors[i%colors.length]}22;color:${colors[i%colors.length]};border:1px solid ${colors[i%colors.length]}44;text-transform:capitalize">${g}</span>`).join('');
-    } else {
-      genresEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">Sin géneros detectados</span>';
-    }
-
-    // Playlists sugeridas
-    renderSpAnalyzePlaylists(genres);
-
+    let genres = d.genres || [];
     resultEl.style.display = 'block';
+    if (genres.length) {
+      renderSpGenreBadges(genresEl, genres, false);
+      renderSpAnalyzePlaylists(genres);
+    } else {
+      // Fallback IA
+      genresEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">⚡ Detectando con IA...</span>';
+      try {
+        const gr = await fetch('/api/ai-describe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'genre', artist: d.artist, track: d.track }),
+        });
+        const gd = await gr.json();
+        if (gd.ok && gd.genres?.length) {
+          genres = gd.genres;
+          _spAnalyzeData.genres = genres;
+          renderSpGenreBadges(genresEl, genres, true);
+          renderSpAnalyzePlaylists(genres);
+        } else {
+          genresEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">Sin géneros detectados</span>';
+        }
+      } catch(_) {
+        genresEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">Sin géneros detectados</span>';
+      }
+    }
   } catch(e) {
     loadingEl.style.display = 'none';
     errorEl.textContent = e.message;
     errorEl.style.display = 'block';
   }
+}
+
+function renderSpGenreBadges(el, genres, fromAI) {
+  const colors = ['#1db954','#3b82f6','#8b5cf6','#f59e0b','#ec4899','#06b6d4'];
+  el.innerHTML = genres.map((g, i) => `<span style="padding:4px 10px;border-radius:100px;font-size:11px;font-weight:600;background:${colors[i%colors.length]}22;color:${colors[i%colors.length]};border:1px solid ${colors[i%colors.length]}44;text-transform:capitalize">${g}</span>`).join('')
+    + (fromAI ? '<span style="font-size:10px;color:var(--muted);align-self:center;margin-left:4px">⚡ vía IA</span>' : '');
 }
 
 function renderSpAnalyzePlaylists(genres) {
