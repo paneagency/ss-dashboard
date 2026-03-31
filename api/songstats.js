@@ -260,11 +260,13 @@ module.exports = async (req, res) => {
     return res.status(500).json({ ok: false, error: e.message });
   }
 
-  // Persist to Sheets (fire & forget)
+  // Persist to Sheets (fire & forget, delayed to avoid Sheets quota conflicts)
   if (save) {
     (async () => {
-      try { await saveArtistSnapshot(spotifyArtistId, artistName, artistData); }
-      catch(e) { console.error('Songstats sheet save error:', e.message); }
+      try {
+        await delay(8000); // wait for other campaign writes to finish
+        await saveArtistSnapshot(spotifyArtistId, artistName, artistData);
+      } catch(e) { console.error('Songstats sheet save error:', e.message); }
     })();
   }
 
