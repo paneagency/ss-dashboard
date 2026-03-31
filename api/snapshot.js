@@ -46,17 +46,26 @@ async function getCCToken() {
 }
 
 // ── Spotify OAuth (for listing our playlists) ────────────────
-async function kvGet(key) {
+async function kvCmd(cmd) {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
   if (!url || !token) return null;
   const r = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(['GET', key]),
+    body: JSON.stringify(cmd),
   });
   const d = await r.json();
-  return d.result || null;
+  return d.result ?? null;
+}
+
+async function kvGet(key) { return kvCmd(['GET', key]); }
+async function kvSet(key, val, ttl) { return kvCmd(['SET', key, JSON.stringify(val), 'EX', ttl]); }
+async function kvDel(key) { return kvCmd(['DEL', key]); }
+async function kvGetJson(key) {
+  const v = await kvGet(key);
+  if (!v) return null;
+  try { return JSON.parse(v); } catch { return null; }
 }
 
 async function kvScan(pattern) {
@@ -183,7 +192,15 @@ module.exports = async (req, res) => {
 
   // ── GET action=history: leer HistorialPlaylists para gráficos ──
   if (req.method === 'GET' && req.query.action === 'history') {
+    const HISTORY_CACHE_KEY = 'snapshot:history:v1';
+    const HISTORY_TTL = 4 * 3600; // 4 horas
     try {
+      // Serve from KV cache if available
+      const cached = await kvGetJson(HISTORY_CACHE_KEY);
+      if (cached) {
+        res.setHeader('X-Cache', 'HIT');
+        return res.json({ ok: true, data: cached });
+      }
       const sheets = getSheets();
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
@@ -199,6 +216,9 @@ module.exports = async (req, res) => {
         image: r[16] || '',
         grupo: r[18] || '',
       })).filter(r => r.date && r.id);
+      // Cache for next requests (fire-and-forget)
+      kvSet(HISTORY_CACHE_KEY, data, HISTORY_TTL).catch(() => {});
+      res.setHeader('X-Cache', 'MISS');
       return res.json({ ok: true, data });
     } catch(e) {
       return res.status(500).json({ error: e.message });
@@ -313,6 +333,8 @@ module.exports = async (req, res) => {
         resource: { values: rows },
       });
       console.log(`Cron snapshot ${today}: ${rows.length} playlists (${Object.keys(playlistGrupoMap).length} de proveedores)`);
+      // Invalidate history cache so next request reads fresh data
+      kvDel('snapshot:history:v1').catch(() => {});
       return res.json({ ok: true, date: today, playlists: rows.length, byProvider: Object.keys(playlistGrupoMap).length });
     } catch(e) {
       console.error('cron snapshot error:', e.message);
