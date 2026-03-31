@@ -1798,8 +1798,7 @@
         <div class="section-subtitle">Gestión de playlists y análisis de posiciones</div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span id="sp-account-info" class="sp-account-chip">🎵 —</span>
-        <button class="btn-secondary" style="font-size:13px;padding:7px 14px" onclick="loadSpotifyTab(true)">⟳ Refrescar</button>
+        <span id="sp-account-info" title="Spotify conectado" style="display:none;width:9px;height:9px;border-radius:50%;background:#1db954;flex-shrink:0"></span>
 
         <button onclick="openSpotifyModal(null)" style="display:inline-flex;align-items:center;gap:7px;background:#1db954;color:#000;border:none;border-radius:100px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;letter-spacing:0.01em" onmouseover="this.style.background='#1ed760';this.style.transform='scale(1.04)';this.style.boxShadow='0 4px 22px rgba(29,185,84,0.45)'" onmouseout="this.style.background='#1db954';this.style.transform='';this.style.boxShadow=''"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva Playlist</button>
       </div>
@@ -7898,7 +7897,7 @@ async function loadSpotifyTab(force = false) {
     _spPlaylists = data.playlists;
     _spLoaded = true;
     const chip = document.getElementById('sp-account-info');
-    if (chip) chip.textContent = '🎵 ' + (data.userId || 'Cuenta activa');
+    if (chip) chip.style.display = 'inline-block';
     renderSpotifyPlaylists(_spPlaylists);
   } catch(e) {
     if (grid) grid.innerHTML = `<div style="color:#ef4444;text-align:center;padding:60px;grid-column:1/-1">Error: ${e.message}</div>`;
