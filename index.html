@@ -8982,9 +8982,10 @@ function processSpGrowthData(rawData) {
   }
   Object.values(byId).forEach(pl => {
     pl.snapshots.sort((a, b) => a.date.localeCompare(b.date));
-    // Deduplicate same-date entries (keep last)
-    const seen = {};
-    pl.snapshots = pl.snapshots.filter(s => { const keep = !seen[s.date]; seen[s.date] = true; return keep; });
+    // Deduplicate same-date entries (keep last = most recent followers value)
+    const byDate = {};
+    pl.snapshots.forEach(s => { byDate[s.date] = s; });
+    pl.snapshots = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
   });
   return byId;
 }

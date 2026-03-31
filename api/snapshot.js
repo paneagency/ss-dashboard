@@ -225,8 +225,18 @@ module.exports = async (req, res) => {
       for (const [id, entries] of Object.entries(byId)) {
         if (entries.length < 2) { deltas[id] = null; continue; }
         entries.sort((a, b) => a.date.localeCompare(b.date));
-        const last = entries[entries.length - 1];
-        const prev = entries[entries.length - 2];
+        // Deduplicate by date keeping last entry per date
+        const deduped = [];
+        for (const e of entries) {
+          if (deduped.length && deduped[deduped.length - 1].date === e.date) {
+            deduped[deduped.length - 1] = e;
+          } else {
+            deduped.push(e);
+          }
+        }
+        if (deduped.length < 2) { deltas[id] = null; continue; }
+        const last = deduped[deduped.length - 1];
+        const prev = deduped[deduped.length - 2];
         deltas[id] = last.followers - prev.followers;
       }
       return res.json({ ok: true, deltas });
