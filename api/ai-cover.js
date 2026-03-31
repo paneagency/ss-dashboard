@@ -10,28 +10,24 @@ export default async function handler(req, res) {
   try {
     const prompt = `Spotify playlist cover art for a music playlist called "${name.trim()}". Vibrant colors, artistic, abstract, no text, no letters, no words, square format, music themed, high quality digital illustration.`;
 
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        instances: [{ prompt }],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: '1:1',
-          safetyFilterLevel: 'block_some',
-          personGeneration: 'dont_allow',
-        },
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ['IMAGE'] },
       }),
     });
 
     const d = await r.json();
     if (!r.ok) throw new Error(d.error?.message || `API error ${r.status}`);
 
-    const b64 = d.predictions?.[0]?.bytesBase64Encoded;
-    const mimeType = d.predictions?.[0]?.mimeType || 'image/png';
-    if (!b64) throw new Error('No image generated');
+    const parts = d.candidates?.[0]?.content?.parts || [];
+    const imgPart = parts.find(p => p.inlineData?.data);
+    if (!imgPart) throw new Error('No image generated');
 
-    return res.json({ ok: true, imageData: `data:${mimeType};base64,${b64}` });
+    const { mimeType, data } = imgPart.inlineData;
+    return res.json({ ok: true, imageData: `data:${mimeType};base64,${data}` });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
