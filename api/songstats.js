@@ -30,17 +30,16 @@ async function kvGetJson(key) {
 
 async function kvIncr(key) {
   const n = await kvCmd(['INCR', key]);
-  if (n === 1) await kvCmd(['EXPIRE', key, 86400]); // TTL on first call
+  if (n === 1) await kvCmd(['EXPIRE', key, 86400]);
   return n;
 }
 
 // ── Rate limit ──────────────────────────────────────────────────
-function todayKey() {
-  return `songstats:calls:${new Date().toISOString().split('T')[0]}`;
-}
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function rateKey()  { return `songstats:calls:${todayStr()}`; }
 
 async function getRateStatus() {
-  const key  = todayKey();
+  const key  = rateKey();
   const used = await kvGetNum(key);
   return { key, used, limit: RATE_LIMIT, remaining: Math.max(0, RATE_LIMIT - used) };
 }
@@ -54,82 +53,150 @@ function getAuth() {
   });
 }
 
-async function appendRow(sheets, sheetName, row) {
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${sheetName}!A:A`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [row] },
-  });
-}
-
-// ── Songstats API ────────────────────────────────────────────────
-async function fetchSongstats(path) {
+// ── Songstats fetch ──────────────────────────────────────────────
+async function ss(path) {
   const apiKey = process.env.SONGSTATS_API_KEY;
   if (!apiKey) throw new Error('SONGSTATS_API_KEY no configurada');
   const r = await fetch(`https://${SONGSTATS_HOST}${path}`, {
-    headers: {
-      'x-rapidapi-host': SONGSTATS_HOST,
-      'x-rapidapi-key':  apiKey,
-    },
+    headers: { 'x-rapidapi-host': SONGSTATS_HOST, 'x-rapidapi-key': apiKey },
   });
   const text = await r.text();
   if (!r.ok) throw new Error(`Songstats ${r.status}: ${text.slice(0, 200)}`);
-  try { return JSON.parse(text); } catch { throw new Error(`Songstats parse error: ${text.slice(0,100)}`); }
+  try { return JSON.parse(text); } catch { throw new Error(`Parse error: ${text.slice(0,100)}`); }
 }
 
-// ── Normalise raw Songstats response into a clean object ─────────
-function normaliseArtist(raw) {
-  // The API wraps data in stats[] array per source
-  const sp = raw?.stats?.find?.(s => s.source === 'spotify') || {};
-  const data = sp.data || sp || {};
+// Build URL helpers — ssId optional for all
+function qs(spId, ssId, extra = '') {
+  return `spotify_artist_id=${spId}${ssId ? '&songstats_artist_id=' + ssId : ''}${extra}`;
+}
+function qst(spId, ssId, extra = '') {
+  return `spotify_track_id=${spId}${ssId ? '&songstats_track_id=' + ssId : ''}${extra}`;
+}
+
+// ── Safe parallel fetch: returns null on error ───────────────────
+async function safeSS(path) {
+  try { return await ss(path); }
+  catch(e) { return { _error: e.message }; }
+}
+
+// ── Fetch all artist data ────────────────────────────────────────
+// Returns { info, stats, audience, topTracks, topPlaylists, callsUsed }
+async function fetchArtistFull(spotifyArtistId) {
+  // Step 1: info (sequential — need songstats_artist_id for the rest)
+  const info = await safeSS(`/artists/info?${qs(spotifyArtistId, null)}`);
+  const ssId = info?.info?.songstats_artist_id || info?.songstats_artist_id || null;
+
+  // Step 2: parallel with both IDs
+  const [stats, audience, topTracks, topPlaylists] = await Promise.all([
+    safeSS(`/artists/stats?source=spotify&${qs(spotifyArtistId, ssId)}`),
+    safeSS(`/artists/audience?source=spotify&${qs(spotifyArtistId, ssId)}`),
+    safeSS(`/artists/top_tracks?${qs(spotifyArtistId, ssId)}&limit=10&metric=playlists&scope=total`),
+    safeSS(`/artists/top_playlists?${qs(spotifyArtistId, ssId)}&limit=10&source=spotify&scope=total`),
+  ]);
+
+  return { info, stats, audience, topTracks, topPlaylists, callsUsed: 5, ssId };
+}
+
+// ── Fetch track data ─────────────────────────────────────────────
+async function fetchTrackFull(spotifyTrackId) {
+  const [info, stats] = await Promise.all([
+    safeSS(`/tracks/info?${qst(spotifyTrackId, null)}`),
+    safeSS(`/tracks/stats?source=spotify&${qst(spotifyTrackId, null)}`),
+  ]);
+  return { info, stats, callsUsed: 2 };
+}
+
+// ── Normalise helpers ────────────────────────────────────────────
+function normaliseArtistInfo(raw) {
+  const i = raw?.info || raw?.artist || raw || {};
   return {
-    monthlyListeners:  data.monthly_listeners   ?? data.listeners ?? null,
-    playlistCount:     data.playlist_count       ?? data.playlists_count ?? null,
-    playlistReach:     data.playlist_reach       ?? null,
-    streamsTotal:      data.total_streams        ?? data.streams_total   ?? null,
-    streamsMonthly:    data.streams_monthly      ?? null,
-    followers:         data.follower_count       ?? data.followers       ?? null,
-    popularity:        data.popularity           ?? null,
-    _raw: raw,
+    name:        i.name || null,
+    bio:         i.biography || i.bio || null,
+    country:     i.country || null,
+    genres:      i.genres || [],
+    image:       i.image || i.image_url || null,
+    ssId:        i.songstats_artist_id || null,
+    links: {
+      spotify:   i.links?.spotify   || null,
+      instagram: i.links?.instagram || null,
+      twitter:   i.links?.twitter   || i.links?.x || null,
+      facebook:  i.links?.facebook  || null,
+      youtube:   i.links?.youtube   || null,
+      tiktok:    i.links?.tiktok    || null,
+      wikipedia: i.links?.wikipedia || null,
+    },
   };
 }
 
-function normaliseTrack(raw) {
-  const sp = raw?.stats?.find?.(s => s.source === 'spotify') || {};
-  const data = sp.data || sp || {};
+function normaliseArtistStats(raw) {
+  const sp = (raw?.stats || []).find(s => s.source === 'spotify') || {};
+  const d  = sp.data || sp || {};
   return {
-    streamsTotal:   data.total_streams    ?? data.streams_total  ?? null,
-    streamsDaily:   data.streams_daily    ?? null,
-    streamsMonthly: data.streams_monthly  ?? null,
-    playlistCount:  data.playlist_count   ?? data.playlists_count ?? null,
-    playlistReach:  data.playlist_reach   ?? null,
-    popularity:     data.popularity       ?? null,
-    _raw: raw,
+    monthlyListeners: d.monthly_listeners   ?? null,
+    followers:        d.follower_count       ?? d.followers        ?? null,
+    playlistCount:    d.playlist_count       ?? d.playlists_count  ?? null,
+    playlistReach:    d.playlist_reach       ?? null,
+    streamsTotal:     d.total_streams        ?? d.streams_total    ?? null,
   };
 }
 
-// ── Save snapshots ───────────────────────────────────────────────
-async function saveArtistSnapshot(sheets, artistId, artistName, norm) {
-  const fecha = new Date().toISOString().split('T')[0];
-  await appendRow(sheets, 'SongstatsArtistas', [
-    fecha, artistId, artistName || '',
-    norm.monthlyListeners ?? '', norm.playlistCount ?? '',
-    norm.playlistReach ?? '', norm.streamsTotal ?? '',
-    norm.streamsMonthly ?? '', norm.followers ?? '',
-    JSON.stringify(norm._raw).slice(0, 3000),
-  ]);
+function normaliseAudience(raw) {
+  const sp = (raw?.audience || []).find(s => s.source === 'spotify') || raw?.audience?.[0] || {};
+  const d  = sp.data || {};
+  return {
+    topCountries: (d.top_cities || d.top_countries || []).slice(0, 8).map(c => ({
+      code:  c.country_code || c.code || '',
+      name:  c.country_name || c.name || c.city_name || '',
+      value: c.listeners    || c.value || 0,
+    })),
+  };
 }
 
-async function saveTrackSnapshot(sheets, trackId, trackName, artistName, norm) {
-  const fecha = new Date().toISOString().split('T')[0];
-  await appendRow(sheets, 'SongstatsTracks', [
-    fecha, trackId, trackName || '', artistName || '',
-    norm.streamsTotal ?? '', norm.streamsDaily ?? '',
-    norm.streamsMonthly ?? '', norm.playlistCount ?? '',
-    norm.playlistReach ?? '',
-    JSON.stringify(norm._raw).slice(0, 3000),
-  ]);
+function normaliseTopTracks(raw) {
+  const list = raw?.tracks || raw?.top_tracks || raw?.catalog || [];
+  return list.slice(0, 10).map(t => ({
+    id:       t.spotify_track_id || t.track_id || null,
+    name:     t.name || t.track_name || '—',
+    streams:  t.total_streams   || t.streams_total || null,
+    playlists:t.playlist_count  || t.playlists     || null,
+    image:    t.image           || t.image_url     || null,
+  }));
+}
+
+function normaliseTopPlaylists(raw) {
+  const list = raw?.playlists || raw?.top_playlists || [];
+  return list.slice(0, 10).map(p => ({
+    name:      p.name          || p.playlist_name || '—',
+    curator:   p.curator_name  || p.curator       || p.owner || '',
+    followers: p.followers     || p.follower_count || null,
+    image:     p.image         || p.image_url     || null,
+    type:      p.playlist_type || p.type          || '',
+    url:       p.spotify_url   || p.url           || null,
+  }));
+}
+
+function normaliseTrackInfo(raw) {
+  const t = raw?.track || raw?.info || raw || {};
+  return {
+    name:        t.name        || t.track_name || null,
+    releaseDate: t.release_date || null,
+    isrc:        t.isrc        || null,
+    image:       t.image       || t.image_url  || null,
+    ssId:        t.songstats_track_id || null,
+  };
+}
+
+function normaliseTrackStats(raw) {
+  const sp = (raw?.stats || []).find(s => s.source === 'spotify') || {};
+  const d  = sp.data || sp || {};
+  return {
+    streamsTotal:   d.total_streams   ?? d.streams_total   ?? null,
+    streamsMonthly: d.streams_monthly ?? null,
+    streamsDaily:   d.streams_daily   ?? null,
+    playlistCount:  d.playlist_count  ?? d.playlists_count ?? null,
+    playlistReach:  d.playlist_reach  ?? null,
+    popularity:     d.popularity      ?? null,
+  };
 }
 
 // ── Handler ──────────────────────────────────────────────────────
@@ -151,100 +218,102 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const {
-    mode,               // 'artist' | 'track' | 'both'
+    mode,             // 'artist' | 'track' | 'both'
     spotifyArtistId,
     spotifyTrackId,
     artistName,
     trackName,
-    save = false,       // if true, persist snapshot to Sheets
   } = req.body || {};
 
-  if (!mode) return res.status(400).json({ error: 'mode requerido (artist|track|both)' });
+  if (!mode) return res.status(400).json({ error: 'mode requerido' });
 
-  const today = new Date().toISOString().split('T')[0];
+  const today      = todayStr();
+  const rl         = await getRateStatus();
+  const artistKey  = spotifyArtistId ? `songstats:v2:artist:${spotifyArtistId}:${today}` : null;
+  const trackKey   = spotifyTrackId  ? `songstats:v2:track:${spotifyTrackId}:${today}`   : null;
 
-  // ── Check daily cache ──────────────────────────────────────────
-  const artistCacheKey = spotifyArtistId ? `songstats:cache:artist:${spotifyArtistId}:${today}` : null;
-  const trackCacheKey  = spotifyTrackId  ? `songstats:cache:track:${spotifyTrackId}:${today}`   : null;
-
-  let artistNorm   = null, trackNorm   = null;
+  let artistData = null, trackData = null;
   let artistCached = false, trackCached = false;
 
-  if (artistCacheKey && (mode === 'artist' || mode === 'both')) {
-    const c = await kvGetJson(artistCacheKey);
-    if (c) { artistNorm = c; artistCached = true; }
+  // Check cache
+  if (artistKey && (mode === 'artist' || mode === 'both')) {
+    const c = await kvGetJson(artistKey);
+    if (c) { artistData = c; artistCached = true; }
   }
-  if (trackCacheKey && (mode === 'track' || mode === 'both')) {
-    const c = await kvGetJson(trackCacheKey);
-    if (c) { trackNorm = c; trackCached = true; }
+  if (trackKey && (mode === 'track' || mode === 'both')) {
+    const c = await kvGetJson(trackKey);
+    if (c) { trackData = c; trackCached = true; }
   }
 
   const needArtist = (mode === 'artist' || mode === 'both') && !artistCached && !!spotifyArtistId;
   const needTrack  = (mode === 'track'  || mode === 'both') && !trackCached  && !!spotifyTrackId;
-  const callsNeeded = (needArtist ? 1 : 0) + (needTrack ? 1 : 0);
 
-  // ── Rate limit check ───────────────────────────────────────────
-  const rl = await getRateStatus();
+  // Estimate calls needed
+  const callsNeeded = (needArtist ? 5 : 0) + (needTrack ? 2 : 0);
   if (callsNeeded > 0 && rl.used + callsNeeded > rl.limit) {
     return res.status(429).json({
       ok: false,
-      error: `Límite diario alcanzado (${rl.used}/${rl.limit} llamadas usadas hoy)`,
-      artist: artistNorm, artistCached,
-      track:  trackNorm,  trackCached,
+      error: `Límite diario alcanzado (${rl.used}/${rl.limit} llamadas usadas)`,
+      artist: artistData, artistCached,
+      track:  trackData,  trackCached,
       credits: { used: rl.used, limit: rl.limit, remaining: 0 },
     });
   }
 
-  // ── Fetch from Songstats API (parallel) ────────────────────────
   let usedCalls = 0;
-  const [artistRaw, trackRaw] = await Promise.all([
-    needArtist ? fetchSongstats(`/artists/stats?spotify_artist_id=${spotifyArtistId}&source=spotify`).catch(e => ({ _err: e.message })) : null,
-    needTrack  ? fetchSongstats(`/tracks/stats?spotify_track_id=${spotifyTrackId}&source=spotify`).catch(e => ({ _err: e.message })) : null,
-  ]);
 
-  if (artistRaw !== null) {
-    if (!artistRaw._err) {
-      artistNorm = normaliseArtist(artistRaw);
-      await kvSet(artistCacheKey, artistNorm, 86400);
-      await kvIncr(rl.key);
-      usedCalls++;
-    } else {
-      artistNorm = { error: artistRaw._err };
+  // Fetch artist
+  if (needArtist) {
+    try {
+      const raw = await fetchArtistFull(spotifyArtistId);
+      artistData = {
+        info:         normaliseArtistInfo(raw.info),
+        stats:        normaliseArtistStats(raw.stats),
+        audience:     normaliseAudience(raw.audience),
+        topTracks:    normaliseTopTracks(raw.topTracks),
+        topPlaylists: normaliseTopPlaylists(raw.topPlaylists),
+        _errors: {
+          info:      raw.info?._error         || null,
+          stats:     raw.stats?._error        || null,
+          audience:  raw.audience?._error     || null,
+          topTracks: raw.topTracks?._error    || null,
+          topPl:     raw.topPlaylists?._error || null,
+        },
+      };
+      await kvSet(artistKey, artistData, 86400);
+      // Increment once per batch (Songstats seems to count calls server-side, we track locally)
+      for (let i = 0; i < raw.callsUsed; i++) { await kvIncr(rl.key); }
+      usedCalls += raw.callsUsed;
+    } catch(e) {
+      artistData = { error: e.message };
     }
   }
-  if (trackRaw !== null) {
-    if (!trackRaw._err) {
-      trackNorm = normaliseTrack(trackRaw);
-      await kvSet(trackCacheKey, trackNorm, 86400);
-      await kvIncr(rl.key);
-      usedCalls++;
-    } else {
-      trackNorm = { error: trackRaw._err };
-    }
-  }
 
-  // ── Persist snapshot to Sheets (fire & forget) ────────────────
-  if (save) {
-    (async () => {
-      try {
-        const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-        if (artistNorm && !artistNorm.error && needArtist) {
-          await saveArtistSnapshot(sheets, spotifyArtistId, artistName, artistNorm);
-        }
-        if (trackNorm && !trackNorm.error && needTrack) {
-          await saveTrackSnapshot(sheets, spotifyTrackId, trackName, artistName, trackNorm);
-        }
-      } catch (e) {
-        console.error('Songstats sheet save error:', e.message);
-      }
-    })();
+  // Fetch track
+  if (needTrack) {
+    try {
+      const raw = await fetchTrackFull(spotifyTrackId);
+      trackData = {
+        info:  normaliseTrackInfo(raw.info),
+        stats: normaliseTrackStats(raw.stats),
+        _errors: {
+          info:  raw.info?._error  || null,
+          stats: raw.stats?._error || null,
+        },
+      };
+      await kvSet(trackKey, trackData, 86400);
+      for (let i = 0; i < raw.callsUsed; i++) { await kvIncr(rl.key); }
+      usedCalls += raw.callsUsed;
+    } catch(e) {
+      trackData = { error: e.message };
+    }
   }
 
   const finalUsed = rl.used + usedCalls;
   return res.json({
     ok: true,
-    artist: artistNorm, artistCached,
-    track:  trackNorm,  trackCached,
+    artist: artistData, artistCached,
+    track:  trackData,  trackCached,
     credits: { used: finalUsed, limit: RATE_LIMIT, remaining: Math.max(0, RATE_LIMIT - finalUsed) },
   });
-}
+};
