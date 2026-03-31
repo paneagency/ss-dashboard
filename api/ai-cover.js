@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   try {
     const prompt = `Spotify playlist cover art for a music playlist called "${name.trim()}". Vibrant colors, artistic, abstract, no text, no letters, no words, square format, music themed, high quality digital illustration.`;
 
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`, {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
