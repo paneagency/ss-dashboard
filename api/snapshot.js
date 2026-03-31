@@ -313,10 +313,14 @@ module.exports = async (req, res) => {
         `https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,followers,tracks(total),images,owner`,
         { headers: { Authorization: `Bearer ${ccToken}` } }
       );
-      const body = await r.json();
+      const text = await r.text();
       if (!r.ok) {
-        return res.json({ ok: false, playlistId, status: r.status, spotifyError: body });
+        let spotifyError = null;
+        try { spotifyError = JSON.parse(text); } catch(_) {}
+        const errorMsg = spotifyError?.error?.message || text.slice(0, 100);
+        return res.json({ ok: false, playlistId, status: r.status, error: errorMsg });
       }
+      const body = JSON.parse(text);
       return res.json({
         ok: true,
         playlist: {
