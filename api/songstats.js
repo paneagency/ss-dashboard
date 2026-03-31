@@ -274,7 +274,8 @@ module.exports = async (req, res) => {
     spotifyTrackId,
     artistName,
     trackName,
-    save = false,
+    save  = false,
+    debug = false,    // bypass cache, return raw API response
   } = req.body || {};
 
   if (!mode) return res.status(400).json({ error: 'mode requerido' });
@@ -287,12 +288,12 @@ module.exports = async (req, res) => {
   let artistData = null, trackData = null;
   let artistCached = false, trackCached = false;
 
-  // Check cache
-  if (artistKey && (mode === 'artist' || mode === 'both')) {
+  // Check cache (bypassed when debug=true)
+  if (!debug && artistKey && (mode === 'artist' || mode === 'both')) {
     const c = await kvGetJson(artistKey);
     if (c) { artistData = c; artistCached = true; }
   }
-  if (trackKey && (mode === 'track' || mode === 'both')) {
+  if (!debug && trackKey && (mode === 'track' || mode === 'both')) {
     const c = await kvGetJson(trackKey);
     if (c) { trackData = c; trackCached = true; }
   }
