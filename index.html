@@ -9298,12 +9298,16 @@ async function previewSpProviderUrls() {
   if (addBtn) addBtn.disabled = true;
   if (previewBtn) previewBtn.disabled = true;
 
-  const results = await Promise.all(ids.map(id =>
-    fetch(`/api/snapshot?action=preview&playlistId=${id}`)
+  const results = [];
+  for (const id of ids) {
+    const d = await fetch(`/api/snapshot?action=preview&playlistId=${id}`)
       .then(r => r.json())
       .then(d => ({ ...d, playlistId: d.playlistId || id }))
-      .catch(() => ({ ok: false, playlistId: id }))
-  ));
+      .catch(() => ({ ok: false, playlistId: id }));
+    results.push(d);
+    if (statusEl) statusEl.textContent = `Verificando ${results.length}/${ids.length}...`;
+    if (results.length < ids.length) await new Promise(r => setTimeout(r, 300));
+  }
 
   _spPendingPlaylists = results.filter(d => d.ok && d.playlist).map(d => d.playlist);
   const failedResults = results.filter(d => !d.ok || !d.playlist);
