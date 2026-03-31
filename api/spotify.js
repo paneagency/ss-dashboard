@@ -51,7 +51,11 @@ export default async function handler(req, res) {
       const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=0`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!plRes.ok) return res.status(404).json({ error: 'Playlist no encontrada o es privada' });
+      if (!plRes.ok) {
+        const errBody = await plRes.json().catch(() => ({}));
+        console.log('tracks endpoint error:', plRes.status, JSON.stringify(errBody));
+        return res.status(404).json({ error: `Spotify error ${plRes.status}: ${errBody.error?.message || 'sin detalle'}` });
+      }
       const plData = await plRes.json();
       const total = plData.total ?? 0;
 
