@@ -82,19 +82,14 @@ async function safeSS(path) {
 // ── Fetch all artist data ────────────────────────────────────────
 // Returns { info, stats, audience, topTracks, topPlaylists, callsUsed }
 async function fetchArtistFull(spotifyArtistId) {
-  // Step 1: info (sequential — need songstats_artist_id for the rest)
-  const info = await safeSS(`/artists/info?${qs(spotifyArtistId, null)}`);
+  // Parallel: info + stats (2 calls)
+  const [info, stats] = await Promise.all([
+    safeSS(`/artists/info?${qs(spotifyArtistId, null)}`),
+    safeSS(`/artists/stats?source=spotify&${qs(spotifyArtistId, null)}`),
+  ]);
   const ssId = info?.info?.songstats_artist_id || info?.songstats_artist_id || null;
 
-  // Step 2: parallel with both IDs
-  const [stats, audience, topTracks, topPlaylists] = await Promise.all([
-    safeSS(`/artists/stats?source=spotify&${qs(spotifyArtistId, ssId)}`),
-    safeSS(`/artists/audience?source=spotify&${qs(spotifyArtistId, ssId)}`),
-    safeSS(`/artists/top_tracks?${qs(spotifyArtistId, ssId)}&limit=10&metric=playlists&scope=total`),
-    safeSS(`/artists/top_playlists?${qs(spotifyArtistId, ssId)}&limit=10&source=spotify&scope=total`),
-  ]);
-
-  return { info, stats, audience, topTracks, topPlaylists, callsUsed: 5, ssId };
+  return { info, stats, audience: null, topTracks: [], topPlaylists: [], callsUsed: 2, ssId };
 }
 
 // ── Fetch track data ─────────────────────────────────────────────
@@ -248,8 +243,8 @@ module.exports = async (req, res) => {
   const needArtist = (mode === 'artist' || mode === 'both') && !artistCached && !!spotifyArtistId;
   const needTrack  = (mode === 'track'  || mode === 'both') && !trackCached  && !!spotifyTrackId;
 
-  // Estimate calls needed
-  const callsNeeded = (needArtist ? 5 : 0) + (needTrack ? 2 : 0);
+  // Estimate calls needed (artist = 2: info+stats, track = 2: info+stats)
+  const callsNeeded = (needArtist ? 2 : 0) + (needTrack ? 2 : 0);
   if (callsNeeded > 0 && rl.used + callsNeeded > rl.limit) {
     return res.status(429).json({
       ok: false,
