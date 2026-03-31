@@ -7904,6 +7904,7 @@ async function spGenerateCover(name) {
   } catch(e) {
     loadingEl.style.display = 'none';
     if (emptyEl) emptyEl.style.display = 'flex';
+    showToast('Error portada IA: ' + e.message, true);
   } finally {
     loadingEl.style.display = 'none';
   }
