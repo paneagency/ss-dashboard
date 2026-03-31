@@ -77,11 +77,6 @@ export default async function handler(req, res) {
         albumImage: track.album.images[0]?.url || null,
         image: artistImage,
         genres: artistGenres,
-        artistFollowers,
-        artistPopularity,
-        trackPopularity: track.popularity ?? null,
-        durationMs: track.duration_ms ?? null,
-        explicit: track.explicit ?? false,
         releaseDate: track.album.release_date || null,
       });
     }

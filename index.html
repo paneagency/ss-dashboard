@@ -1865,8 +1865,7 @@
                 <img id="sp-az-artist-img" style="width:28px;height:28px;border-radius:50%;object-fit:cover;background:var(--surface2)">
                 <span id="sp-az-artist" style="font-size:14px;color:var(--muted)"></span>
               </div>
-              <div id="sp-az-genres" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-              <div id="sp-az-popularity" style="font-size:12px;color:var(--muted)"></div>
+              <div id="sp-az-genres" style="display:flex;flex-wrap:wrap;gap:6px"></div>
             </div>
             <button id="sp-az-campaign-btn" onclick="spAnalyzeOpenCampaign()" style="padding:8px 16px;border-radius:100px;background:transparent;border:1px solid #1db954;color:#1db954;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.15s;flex-shrink:0" onmouseover="this.style.background='#1db954';this.style.color='#000'" onmouseout="this.style.background='transparent';this.style.color='#1db954'">+ Nueva campaña</button>
           </div>
@@ -8334,10 +8333,7 @@ async function analyzeSpTrack() {
     artistImg.src = d.image || '';
     artistImg.style.display = d.image ? 'inline-block' : 'none';
 
-    // Popularidad
-    const popEl = document.getElementById('sp-az-popularity');
-    console.log('trackPopularity:', d.trackPopularity);
-    popEl.textContent = d.trackPopularity != null ? `Popularidad Spotify: ${d.trackPopularity}/100` : '';
+
 
     // Géneros como badges
     const genresEl = document.getElementById('sp-az-genres');
