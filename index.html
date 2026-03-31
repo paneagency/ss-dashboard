@@ -8607,6 +8607,7 @@ async function fetchSpAzSongstats(artistId, trackId, artistName, trackName) {
       body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName, save: true }),
     });
     const d = await r.json();
+    console.log('[Songstats debug]', JSON.stringify(d._debug, null, 2));
     el.innerHTML = buildSongstatsPanel(d, artistName, trackName);
   } catch(e) {
     el.innerHTML = `<div class="ss-panel"><div style="padding:16px;color:var(--muted);font-size:12px">No se pudieron obtener estadísticas: ${e.message}</div></div>`;

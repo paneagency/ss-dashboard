@@ -145,7 +145,7 @@ async function fetchArtistFull(spotifyArtistId) {
   ]);
   const ssId = info?.info?.songstats_artist_id || info?.songstats_artist_id || null;
 
-  return { info, stats, audience: null, topTracks: [], topPlaylists: [], callsUsed: 2, ssId };
+  return { info, stats, audience: null, topTracks: [], topPlaylists: [], callsUsed: 2, ssId, _rawInfo: info, _rawStats: stats };
 }
 
 // ── Fetch track data ─────────────────────────────────────────────
@@ -331,6 +331,8 @@ module.exports = async (req, res) => {
           topTracks: raw.topTracks?._error    || null,
           topPl:     raw.topPlaylists?._error || null,
         },
+        _rawInfo:  raw._rawInfo,
+        _rawStats: raw._rawStats,
       };
       await kvSet(artistKey, artistData, 86400);
       // Increment once per batch (Songstats seems to count calls server-side, we track locally)
@@ -383,5 +385,6 @@ module.exports = async (req, res) => {
     artist: artistData, artistCached,
     track:  trackData,  trackCached,
     credits: { used: finalUsed, limit: RATE_LIMIT, remaining: Math.max(0, RATE_LIMIT - finalUsed) },
+    _debug: { artistRawInfo: artistData?._rawInfo, artistRawStats: artistData?._rawStats, trackRawInfo: trackData?._rawInfo, trackRawStats: trackData?._rawStats },
   });
 };
