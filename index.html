@@ -8347,6 +8347,7 @@ async function analyzeSpTrack() {
     artistImg.style.display = d.image ? 'inline-block' : 'none';
 
     // Audio Features
+    console.log('spotify response:', JSON.stringify({audioFeatures: d.audioFeatures, trackPopularity: d.trackPopularity}));
     renderSpAudioFeatures(d);
 
     // Géneros como badges
