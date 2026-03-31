@@ -53,6 +53,62 @@ function getAuth() {
   });
 }
 
+// SongstatsArtistas columns:
+// FECHA | SPOTIFY_ID | ARTISTA | BIO | PAIS | GENEROS | INSTAGRAM | TWITTER | YOUTUBE | TIKTOK | MONTHLY_LISTENERS | FOLLOWERS | PLAYLIST_COUNT | PLAYLIST_REACH | STREAMS_TOTAL
+async function saveArtistSnapshot(artistId, artistName, artistData) {
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  const fecha  = todayStr();
+  const info   = artistData.info  || {};
+  const stats  = artistData.stats || {};
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'SongstatsArtistas!A:A',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[
+      fecha,
+      artistId,
+      info.name || artistName || '',
+      info.bio        || '',
+      info.country    || '',
+      (info.genres || []).join(', '),
+      info.links?.instagram || '',
+      info.links?.twitter   || '',
+      info.links?.youtube   || '',
+      info.links?.tiktok    || '',
+      stats.monthlyListeners ?? '',
+      stats.followers        ?? '',
+      stats.playlistCount    ?? '',
+      stats.playlistReach    ?? '',
+      stats.streamsTotal     ?? '',
+    ]] },
+  });
+}
+
+// SongstatsTracks columns:
+// FECHA | SPOTIFY_ID | TRACK | ARTISTA | STREAMS_TOTAL | STREAMS_DAILY | STREAMS_MONTHLY | PLAYLIST_COUNT | PLAYLIST_REACH
+async function saveTrackSnapshot(trackId, trackName, artistName, trackData) {
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  const fecha  = todayStr();
+  const info   = trackData.info  || {};
+  const stats  = trackData.stats || {};
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'SongstatsTracks!A:A',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[
+      fecha,
+      trackId,
+      info.name || trackName || '',
+      artistName || '',
+      stats.streamsTotal   ?? '',
+      stats.streamsDaily   ?? '',
+      stats.streamsMonthly ?? '',
+      stats.playlistCount  ?? '',
+      stats.playlistReach  ?? '',
+    ]] },
+  });
+}
+
 // ── Songstats fetch ──────────────────────────────────────────────
 async function ss(path) {
   const apiKey = process.env.SONGSTATS_API_KEY;
@@ -218,6 +274,7 @@ module.exports = async (req, res) => {
     spotifyTrackId,
     artistName,
     trackName,
+    save = false,
   } = req.body || {};
 
   if (!mode) return res.status(400).json({ error: 'mode requerido' });
@@ -302,6 +359,22 @@ module.exports = async (req, res) => {
     } catch(e) {
       trackData = { error: e.message };
     }
+  }
+
+  // ── Persist to Sheets (fire & forget) ───────────────────────────
+  if (save) {
+    (async () => {
+      try {
+        if (artistData && !artistData.error && needArtist) {
+          await saveArtistSnapshot(spotifyArtistId, artistName, artistData);
+        }
+        if (trackData && !trackData.error && needTrack) {
+          await saveTrackSnapshot(spotifyTrackId, trackName, artistName, trackData);
+        }
+      } catch(e) {
+        console.error('Songstats sheet save error:', e.message);
+      }
+    })();
   }
 
   const finalUsed = rl.used + usedCalls;
