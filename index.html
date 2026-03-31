@@ -465,15 +465,20 @@
 
     .sp-account-chip { display:inline-flex;align-items:center;gap:8px;background:rgba(29,185,84,0.12);border:1px solid rgba(29,185,84,0.3);border-radius:20px;padding:5px 14px;font-size:13px;color:#1db954;font-weight:500; }
     .sp-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:16px; }
-    .sp-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color 0.2s,box-shadow 0.2s; }
-    .sp-card:hover { border-color:rgba(29,185,84,0.5);box-shadow:0 4px 20px rgba(0,0,0,0.25); }
-    .sp-cover { width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--surface2);display:block; }
+    .sp-card { background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:all 0.22s;position:relative;cursor:pointer; }
+    .sp-card:hover { border-color:rgba(29,185,84,0.45);box-shadow:0 10px 36px rgba(0,0,0,0.45);transform:translateY(-3px); }
+    .sp-cover-wrap { position:relative;overflow:hidden; }
+    .sp-cover { width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--surface2);display:block;transition:transform 0.3s; }
+    .sp-card:hover .sp-cover { transform:scale(1.05); }
     .sp-cover-ph { width:100%;aspect-ratio:1/1;background:linear-gradient(135deg,#1db954,#0f6b35);display:flex;align-items:center;justify-content:center;font-size:44px; }
-    .sp-card-body { padding:12px 14px 14px; }
-    .sp-card-name { font-weight:600;font-size:14px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-    .sp-card-desc { font-size:12px;color:var(--muted);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:30px; }
-    .sp-card-meta { font-size:12px;color:var(--muted);display:flex;gap:10px;margin-bottom:10px; }
-    .sp-card-actions { display:flex;gap:5px; }
+    .sp-cover-overlay { position:absolute;inset:0;background:rgba(0,0,0,0);transition:background 0.22s;display:flex;align-items:flex-end;justify-content:flex-end;gap:7px;padding:10px; }
+    .sp-card:hover .sp-cover-overlay { background:rgba(0,0,0,0.5); }
+    .sp-cover-btn { width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.18);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;text-decoration:none;opacity:0;transform:translateY(8px);transition:opacity 0.18s,transform 0.18s,background 0.15s; }
+    .sp-card:hover .sp-cover-btn { opacity:1;transform:translateY(0); }
+    .sp-cover-btn:hover { background:rgba(29,185,84,0.75) !important; }
+    .sp-card-body { padding:11px 13px 13px; }
+    .sp-card-name { font-weight:600;font-size:13px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3; }
+    .sp-card-meta { font-size:11px;color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:6px; }
     .sp-btn { flex:1;padding:5px 0;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;transition:all 0.15s;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center; }
     .sp-btn:hover { border-color:var(--indigo);color:var(--indigo); }
     .sp-btn.sp-green:hover { border-color:#1db954;color:#1db954; }
@@ -7953,21 +7958,24 @@ function renderSpotifyPlaylists(playlists) {
     return;
   }
   grid.innerHTML = playlists.map((p, i) => `
-    <div class="sp-card" onclick="analyzeSpotifyPlaylist(${i})" style="cursor:pointer">
-      ${p.image
-        ? `<img class="sp-cover" src="${p.image}" alt="${p.name.replace(/"/g,'')}" loading="lazy">`
-        : `<div class="sp-cover-ph">🎵</div>`}
+    <div class="sp-card" onclick="analyzeSpotifyPlaylist(${i})">
+      <div class="sp-cover-wrap">
+        ${p.image
+          ? `<img class="sp-cover" src="${p.image}" alt="${p.name.replace(/"/g,'')}" loading="lazy">`
+          : `<div class="sp-cover-ph">🎵</div>`}
+        <div class="sp-cover-overlay" onclick="event.stopPropagation()">
+          <button class="sp-cover-btn" onclick="spCopyLink(${i})" title="Copiar link">🔗</button>
+          <a href="${p.url}" target="_blank" class="sp-cover-btn" title="Abrir en Spotify" onclick="event.stopPropagation()">↗</a>
+        </div>
+      </div>
       <div class="sp-card-body">
         <div class="sp-card-name" title="${p.name.replace(/"/g,'')}">${p.name}</div>
-        <div class="sp-card-desc">${p.description || '<span style="opacity:0.4">Sin descripción</span>'}</div>
         <div class="sp-card-meta">
-          ${p.grupo ? `<span style="color:#1db954;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">${p.grupo}</span>` : ''}
-          ${p.followers ? `<span>👥 ${p.followers.toLocaleString()}</span>` : ''}
-          ${p.delta !== null ? `<span style="font-size:11px;font-weight:700;color:${p.delta > 0 ? '#1db954' : p.delta < 0 ? '#ef4444' : 'var(--muted)'}">${p.delta > 0 ? '+' : ''}${p.delta}</span>` : ''}
-        </div>
-        <div class="sp-card-actions" onclick="event.stopPropagation()">
-          <button class="sp-btn" onclick="spCopyLink(${i})" title="Copiar link">🔗</button>
-          <a href="${p.url}" target="_blank" class="sp-btn" title="Abrir en Spotify">↗</a>
+          <span style="color:#1db954;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%">${p.grupo || ''}</span>
+          <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            ${p.followers ? `<span>👥 ${p.followers >= 1000 ? (p.followers/1000).toFixed(0)+'K' : p.followers}</span>` : ''}
+            ${p.delta !== null ? `<span style="font-weight:700;color:${p.delta > 0 ? '#1db954' : p.delta < 0 ? '#ef4444' : 'var(--muted)'}">${p.delta > 0 ? '+' : ''}${p.delta}</span>` : ''}
+          </span>
         </div>
       </div>
     </div>
