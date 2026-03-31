@@ -135,46 +135,48 @@ async function safeSS(path) {
   catch(e) { return { _error: e.message }; }
 }
 
-// ── Fetch all artist data ────────────────────────────────────────
-// Returns { info, stats, audience, topTracks, topPlaylists, callsUsed }
-async function fetchArtistFull(spotifyArtistId) {
-  // Parallel: info + stats (2 calls)
-  const [info, stats] = await Promise.all([
-    safeSS(`/artists/info?${qs(spotifyArtistId, null)}`),
-    safeSS(`/artists/stats?source=spotify&${qs(spotifyArtistId, null)}`),
-  ]);
-  const ssId = info?.info?.songstats_artist_id || info?.songstats_artist_id || null;
+const delay = ms => new Promise(r => setTimeout(r, ms));
 
+// ── Fetch all artist data ────────────────────────────────────────
+// Returns { info, stats, callsUsed, _rawInfo, _rawStats }
+async function fetchArtistFull(spotifyArtistId) {
+  // Sequential to avoid per-second rate limit on BASIC plan
+  const info = await safeSS(`/artists/info?${qs(spotifyArtistId, null)}`);
+  await delay(1200);
+  const stats = await safeSS(`/artists/stats?source=spotify&${qs(spotifyArtistId, null)}`);
+  const ssId = info?.artist_info?.songstats_artist_id || null;
   return { info, stats, audience: null, topTracks: [], topPlaylists: [], callsUsed: 2, ssId, _rawInfo: info, _rawStats: stats };
 }
 
 // ── Fetch track data ─────────────────────────────────────────────
 async function fetchTrackFull(spotifyTrackId) {
-  const [info, stats] = await Promise.all([
-    safeSS(`/tracks/info?${qst(spotifyTrackId, null)}`),
-    safeSS(`/tracks/stats?source=spotify&${qst(spotifyTrackId, null)}`),
-  ]);
-  return { info, stats, callsUsed: 2 };
+  const info = await safeSS(`/tracks/info?${qst(spotifyTrackId, null)}`);
+  await delay(1200);
+  const stats = await safeSS(`/tracks/stats?source=spotify&${qst(spotifyTrackId, null)}`);
+  return { info, stats, callsUsed: 2, _rawInfo: info, _rawStats: stats };
 }
 
 // ── Normalise helpers ────────────────────────────────────────────
 function normaliseArtistInfo(raw) {
-  const i = raw?.info || raw?.artist || raw || {};
+  // API returns data under artist_info key; links is an array of {source, url}
+  const i = raw?.artist_info || raw?.info || raw?.artist || raw || {};
+  const linksArr = Array.isArray(i.links) ? i.links : [];
+  const findLink = src => linksArr.find(l => l.source === src)?.url || null;
   return {
-    name:        i.name || null,
-    bio:         i.biography || i.bio || null,
-    country:     i.country || null,
-    genres:      i.genres || [],
-    image:       i.image || i.image_url || null,
-    ssId:        i.songstats_artist_id || null,
+    name:     i.name || null,
+    bio:      i.bio || i.biography || null,
+    country:  i.country || null,
+    genres:   i.genres || [],
+    image:    i.avatar || i.image || i.image_url || null,
+    ssId:     i.songstats_artist_id || null,
     links: {
-      spotify:   i.links?.spotify   || null,
-      instagram: i.links?.instagram || null,
-      twitter:   i.links?.twitter   || i.links?.x || null,
-      facebook:  i.links?.facebook  || null,
-      youtube:   i.links?.youtube   || null,
-      tiktok:    i.links?.tiktok    || null,
-      wikipedia: i.links?.wikipedia || null,
+      spotify:   findLink('spotify'),
+      instagram: findLink('instagram'),
+      twitter:   findLink('twitter') || findLink('x'),
+      facebook:  findLink('facebook'),
+      youtube:   findLink('youtube'),
+      tiktok:    findLink('tiktok'),
+      wikipedia: findLink('wikipedia'),
     },
   };
 }
@@ -227,12 +229,13 @@ function normaliseTopPlaylists(raw) {
 }
 
 function normaliseTrackInfo(raw) {
-  const t = raw?.track || raw?.info || raw || {};
+  // API returns data under track_info key
+  const t = raw?.track_info || raw?.track || raw?.info || raw || {};
   return {
     name:        t.name        || t.track_name || null,
     releaseDate: t.release_date || null,
     isrc:        t.isrc        || null,
-    image:       t.image       || t.image_url  || null,
+    image:       t.avatar      || t.image || t.image_url || null,
     ssId:        t.songstats_track_id || null,
   };
 }
@@ -355,6 +358,8 @@ module.exports = async (req, res) => {
           info:  raw.info?._error  || null,
           stats: raw.stats?._error || null,
         },
+        _rawInfo:  raw._rawInfo,
+        _rawStats: raw._rawStats,
       };
       await kvSet(trackKey, trackData, 86400);
       for (let i = 0; i < raw.callsUsed; i++) { await kvIncr(rl.key); }
