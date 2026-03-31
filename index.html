@@ -8218,6 +8218,10 @@ async function openPlaylistStatsModal(idx) {
   const latest = rows[rows.length - 1];
   const prev = rows[rows.length - 2];
   const delta = hasData ? latest.followers - prev.followers : null;
+  const cutoff28 = new Date(); cutoff28.setDate(cutoff28.getDate() - 28);
+  const cutoffStr = cutoff28.toISOString().slice(0, 10);
+  const first28 = rows.find(r => r.date >= cutoffStr);
+  const delta28 = (first28 && latest && first28 !== latest) ? latest.followers - first28.followers : null;
   const fmt = n => n >= 1000 ? (n/1000).toFixed(1)+'K' : n?.toLocaleString() || '—';
 
   overlay.innerHTML = `<div class="ss-modal-box" style="max-width:520px">
@@ -8242,8 +8246,8 @@ async function openPlaylistStatsModal(idx) {
           <div style="font-size:20px;font-weight:700;color:${delta > 0 ? '#1db954' : delta < 0 ? '#ef4444' : 'var(--text)'}">${delta !== null ? (delta > 0 ? '+' : '') + delta : '—'}</div>
         </div>
         <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Snapshots</div>
-          <div style="font-size:20px;font-weight:700">${rows.length}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Últ. 28 días</div>
+          <div style="font-size:20px;font-weight:700;color:${delta28 > 0 ? '#1db954' : delta28 < 0 ? '#ef4444' : 'var(--text)'}">${delta28 !== null ? (delta28 > 0 ? '+' : '') + delta28.toLocaleString() : '—'}</div>
         </div>
       </div>
       ${hasData
