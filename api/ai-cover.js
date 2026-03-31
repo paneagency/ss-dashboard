@@ -1,4 +1,13 @@
 export default async function handler(req, res) {
+  // Temporal: GET devuelve lista de modelos para debug
+  if (req.method === 'GET') {
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    const d = await r.json();
+    const names = (d.models || []).map(m => m.name);
+    return res.json({ models: names });
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { name } = req.body || {};
