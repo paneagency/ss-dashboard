@@ -20,15 +20,7 @@ export default async function handler(req, res) {
         max_tokens: 120,
         messages: [{
           role: 'user',
-          content: `Escribí una descripción para una playlist de Spotify llamada "${name.trim()}".
-
-Requisitos:
-- Máximo 180 caracteres
-- En español
-- Orientada a SEO: incluí palabras clave naturales relacionadas al género/mood del nombre
-- Tono atractivo, que invite a escuchar
-- Sin comillas, sin hashtags, sin emojis
-- Solo el texto de la descripción, nada más`,
+          content: `Sos un experto en SEO musical y posicionamiento en plataformas de streaming. Creá una descripción para una playlist de Spotify llamada "${name.trim()}", orientada a búsquedas en 2026. Usá palabras clave de alto volumen relacionadas con el género, mood y ocasión que sugiere el nombre. Máximo 200 caracteres, sin emojis, en español neutro. Solo dame el resultado final, sin explicaciones ni comillas.`,
         }],
       }),
     });
