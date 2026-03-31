@@ -8334,7 +8334,7 @@ async function analyzeSpTrack() {
       try {
         const gr = await fetch('/api/ai-describe', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'genre', artist: d.artist, track: d.track }),
+          body: JSON.stringify({ mode: 'genre', artist: d.allArtists || d.artist, track: d.track }),
         });
         const gd = await gr.json();
         if (gd.ok && gd.genres?.length) {
