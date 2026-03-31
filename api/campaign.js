@@ -741,6 +741,16 @@ module.exports = async (req, res) => {
         requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '', campaignId, new Date().toISOString()]] },
       });
 
+      // Fire & forget: snapshot Songstats para el artista al crear campaña
+      if (spotifyArtistId) {
+        const baseUrl = `https://${req.headers.host}`;
+        fetch(`${baseUrl}/api/songstats`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'artist', spotifyArtistId, artistName: artista, save: true }),
+        }).catch(() => {});
+      }
+
       return res.json({ ok: true, clientId, fechaVencimiento, masterEventId, vendorEventId, campaignId });
     }
 
