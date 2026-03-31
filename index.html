@@ -1787,6 +1787,7 @@
       <button id="sp-subtab-grid" class="sp-subtab active" onclick="setSpSubTab('grid')">🎵 Playlists</button>
       <button id="sp-subtab-growth" class="sp-subtab" onclick="setSpSubTab('growth')">📈 Crecimiento</button>
       <button id="sp-subtab-providers" class="sp-subtab" onclick="setSpSubTab('providers')">👥 Proveedores</button>
+      <button id="sp-subtab-analyze" class="sp-subtab" onclick="setSpSubTab('analyze')">🎯 Analizar</button>
     </div>
 
     <!-- Grid view -->
@@ -1831,6 +1832,52 @@
         <div class="chart-title" style="margin-bottom:16px">Playlists configuradas por grupo</div>
         <div id="sp-providers-list"><div style="color:var(--muted);font-size:13px">Cargando...</div></div>
       </div>
+    </div>
+
+    <!-- Analyze view -->
+    <div id="sp-view-analyze" style="display:none">
+      <div class="chart-card" style="margin-bottom:20px">
+        <div class="chart-title" style="margin-bottom:4px">Analizar canción</div>
+        <div class="chart-subtitle" style="margin-bottom:16px">Pegá el link de un track de Spotify para detectar género y ver en qué playlists encajaría</div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input id="sp-analyze-input" type="text" placeholder="https://open.spotify.com/track/..."
+            style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:14px;outline:none;transition:border-color 0.2s"
+            onfocus="this.style.borderColor='#1db954'" onblur="this.style.borderColor='var(--border2)'"
+            onkeydown="if(event.key==='Enter')analyzeSpTrack()">
+          <button onclick="analyzeSpTrack()" style="padding:10px 20px;border-radius:8px;background:#1db954;border:none;color:#000;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background 0.15s" onmouseover="this.style.background='#1ed760'" onmouseout="this.style.background='#1db954'">Analizar</button>
+        </div>
+      </div>
+
+      <!-- Resultado -->
+      <div id="sp-analyze-result" style="display:none">
+        <!-- Track card -->
+        <div class="chart-card" style="margin-bottom:20px">
+          <div style="display:flex;gap:18px;align-items:flex-start">
+            <img id="sp-az-album" style="width:90px;height:90px;border-radius:10px;object-fit:cover;flex-shrink:0;background:var(--surface2)">
+            <div style="flex:1;min-width:0">
+              <div id="sp-az-track" style="font-size:18px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <img id="sp-az-artist-img" style="width:28px;height:28px;border-radius:50%;object-fit:cover;background:var(--surface2)">
+                <span id="sp-az-artist" style="font-size:14px;color:var(--muted)"></span>
+              </div>
+              <div id="sp-az-genres" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            </div>
+            <button id="sp-az-campaign-btn" onclick="spAnalyzeOpenCampaign()" style="padding:8px 16px;border-radius:100px;background:transparent;border:1px solid #1db954;color:#1db954;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.15s;flex-shrink:0" onmouseover="this.style.background='#1db954';this.style.color='#000'" onmouseout="this.style.background='transparent';this.style.color='#1db954'">+ Nueva campaña</button>
+          </div>
+        </div>
+
+        <!-- Playlists sugeridas -->
+        <div class="chart-card">
+          <div class="chart-title" style="margin-bottom:4px">Playlists donde podría encajar</div>
+          <div class="chart-subtitle" style="margin-bottom:16px">Basado en el género detectado</div>
+          <div id="sp-az-playlists" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px"></div>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div id="sp-analyze-loading" style="display:none;text-align:center;padding:40px;color:var(--muted);font-size:14px">Analizando canción...</div>
+      <!-- Error -->
+      <div id="sp-analyze-error" style="display:none;padding:14px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;font-size:13px"></div>
     </div>
 
     <!-- Growth view -->
@@ -8232,11 +8279,107 @@ function setSpSubTab(tab) {
   document.getElementById('sp-view-grid').style.display = tab === 'grid' ? 'block' : 'none';
   document.getElementById('sp-view-growth').style.display = tab === 'growth' ? 'block' : 'none';
   document.getElementById('sp-view-providers').style.display = tab === 'providers' ? 'block' : 'none';
+  document.getElementById('sp-view-analyze').style.display = tab === 'analyze' ? 'block' : 'none';
   document.getElementById('sp-subtab-grid').className = 'sp-subtab' + (tab === 'grid' ? ' active' : '');
   document.getElementById('sp-subtab-growth').className = 'sp-subtab' + (tab === 'growth' ? ' active' : '');
   document.getElementById('sp-subtab-providers').className = 'sp-subtab' + (tab === 'providers' ? ' active' : '');
+  document.getElementById('sp-subtab-analyze').className = 'sp-subtab' + (tab === 'analyze' ? ' active' : '');
   if (tab === 'growth' && !_spGrowthData && !_spGrowthLoading) loadSpGrowthData();
   if (tab === 'providers') loadSpProviders();
+}
+
+// ── Analyze track ─────────────────────────────────────────────
+let _spAnalyzeData = null;
+
+async function analyzeSpTrack() {
+  const url = document.getElementById('sp-analyze-input').value.trim();
+  if (!url) return;
+
+  const resultEl = document.getElementById('sp-analyze-result');
+  const loadingEl = document.getElementById('sp-analyze-loading');
+  const errorEl = document.getElementById('sp-analyze-error');
+  resultEl.style.display = 'none';
+  errorEl.style.display = 'none';
+  loadingEl.style.display = 'block';
+
+  try {
+    const r = await fetch(`/api/spotify?url=${encodeURIComponent(url)}`);
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Error al analizar');
+    if (d.type !== 'track') throw new Error('Solo se aceptan links de canciones (/track/)');
+
+    _spAnalyzeData = d;
+    loadingEl.style.display = 'none';
+
+    // Track info
+    document.getElementById('sp-az-track').textContent = d.track;
+    document.getElementById('sp-az-artist').textContent = d.allArtists || d.artist;
+    const albumImg = document.getElementById('sp-az-album');
+    albumImg.src = d.albumImage || d.image || '';
+    albumImg.style.display = (d.albumImage || d.image) ? 'block' : 'none';
+    const artistImg = document.getElementById('sp-az-artist-img');
+    artistImg.src = d.image || '';
+    artistImg.style.display = d.image ? 'inline-block' : 'none';
+
+    // Géneros como badges
+    const genresEl = document.getElementById('sp-az-genres');
+    const genres = d.genres || [];
+    if (genres.length) {
+      const colors = ['#1db954','#3b82f6','#8b5cf6','#f59e0b','#ec4899','#06b6d4'];
+      genresEl.innerHTML = genres.map((g, i) => `<span style="padding:4px 10px;border-radius:100px;font-size:11px;font-weight:600;background:${colors[i%colors.length]}22;color:${colors[i%colors.length]};border:1px solid ${colors[i%colors.length]}44;text-transform:capitalize">${g}</span>`).join('');
+    } else {
+      genresEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">Sin géneros detectados</span>';
+    }
+
+    // Playlists sugeridas
+    renderSpAnalyzePlaylists(genres);
+
+    resultEl.style.display = 'block';
+  } catch(e) {
+    loadingEl.style.display = 'none';
+    errorEl.textContent = e.message;
+    errorEl.style.display = 'block';
+  }
+}
+
+function renderSpAnalyzePlaylists(genres) {
+  const container = document.getElementById('sp-az-playlists');
+  const playlists = _spPlaylists || [];
+  if (!playlists.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:13px">No hay playlists cargadas</div>';
+    return;
+  }
+
+  // Match: si alguna keyword del género aparece en nombre o descripción de la playlist
+  const keywords = genres.flatMap(g => g.toLowerCase().split(/[\s-]+/)).filter(w => w.length > 3);
+
+  const scored = playlists.map(p => {
+    const haystack = `${p.name} ${p.description || ''}`.toLowerCase();
+    const score = keywords.filter(k => haystack.includes(k)).length;
+    return { ...p, score };
+  }).sort((a, b) => b.score - a.score);
+
+  const top = scored.slice(0, 12);
+  container.innerHTML = top.map((p, i) => `
+    <div style="background:var(--surface);border:1px solid ${p.score > 0 ? 'rgba(29,185,84,0.4)' : 'var(--border)'};border-radius:10px;overflow:hidden;transition:border-color 0.2s;cursor:pointer" onclick="setSpSubTab('grid')" title="${p.name}">
+      ${p.image ? `<img src="${p.image}" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block">` : `<div style="width:100%;aspect-ratio:1/1;background:linear-gradient(135deg,#1db954,#0f6b35);display:flex;align-items:center;justify-content:center;font-size:28px">🎵</div>`}
+      <div style="padding:8px 10px">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        ${p.score > 0 ? `<div style="font-size:10px;color:#1db954;margin-top:2px;font-weight:500">● coincide</div>` : `<div style="font-size:10px;color:var(--muted);margin-top:2px">sin coincidencia directa</div>`}
+      </div>
+    </div>`).join('');
+}
+
+function spAnalyzeOpenCampaign() {
+  if (!_spAnalyzeData) return;
+  // Pre-fill artista y género en modal nueva campaña
+  openModal();
+  setTimeout(() => {
+    const fa = document.getElementById('f-artista');
+    if (fa) { fa.value = _spAnalyzeData.artist; fa.dispatchEvent(new Event('input')); }
+    const fg = document.getElementById('f-genero');
+    if (fg && _spAnalyzeData.genres?.length) fg.value = _spAnalyzeData.genres[0];
+  }, 100);
 }
 
 // ── Growth chart ─────────────────────────────────────────────

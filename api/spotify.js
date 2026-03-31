@@ -52,6 +52,7 @@ export default async function handler(req, res) {
 
       // Obtener foto de perfil del artista (no la portada del álbum)
       let artistImage = null;
+      let artistGenres = [];
       const mainArtistId = track.artists[0]?.id;
       if (mainArtistId) {
         const ra = await fetch(`https://api.spotify.com/v1/artists/${mainArtistId}`, {
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
         if (ra.ok) {
           const artistData = await ra.json();
           artistImage = artistData.images[0]?.url || null;
+          artistGenres = artistData.genres || [];
         }
       }
 
@@ -70,7 +72,9 @@ export default async function handler(req, res) {
         allArtists: track.artists.map(a => a.name).join(', '),
         track: track.name,
         album: track.album.name,
+        albumImage: track.album.images[0]?.url || null,
         image: artistImage,
+        genres: artistGenres,
       });
     }
 
