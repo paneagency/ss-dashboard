@@ -9299,7 +9299,10 @@ async function previewSpProviderUrls() {
   if (previewBtn) previewBtn.disabled = true;
 
   const results = await Promise.all(ids.map(id =>
-    fetch(`/api/snapshot?action=preview&playlistId=${id}`).then(r => r.json()).catch(() => ({ ok: false }))
+    fetch(`/api/snapshot?action=preview&playlistId=${id}`)
+      .then(r => r.json())
+      .then(d => ({ ...d, playlistId: d.playlistId || id }))
+      .catch(() => ({ ok: false, playlistId: id }))
   ));
 
   _spPendingPlaylists = results.filter(d => d.ok && d.playlist).map(d => d.playlist);
@@ -9323,7 +9326,7 @@ async function previewSpProviderUrls() {
         <div style="width:38px;height:38px;border-radius:5px;background:rgba(239,68,68,0.15);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px">✕</div>
         <div style="min-width:0">
           <div style="font-size:12px;font-weight:500;color:#ef4444">${d.playlistId || 'ID desconocido'}</div>
-          <div style="font-size:11px;color:var(--muted)">${d.spotifyError?.error?.message || d.spotifyError?.error?.status === 404 ? 'Playlist privada o no existe' : d.spotifyError?.error?.message || `Error ${d.status || ''}`}</div>
+          <div style="font-size:11px;color:var(--muted)">${d.spotifyError?.error?.status === 404 ? 'No existe o fue eliminada' : (d.spotifyError?.error?.message || d.error || `Error ${d.status || '(sin respuesta)'}`)}</div>
         </div>
       </div>`),
   ].join('');
