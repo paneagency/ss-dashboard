@@ -11,7 +11,7 @@ export default async function handler(req, res) {
 
     if (mode === 'genre') {
       if (!artist?.trim()) return res.status(400).json({ error: 'artist requerido' });
-      prompt = `Sos un experto en música latinoamericana y géneros musicales. ¿Cuáles son los géneros musicales de "${artist.trim()}"${track ? ` (canción: "${track.trim()}")` : ''}? Respondé SOLO con una lista de géneros separados por coma, en minúsculas, sin explicaciones. Ejemplo: rock argentino, punk rock, alternativo. Máximo 5 géneros.`;
+      prompt = `Clasificá el género musical del artista "${artist.trim()}"${track ? ` (canción: "${track.trim()}")` : ''}. Respondé ÚNICAMENTE con géneros separados por coma, en minúsculas, sin ninguna explicación ni pregunta. Si hay ambigüedad, hacé tu mejor estimación. Máximo 5 géneros cortos. Ejemplo de respuesta válida: cumbia, pop latino, tropical`;
       maxTokens = 60;
     } else {
       if (!name?.trim()) return res.status(400).json({ error: 'name requerido' });
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const text = d.content?.[0]?.text?.trim() || '';
 
     if (mode === 'genre') {
-      const genres = text.split(',').map(g => g.trim().toLowerCase()).filter(Boolean);
+      const genres = text.split(',').map(g => g.trim().toLowerCase()).filter(g => g.length > 0 && g.length < 40 && !g.includes('?') && !g.includes('necesit'));
       return res.json({ ok: true, genres, fromAI: true });
     }
 
