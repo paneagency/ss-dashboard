@@ -210,7 +210,7 @@ export default async function handler(req, res) {
         const { accessToken: oauthToken } = await getAccessToken(qUserId || null);
 
         // Get total tracks
-        const infoRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,tracks.total`, {
+        const infoRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
           headers: { Authorization: `Bearer ${oauthToken}` },
         });
         if (!infoRes.ok) return res.status(404).json({ error: 'Playlist no encontrada' });
