@@ -486,6 +486,11 @@
     @keyframes sp-modal-in { from { opacity:0;transform:translateY(22px) scale(0.97); } to { opacity:1;transform:translateY(0) scale(1); } }
     .sp-modal-animated { animation:sp-modal-in 0.24s cubic-bezier(0.34,1.3,0.64,1); }
     .sp-char-count { font-size:11px;color:var(--muted);text-align:right;margin-top:3px; }
+    .sp-az-feat-item { background:var(--surface2);border-radius:10px;padding:12px 14px; }
+    .sp-az-feat-label { font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px; }
+    .sp-az-feat-value { font-size:20px;font-weight:700;margin-bottom:8px; }
+    .sp-az-feat-bar { height:5px;border-radius:3px;background:var(--border2);overflow:hidden; }
+    .sp-az-feat-fill { height:100%;border-radius:3px;transition:width 0.6s cubic-bezier(0.34,1.3,0.64,1); }
     .sp-char-count.warn { color:#f59e0b; }
     .sp-subtab { padding:7px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s; }
     .sp-subtab.active { background:var(--indigo);color:#fff;border-color:var(--indigo); }
@@ -1863,6 +1868,19 @@
               <div id="sp-az-genres" style="display:flex;flex-wrap:wrap;gap:6px"></div>
             </div>
             <button id="sp-az-campaign-btn" onclick="spAnalyzeOpenCampaign()" style="padding:8px 16px;border-radius:100px;background:transparent;border:1px solid #1db954;color:#1db954;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.15s;flex-shrink:0" onmouseover="this.style.background='#1db954';this.style.color='#000'" onmouseout="this.style.background='transparent';this.style.color='#1db954'">+ Nueva campaña</button>
+          </div>
+        </div>
+
+        <!-- Audio Features -->
+        <div id="sp-az-features-card" class="chart-card" style="display:none;margin-bottom:20px">
+          <div class="chart-title" style="margin-bottom:16px">Audio Features</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
+            <div id="sp-az-feat-tempo" class="sp-az-feat-item"></div>
+            <div id="sp-az-feat-energy" class="sp-az-feat-item"></div>
+            <div id="sp-az-feat-dance" class="sp-az-feat-item"></div>
+            <div id="sp-az-feat-valence" class="sp-az-feat-item"></div>
+            <div id="sp-az-feat-acoustic" class="sp-az-feat-item"></div>
+            <div id="sp-az-feat-popularity" class="sp-az-feat-item"></div>
           </div>
         </div>
 
@@ -8321,6 +8339,9 @@ async function analyzeSpTrack() {
     artistImg.src = d.image || '';
     artistImg.style.display = d.image ? 'inline-block' : 'none';
 
+    // Audio Features
+    renderSpAudioFeatures(d);
+
     // Géneros como badges
     const genresEl = document.getElementById('sp-az-genres');
     let genres = d.genres || [];
@@ -8353,6 +8374,39 @@ async function analyzeSpTrack() {
     loadingEl.style.display = 'none';
     errorEl.textContent = e.message;
     errorEl.style.display = 'block';
+  }
+}
+
+function renderSpAudioFeatures(d) {
+  const card = document.getElementById('sp-az-features-card');
+  const af = d.audioFeatures;
+  if (!af && d.trackPopularity == null) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  function feat(id, label, value, max, unit, color, extra) {
+    const pct = Math.round((value / max) * 100);
+    document.getElementById(id).innerHTML = `
+      <div class="sp-az-feat-label">${label}</div>
+      <div class="sp-az-feat-value">${value}${unit}${extra ? `<span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:4px">${extra}</span>` : ''}</div>
+      <div class="sp-az-feat-bar"><div class="sp-az-feat-fill" style="width:${pct}%;background:${color}"></div></div>`;
+  }
+
+  const keys = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  if (af) {
+    feat('sp-az-feat-tempo', 'BPM', af.tempo, 220, '', '#1db954', af.tempo < 80 ? 'lento' : af.tempo < 120 ? 'moderado' : af.tempo < 160 ? 'rápido' : 'muy rápido');
+    feat('sp-az-feat-energy', 'Energía', Math.round(af.energy * 100), 100, '%', '#ef4444');
+    feat('sp-az-feat-dance', 'Bailabilidad', Math.round(af.danceability * 100), 100, '%', '#8b5cf6');
+    feat('sp-az-feat-valence', 'Positividad', Math.round(af.valence * 100), 100, '%', '#f59e0b', af.valence < 0.35 ? 'melancólica' : af.valence < 0.65 ? 'neutral' : 'alegre');
+    feat('sp-az-feat-acoustic', 'Acústica', Math.round(af.acousticness * 100), 100, '%', '#06b6d4');
+  } else {
+    ['sp-az-feat-tempo','sp-az-feat-energy','sp-az-feat-dance','sp-az-feat-valence','sp-az-feat-acoustic'].forEach(id => {
+      document.getElementById(id).innerHTML = '';
+    });
+  }
+  if (d.trackPopularity != null) {
+    feat('sp-az-feat-popularity', 'Popularidad', d.trackPopularity, 100, '/100', '#3b82f6');
+  } else {
+    document.getElementById('sp-az-feat-popularity').innerHTML = '';
   }
 }
 

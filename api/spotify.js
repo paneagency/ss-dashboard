@@ -50,20 +50,26 @@ export default async function handler(req, res) {
       if (!r.ok) return res.status(404).json({ error: 'Track no encontrado' });
       const track = await r.json();
 
-      // Obtener foto de perfil del artista (no la portada del álbum)
-      let artistImage = null;
-      let artistGenres = [];
+      // Fetch artista y audio features en paralelo
+      let artistImage = null, artistGenres = [], artistFollowers = null, artistPopularity = null;
+      let audioFeatures = null;
       const mainArtistId = track.artists[0]?.id;
-      if (mainArtistId) {
-        const ra = await fetch(`https://api.spotify.com/v1/artists/${mainArtistId}`, {
+
+      await Promise.all([
+        mainArtistId && fetch(`https://api.spotify.com/v1/artists/${mainArtistId}`, {
           headers: { Authorization: `Bearer ${token}` },
-        });
-        if (ra.ok) {
-          const artistData = await ra.json();
-          artistImage = artistData.images[0]?.url || null;
-          artistGenres = artistData.genres || [];
-        }
-      }
+        }).then(r => r.ok ? r.json() : null).then(d => {
+          if (d) {
+            artistImage = d.images[0]?.url || null;
+            artistGenres = d.genres || [];
+            artistFollowers = d.followers?.total ?? null;
+            artistPopularity = d.popularity ?? null;
+          }
+        }),
+        fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(r => r.ok ? r.json() : null).then(d => { if (d) audioFeatures = d; }),
+      ]);
 
       return res.json({
         type: 'track',
@@ -75,6 +81,23 @@ export default async function handler(req, res) {
         albumImage: track.album.images[0]?.url || null,
         image: artistImage,
         genres: artistGenres,
+        artistFollowers,
+        artistPopularity,
+        trackPopularity: track.popularity ?? null,
+        durationMs: track.duration_ms ?? null,
+        explicit: track.explicit ?? false,
+        releaseDate: track.album.release_date || null,
+        audioFeatures: audioFeatures ? {
+          tempo: Math.round(audioFeatures.tempo),
+          energy: audioFeatures.energy,
+          danceability: audioFeatures.danceability,
+          valence: audioFeatures.valence,
+          acousticness: audioFeatures.acousticness,
+          instrumentalness: audioFeatures.instrumentalness,
+          loudness: audioFeatures.loudness,
+          key: audioFeatures.key,
+          mode: audioFeatures.mode,
+        } : null,
       });
     }
 
