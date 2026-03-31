@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { name, mode, artist, track, audioFeatures } = req.body || {};
+  const { name, mode, artist, track } = req.body || {};
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY no configurada' });
@@ -11,13 +11,12 @@ export default async function handler(req, res) {
 
     if (mode === 'genre') {
       if (!artist?.trim()) return res.status(400).json({ error: 'artist requerido' });
-      const afContext = audioFeatures ? `\nDatos de audio: BPM=${audioFeatures.tempo}, energía=${Math.round(audioFeatures.energy*100)}%, bailabilidad=${Math.round(audioFeatures.danceability*100)}%, positividad=${Math.round(audioFeatures.valence*100)}%, acústica=${Math.round(audioFeatures.acousticness*100)}%.` : '';
       prompt = `Sos un experto en música latinoamericana y campañas de Spotify. Analizá este track:
-Artista: "${artist.trim()}"${track ? `\nCanción: "${track.trim()}"` : ''}${afContext}
+Artista: "${artist.trim()}"${track ? `\nCanción: "${track.trim()}"` : ''}
 
 Respondé en este formato exacto (sin texto extra):
 GENEROS: [géneros separados por coma, minúsculas, máximo 5]
-RECOMENDACION: [1 oración sobre en qué tipo de playlists o campaña encajaría esta canción, basándote en el género y los datos de audio]`;
+RECOMENDACION: [1 oración sobre en qué tipo de playlists o campaña encajaría esta canción]`;
       maxTokens = 150;
     } else {
       if (!name?.trim()) return res.status(400).json({ error: 'name requerido' });

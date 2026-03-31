@@ -52,24 +52,20 @@ export default async function handler(req, res) {
 
       // Fetch artista y audio features en paralelo
       let artistImage = null, artistGenres = [], artistFollowers = null, artistPopularity = null;
-      let audioFeatures = null;
       const mainArtistId = track.artists[0]?.id;
 
-      await Promise.all([
-        mainArtistId && fetch(`https://api.spotify.com/v1/artists/${mainArtistId}`, {
+      if (mainArtistId) {
+        const ar = await fetch(`https://api.spotify.com/v1/artists/${mainArtistId}`, {
           headers: { Authorization: `Bearer ${token}` },
-        }).then(r => r.ok ? r.json() : null).then(d => {
-          if (d) {
-            artistImage = d.images[0]?.url || null;
-            artistGenres = d.genres || [];
-            artistFollowers = d.followers?.total ?? null;
-            artistPopularity = d.popularity ?? null;
-          }
-        }),
-        fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(r => { console.log('audio-features status:', r.status); return r.ok ? r.json() : null; }).then(d => { if (d) audioFeatures = d; }),
-      ]);
+        });
+        if (ar.ok) {
+          const d = await ar.json();
+          artistImage = d.images[0]?.url || null;
+          artistGenres = d.genres || [];
+          artistFollowers = d.followers?.total ?? null;
+          artistPopularity = d.popularity ?? null;
+        }
+      }
 
       return res.json({
         type: 'track',
@@ -87,17 +83,6 @@ export default async function handler(req, res) {
         durationMs: track.duration_ms ?? null,
         explicit: track.explicit ?? false,
         releaseDate: track.album.release_date || null,
-        audioFeatures: audioFeatures ? {
-          tempo: Math.round(audioFeatures.tempo),
-          energy: audioFeatures.energy,
-          danceability: audioFeatures.danceability,
-          valence: audioFeatures.valence,
-          acousticness: audioFeatures.acousticness,
-          instrumentalness: audioFeatures.instrumentalness,
-          loudness: audioFeatures.loudness,
-          key: audioFeatures.key,
-          mode: audioFeatures.mode,
-        } : null,
       });
     }
 
