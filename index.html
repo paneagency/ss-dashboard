@@ -1797,19 +1797,15 @@
 
   <!-- ── TAB SPOTIFY ─────────────────────────────────────────────── -->
   <section id="tab-spotify" class="tab-panel">
-    <div class="section-header">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span id="sp-account-info" title="Spotify conectado" style="display:none;width:9px;height:9px;border-radius:50%;background:#1db954;flex-shrink:0"></span>
-
-        <button onclick="openSpotifyModal(null)" style="display:inline-flex;align-items:center;gap:7px;background:#1db954;color:#000;border:none;border-radius:100px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;letter-spacing:0.01em" onmouseover="this.style.background='#1ed760';this.style.transform='scale(1.04)';this.style.boxShadow='0 4px 22px rgba(29,185,84,0.45)'" onmouseout="this.style.background='#1db954';this.style.transform='';this.style.boxShadow=''"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva Playlist</button>
-      </div>
-    </div>
     <!-- Sub-tabs -->
-    <div style="display:flex;gap:8px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">
       <button id="sp-subtab-grid" class="sp-subtab active" onclick="setSpSubTab('grid')">🎵 Playlists</button>
       <button id="sp-subtab-growth" class="sp-subtab" onclick="setSpSubTab('growth')">📈 Crecimiento</button>
       <button id="sp-subtab-providers" class="sp-subtab" onclick="setSpSubTab('providers')">👥 Proveedores</button>
       <button id="sp-subtab-analyze" class="sp-subtab" onclick="setSpSubTab('analyze')">🎯 Analizar</button>
+      <span id="sp-account-info" title="Spotify conectado" style="display:none;width:9px;height:9px;border-radius:50%;background:#1db954;flex-shrink:0"></span>
+      <div style="flex:1"></div>
+      <button onclick="openSpotifyModal(null)" style="display:inline-flex;align-items:center;gap:7px;background:#1db954;color:#000;border:none;border-radius:100px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;letter-spacing:0.01em" onmouseover="this.style.background='#1ed760';this.style.transform='scale(1.04)';this.style.boxShadow='0 4px 22px rgba(29,185,84,0.45)'" onmouseout="this.style.background='#1db954';this.style.transform='';this.style.boxShadow=''"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva Playlist</button>
     </div>
 
     <!-- Grid view -->
