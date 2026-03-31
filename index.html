@@ -8267,12 +8267,14 @@ async function openPlaylistStatsModal(idx) {
         datasets: [{
           data: rows.map(r => r.followers),
           borderColor: '#1db954', backgroundColor: 'rgba(29,185,84,0.08)',
-          borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#1db954',
+          borderWidth: 2, pointRadius: 4, pointHoverRadius: 8, pointBackgroundColor: '#1db954',
           tension: 0.4, fill: true,
         }],
       },
       options: {
-        responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
           label: ctx => ' ' + ctx.parsed.y.toLocaleString() + ' seg',
           afterLabel: ctx => {
             const i = ctx.dataIndex;
