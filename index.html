@@ -1328,8 +1328,27 @@
           <div class="detalle-field full"><div class="detalle-field-label">Spotify</div><input id="dd-spotify" class="dd-input" placeholder="—"></div>
         </div>
 
-        <div class="detalle-section-title">Facturación</div>
+        <div class="detalle-section-title">Comercial</div>
         <div class="detalle-grid" style="margin-bottom:16px">
+          <div class="detalle-field"><div class="detalle-field-label">Representante</div><input id="dd-representante" class="dd-input" list="list-representantes" placeholder="—"></div>
+          <div class="detalle-field"><div class="detalle-field-label">Vendedor</div>
+            <select id="dd-vendedor" class="dd-input" style="cursor:pointer"><option value="">—</option></select>
+          </div>
+          <div class="detalle-field"><div class="detalle-field-label">Método de pago</div>
+            <select id="dd-metodo" class="dd-input" style="cursor:pointer">
+              <option value="">—</option><option>PayPal</option><option>Wise</option>
+              <option>Mercado Pago</option><option>Transferencia Ars</option><option>Sin Comision</option>
+            </select>
+          </div>
+          <div class="detalle-field"><div class="detalle-field-label">Estado</div>
+            <select id="dd-estado" class="dd-input" style="cursor:pointer">
+              <option value="Activa">Activa</option><option value="Sin pauta">Sin pauta</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="detalle-section-title">Facturación</div>
+        <div class="detalle-grid" style="margin-bottom:8px">
           <div class="detalle-field"><div class="detalle-field-label">Tipo</div>
             <select id="dd-tipo" class="dd-input" style="cursor:pointer">
               <option value="Artista">Artista</option>
@@ -1347,25 +1366,6 @@
               <input type="checkbox" id="dd-auto-factura" style="display:none">
               <span style="font-size:16px">🧾</span>
             </div>
-          </div>
-        </div>
-
-        <div class="detalle-section-title">Comercial</div>
-        <div class="detalle-grid" style="margin-bottom:8px">
-          <div class="detalle-field"><div class="detalle-field-label">Representante</div><input id="dd-representante" class="dd-input" list="list-representantes" placeholder="—"></div>
-          <div class="detalle-field"><div class="detalle-field-label">Vendedor</div>
-            <select id="dd-vendedor" class="dd-input" style="cursor:pointer"><option value="">—</option></select>
-          </div>
-          <div class="detalle-field"><div class="detalle-field-label">Método de pago</div>
-            <select id="dd-metodo" class="dd-input" style="cursor:pointer">
-              <option value="">—</option><option>PayPal</option><option>Wise</option>
-              <option>Mercado Pago</option><option>Transferencia Ars</option><option>Sin Comision</option>
-            </select>
-          </div>
-          <div class="detalle-field"><div class="detalle-field-label">Estado</div>
-            <select id="dd-estado" class="dd-input" style="cursor:pointer">
-              <option value="Activa">Activa</option><option value="Sin pauta">Sin pauta</option>
-            </select>
           </div>
         </div>
       </div>
