@@ -9319,11 +9319,22 @@ function sortSpRanking(col) {
     _spSortCol = col;
     _spSortDir = 1;
   }
+  const el = document.getElementById('sp-growth-table');
+  if (el) el._spRankingShown = 20;
   filterSpRanking();
 }
 
 function renderSpGrowthTable(enriched) {
   _spRankingEnriched = enriched;
+  const el = document.getElementById('sp-growth-table');
+  if (el) el._spRankingShown = 20;
+  filterSpRanking();
+}
+
+function spRankingLoadMore() {
+  const el = document.getElementById('sp-growth-table');
+  if (!el) return;
+  el._spRankingShown = (el._spRankingShown || 20) + 20;
   filterSpRanking();
 }
 
@@ -9537,7 +9548,11 @@ function filterSpRanking() {
     return `padding:8px;font-size:10px;font-weight:600;text-align:right;color:${color};cursor:pointer;user-select:none;white-space:nowrap" onclick="sortSpRanking('${c}')"><span>${icon} `;
   };
 
-  const tableRows = rows.map((p) => {
+  const PAGE = 20;
+  const shown = el._spRankingShown || PAGE;
+  const visible = rows.slice(0, shown);
+
+  const makeRow = (p) => {
     const { delta1, delta7, delta30, avgDaily7, prev7, prev30 } = p;
     const pct7  = prev7  > 0 && delta7  !== null ? ((delta7  / prev7)  * 100).toFixed(1) : null;
     const pct30 = prev30 > 0 && delta30 !== null ? ((delta30 / prev30) * 100).toFixed(1) : null;
@@ -9562,9 +9577,18 @@ function filterSpRanking() {
       </td>
       <td style="padding:9px 8px;font-size:12px;text-align:right;white-space:nowrap;color:${col(avgDaily7)}">${fmtD(avgDaily7)}</td>
     </tr>`;
-  }).join('');
+  };
 
+  const tableRows = visible.map(makeRow).join('');
   const noResults = rows.length === 0 ? `<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Sin resultados</td></tr>` : '';
+  const remaining = rows.length - shown;
+  const loadMoreRow = remaining > 0
+    ? `<tr><td colspan="7" style="padding:14px;text-align:center">
+        <button onclick="spRankingLoadMore()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 24px;border-radius:8px;cursor:pointer;font-size:13px">
+          Ver ${Math.min(remaining, PAGE)} más <span style="color:var(--muted)">(${remaining} restantes)</span>
+        </button>
+       </td></tr>`
+    : '';
 
   const thBase = 'padding:8px;font-size:10px;font-weight:600;cursor:pointer;user-select:none;white-space:nowrap';
   const thH = (c, label, align='right') => {
@@ -9584,7 +9608,7 @@ function filterSpRanking() {
       ${thH('delta30','30 DÍAS')}
       ${thH('avgDaily7','PROM/DÍA')}
     </tr></thead>
-    <tbody>${tableRows || noResults}</tbody>
+    <tbody>${tableRows || noResults}${loadMoreRow}</tbody>
   </table>`;
 }
 
