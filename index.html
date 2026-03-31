@@ -7890,13 +7890,16 @@ async function loadSpotifyTab(force = false) {
   if (!grid) return;
   grid.innerHTML = '<div style="color:var(--muted);text-align:center;padding:60px;grid-column:1/-1">Cargando playlists...</div>';
   try {
-    const [r, capsR] = await Promise.all([
+    const [r, capsR, deltasR] = await Promise.all([
       fetch('/api/snapshot?action=providers'),
       fetch('/api/sheets?mode=playlist-caps').catch(() => null),
+      fetch('/api/snapshot?action=deltas').catch(() => null),
     ]);
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || 'Error al cargar playlists');
     if (capsR) { const capsD = await capsR.json().catch(() => ({})); if (capsD.caps) _playlistCaps = capsD.caps; }
+    const deltasData = deltasR ? await deltasR.json().catch(() => ({})) : {};
+    const deltas = deltasData.deltas || {};
     // Normalise sheet rows to the card format
     _spPlaylists = (data.providers || []).map(p => ({
       id:          p.userId,
@@ -7907,7 +7910,15 @@ async function loadSpotifyTab(force = false) {
       followers:   p.followers || null,
       grupo:       p.grupo || '',
       row:         p.row,
+      delta:       deltas[p.userId] ?? null,
     }));
+    // Sort by 24h delta desc (nulls last)
+    _spPlaylists.sort((a, b) => {
+      if (a.delta === null && b.delta === null) return 0;
+      if (a.delta === null) return 1;
+      if (b.delta === null) return -1;
+      return b.delta - a.delta;
+    });
     _spLoaded = true;
     // Populate provider filter
     const sel = document.getElementById('sp-filter-grupo');
@@ -7952,6 +7963,7 @@ function renderSpotifyPlaylists(playlists) {
         <div class="sp-card-meta">
           ${p.grupo ? `<span style="color:#1db954;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">${p.grupo}</span>` : ''}
           ${p.followers ? `<span>👥 ${p.followers.toLocaleString()}</span>` : ''}
+          ${p.delta !== null ? `<span style="font-size:11px;font-weight:700;color:${p.delta > 0 ? '#1db954' : p.delta < 0 ? '#ef4444' : 'var(--muted)'}">${p.delta > 0 ? '+' : ''}${p.delta}</span>` : ''}
         </div>
         <div class="sp-card-actions" onclick="event.stopPropagation()">
           <button class="sp-btn" onclick="spCopyLink(${i})" title="Copiar link">🔗</button>

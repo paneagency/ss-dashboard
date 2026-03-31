@@ -205,6 +205,36 @@ module.exports = async (req, res) => {
     }
   }
 
+  // ── GET action=deltas: delta followers últimas 24hs por playlist ──
+  if (req.method === 'GET' && req.query.action === 'deltas') {
+    try {
+      const sheets = getSheets();
+      const resp = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'HistorialPlaylists!A:D',
+      });
+      const rows = (resp.data.values || []).slice(1).filter(r => r[0] && r[1]);
+      // Group by playlist ID, keep last 2 entries (sorted by date)
+      const byId = {};
+      for (const r of rows) {
+        const id = r[1];
+        if (!byId[id]) byId[id] = [];
+        byId[id].push({ date: r[0], followers: parseInt(r[3]) || 0 });
+      }
+      const deltas = {};
+      for (const [id, entries] of Object.entries(byId)) {
+        if (entries.length < 2) { deltas[id] = null; continue; }
+        entries.sort((a, b) => a.date.localeCompare(b.date));
+        const last = entries[entries.length - 1];
+        const prev = entries[entries.length - 2];
+        deltas[id] = last.followers - prev.followers;
+      }
+      return res.json({ ok: true, deltas });
+    } catch(e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // ── GET action=cron: snapshot automático diario (Vercel cron) ──
   if (req.method === 'GET' && req.query.action === 'cron') {
     try {
