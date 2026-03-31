@@ -185,11 +185,11 @@ function normaliseArtistStats(raw) {
   const sp = (raw?.stats || []).find(s => s.source === 'spotify') || {};
   const d  = sp.data || sp || {};
   return {
-    monthlyListeners: d.monthly_listeners   ?? null,
-    followers:        d.follower_count       ?? d.followers        ?? null,
-    playlistCount:    d.playlist_count       ?? d.playlists_count  ?? null,
-    playlistReach:    d.playlist_reach       ?? null,
-    streamsTotal:     d.total_streams        ?? d.streams_total    ?? null,
+    monthlyListeners: d.monthly_listeners_current ?? d.monthly_listeners   ?? null,
+    followers:        d.followers_total            ?? d.follower_count      ?? d.followers ?? null,
+    playlistCount:    d.playlists_current          ?? d.playlist_count      ?? d.playlists_count ?? null,
+    playlistReach:    d.playlist_reach_current     ?? d.playlist_reach      ?? null,
+    streamsTotal:     d.streams_total              ?? d.total_streams       ?? null,
   };
 }
 
@@ -228,15 +228,16 @@ function normaliseTopPlaylists(raw) {
   }));
 }
 
-function normaliseTrackInfo(raw) {
-  // API returns data under track_info key
-  const t = raw?.track_info || raw?.track || raw?.info || raw || {};
+// statsRaw is passed as fallback: track_info is also returned in /tracks/stats response
+function normaliseTrackInfo(infoRaw, statsRaw) {
+  const t  = infoRaw?.track_info  || infoRaw?.track  || infoRaw?.info  || infoRaw  || {};
+  const fb = statsRaw?.track_info || {};
   return {
-    name:        t.name        || t.track_name || null,
-    releaseDate: t.release_date || null,
-    isrc:        t.isrc        || null,
-    image:       t.avatar      || t.image || t.image_url || null,
-    ssId:        t.songstats_track_id || null,
+    name:        t.title || t.name || t.track_name || fb.title || fb.name || null,
+    releaseDate: t.release_date || fb.release_date || null,
+    isrc:        t.isrc || null,
+    image:       t.avatar || t.image || t.image_url || fb.avatar || null,
+    ssId:        t.songstats_track_id || fb.songstats_track_id || null,
   };
 }
 
@@ -244,12 +245,12 @@ function normaliseTrackStats(raw) {
   const sp = (raw?.stats || []).find(s => s.source === 'spotify') || {};
   const d  = sp.data || sp || {};
   return {
-    streamsTotal:   d.total_streams   ?? d.streams_total   ?? null,
-    streamsMonthly: d.streams_monthly ?? null,
-    streamsDaily:   d.streams_daily   ?? null,
-    playlistCount:  d.playlist_count  ?? d.playlists_count ?? null,
-    playlistReach:  d.playlist_reach  ?? null,
-    popularity:     d.popularity      ?? null,
+    streamsTotal:   d.streams_total              ?? d.total_streams       ?? null,
+    streamsMonthly: d.streams_monthly            ?? null,
+    streamsDaily:   d.streams_daily              ?? null,
+    playlistCount:  d.playlists_current          ?? d.playlist_count      ?? d.playlists_count ?? null,
+    playlistReach:  d.playlist_reach_current     ?? d.playlist_reach      ?? null,
+    popularity:     d.popularity_current         ?? d.popularity          ?? null,
   };
 }
 
@@ -347,12 +348,13 @@ module.exports = async (req, res) => {
     }
   }
 
-  // Fetch track
+  // Fetch track (add delay if artist was just fetched to avoid per-second rate limit)
   if (needTrack) {
+    if (usedCalls > 0) await delay(1500);
     try {
       const raw = await fetchTrackFull(spotifyTrackId);
       trackData = {
-        info:  normaliseTrackInfo(raw.info),
+        info:  normaliseTrackInfo(raw.info, raw.stats),  // stats as fallback for track_info
         stats: normaliseTrackStats(raw.stats),
         _errors: {
           info:  raw.info?._error  || null,
