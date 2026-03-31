@@ -9300,15 +9300,14 @@ async function addSpProvider() {
   const btn = document.getElementById('sp-prov-add-btn');
   if (btn) btn.disabled = true;
   try {
-    for (const pl of _spPendingPlaylists) {
-      const r = await fetch('/api/snapshot?action=providers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grupo, userId: pl.id, name: pl.name, image: pl.image, followers: pl.followers, owner: pl.owner }),
-      });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error);
-    }
+    // Batch: save all playlists in a single request to avoid Sheets quota
+    const r = await fetch('/api/snapshot?action=providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: _spPendingPlaylists.map(pl => ({ grupo, userId: pl.id, name: pl.name, image: pl.image, followers: pl.followers, owner: pl.owner })) }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
     // Sincronizar datalist de proveedores si el grupo es nuevo
     if (!window._providers.includes(grupo)) {
       window._providers.push(grupo);

@@ -324,35 +324,43 @@ module.exports = async (req, res) => {
       }
     }
 
-    // POST: agregar entrada (A=GRUPO, B=PLAYLIST_ID, C=NOMBRE, D=IMAGEN, E=SEGUIDORES, F=OWNER)
+    // POST: agregar entradas — acepta array {items:[{grupo,userId,name,image,followers,owner}]} o single {grupo,userId,...}
     if (req.method === 'POST') {
-      const { grupo, userId, name, image, followers, owner } = req.body || {};
-      if (!grupo || !userId) return res.status(400).json({ error: 'grupo y userId requeridos' });
+      const body = req.body || {};
+      // Normalizar a array
+      const items = body.items
+        ? body.items
+        : (body.grupo && body.userId ? [body] : null);
+      if (!items?.length) return res.status(400).json({ error: 'items[] o grupo+userId requeridos' });
       try {
-        // Guardar en ProveedoresSpotify
+        // Batch write a ProveedoresSpotify
+        const rows = items.map(({ grupo, userId, name, image, followers, owner }) =>
+          [grupo.trim(), userId.trim(), name || '', image || '', followers || '', owner || '']
+        );
         await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
           range: 'ProveedoresSpotify!A:F',
           valueInputOption: 'RAW',
           insertDataOption: 'INSERT_ROWS',
-          resource: { values: [[grupo.trim(), userId.trim(), name || '', image || '', followers || '', owner || '']] },
+          resource: { values: rows },
         });
-        // Sincronizar con hoja Proveedores si el grupo no existe aún
+        // Agregar grupos nuevos a hoja Proveedores (una sola lectura + una escritura)
         const provResp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
           range: 'Proveedores!A:A',
         }).catch(() => ({ data: { values: [] } }));
-        const existingProviders = (provResp.data.values || []).slice(1).map(r => r[0]?.trim().toLowerCase()).filter(Boolean);
-        if (!existingProviders.includes(grupo.trim().toLowerCase())) {
+        const existingProviders = new Set((provResp.data.values || []).slice(1).map(r => r[0]?.trim().toLowerCase()).filter(Boolean));
+        const newGroups = [...new Set(items.map(i => i.grupo.trim()))].filter(g => !existingProviders.has(g.toLowerCase()));
+        if (newGroups.length) {
           await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
             range: 'Proveedores!A:A',
             valueInputOption: 'RAW',
             insertDataOption: 'INSERT_ROWS',
-            resource: { values: [[grupo.trim()]] },
+            resource: { values: newGroups.map(g => [g]) },
           });
         }
-        return res.json({ ok: true });
+        return res.json({ ok: true, saved: rows.length });
       } catch(e) {
         return res.status(500).json({ error: e.message });
       }
