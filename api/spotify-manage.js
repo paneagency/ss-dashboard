@@ -203,6 +203,39 @@ export default async function handler(req, res) {
           }, tracks });
       }
 
+      // Find position of a track in one of our playlists (uses OAuth)
+      if (action === 'position') {
+        const { trackId: qTrackId } = req.query;
+        if (!playlistId || !qTrackId) return res.status(400).json({ error: 'playlistId y trackId requeridos' });
+        const { accessToken: oauthToken } = await getAccessToken(qUserId || null);
+
+        // Get total tracks
+        const infoRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,tracks.total`, {
+          headers: { Authorization: `Bearer ${oauthToken}` },
+        });
+        if (!infoRes.ok) return res.status(404).json({ error: 'Playlist no encontrada' });
+        const info = await infoRes.json();
+        const total = info.tracks?.total ?? 0;
+        const playlistName = info.name;
+
+        let position = null;
+        let offset = 0;
+        while (position === null && offset < total && offset < 1000) {
+          const r = await fetch(
+            `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(id))&limit=100&offset=${offset}`,
+            { headers: { Authorization: `Bearer ${oauthToken}` } }
+          );
+          if (!r.ok) break;
+          const data = await r.json();
+          const items = data.items || [];
+          for (let i = 0; i < items.length; i++) {
+            if (items[i]?.track?.id === qTrackId) { position = offset + i + 1; break; }
+          }
+          offset += 100;
+        }
+        return res.json({ ok: true, position, total, playlistName });
+      }
+
       const { accessToken, userId } = await getAccessToken(qUserId || null);
 
       // List all playlists (handles pagination)

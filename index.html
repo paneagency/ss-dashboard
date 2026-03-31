@@ -1887,12 +1887,11 @@
         <!-- Buscar posición en playlist -->
         <div class="chart-card" style="margin-top:20px">
           <div class="chart-title" style="margin-bottom:4px">Buscar posición en playlist</div>
-          <div class="chart-subtitle" style="margin-bottom:14px">Pegá el link de una playlist para ver en qué posición está este track</div>
+          <div class="chart-subtitle" style="margin-bottom:14px">Seleccioná una de tus playlists para ver en qué posición está este track</div>
           <div style="display:flex;gap:10px">
-            <input id="sp-az-playlist-input" type="text" placeholder="https://open.spotify.com/playlist/..."
-              style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:14px;outline:none;transition:border-color 0.2s"
-              onfocus="this.style.borderColor='#1db954'" onblur="this.style.borderColor='var(--border2)'"
-              onkeydown="if(event.key==='Enter')checkTrackPosition()">
+            <select id="sp-az-playlist-select" style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:14px;outline:none;cursor:pointer">
+              <option value="">— Elegí una playlist —</option>
+            </select>
             <button onclick="checkTrackPosition()" style="padding:10px 18px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-size:14px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#1db954';this.style.color='#1db954'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text)'">Buscar</button>
           </div>
           <div id="sp-az-position-result" style="margin-top:14px;font-size:14px;display:none"></div>
@@ -8327,7 +8326,7 @@ async function analyzeSpTrack() {
   errorEl.style.display = 'none';
   document.getElementById('sp-az-recommendation').style.display = 'none';
   document.getElementById('sp-az-position-result').style.display = 'none';
-  document.getElementById('sp-az-playlist-input').value = '';
+  document.getElementById('sp-az-playlist-select').value = '';
   loadingEl.style.display = 'block';
 
   try {
@@ -8337,6 +8336,8 @@ async function analyzeSpTrack() {
     if (d.type !== 'track') throw new Error('Solo se aceptan links de canciones (/track/)');
 
     _spAnalyzeData = d;
+    const tidMatch = url.match(/track\/([A-Za-z0-9]+)/);
+    _spAnalyzeData.trackId = tidMatch ? tidMatch[1] : null;
     loadingEl.style.display = 'none';
 
     // Track info
@@ -8355,6 +8356,7 @@ async function analyzeSpTrack() {
     const genresEl = document.getElementById('sp-az-genres');
     let genres = d.genres || [];
     resultEl.style.display = 'block';
+    spPopulatePositionDropdown();
     if (genres.length) {
       renderSpGenreBadges(genresEl, genres, false);
       renderSpAnalyzePlaylists(genres);
@@ -8388,19 +8390,26 @@ async function analyzeSpTrack() {
 }
 
 
+function spPopulatePositionDropdown() {
+  const sel = document.getElementById('sp-az-playlist-select');
+  if (!sel) return;
+  const playlists = _spPlaylists || [];
+  sel.innerHTML = '<option value="">— Elegí una playlist —</option>'
+    + playlists.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+}
+
 async function checkTrackPosition() {
-  const trackData = _spAnalyzeData;
-  if (!trackData) return;
-  const trackUrl = document.getElementById('sp-analyze-input').value.trim();
-  const playlistUrl = document.getElementById('sp-az-playlist-input').value.trim();
-  if (!playlistUrl) return;
+  if (!_spAnalyzeData) return;
+  const trackId = _spAnalyzeData.trackId;
+  const playlistId = document.getElementById('sp-az-playlist-select').value;
+  if (!playlistId || !trackId) return;
 
   const resultEl = document.getElementById('sp-az-position-result');
   resultEl.style.display = 'block';
   resultEl.innerHTML = '<span style="color:var(--muted)">Buscando...</span>';
 
   try {
-    const r = await fetch(`/api/spotify?mode=position&trackUrl=${encodeURIComponent(trackUrl)}&playlistUrl=${encodeURIComponent(playlistUrl)}`);
+    const r = await fetch(`/api/spotify-manage?action=position&playlistId=${encodeURIComponent(playlistId)}&trackId=${encodeURIComponent(trackId)}`);
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || 'Error');
 
