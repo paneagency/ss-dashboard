@@ -1884,6 +1884,12 @@
           </div>
         </div>
 
+        <!-- Recomendación IA -->
+        <div id="sp-az-recommendation" style="display:none;margin-bottom:20px;padding:16px;border-radius:12px;background:linear-gradient(135deg,rgba(139,92,246,0.12),rgba(29,185,84,0.08));border:1px solid rgba(139,92,246,0.25)">
+          <div style="font-size:11px;font-weight:600;color:#8b5cf6;letter-spacing:0.5px;margin-bottom:8px">⚡ RECOMENDACIÓN IA</div>
+          <div id="sp-az-recommendation-text" style="font-size:13px;color:var(--text);line-height:1.6"></div>
+        </div>
+
         <!-- Playlists sugeridas -->
         <div class="chart-card">
           <div class="chart-title" style="margin-bottom:4px">Playlists donde podría encajar</div>
@@ -8318,6 +8324,7 @@ async function analyzeSpTrack() {
   const errorEl = document.getElementById('sp-analyze-error');
   resultEl.style.display = 'none';
   errorEl.style.display = 'none';
+  document.getElementById('sp-az-recommendation').style.display = 'none';
   loadingEl.style.display = 'block';
 
   try {
@@ -8355,7 +8362,7 @@ async function analyzeSpTrack() {
       try {
         const gr = await fetch('/api/ai-describe', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'genre', artist: d.allArtists || d.artist, track: d.track }),
+          body: JSON.stringify({ mode: 'genre', artist: d.allArtists || d.artist, track: d.track, audioFeatures: d.audioFeatures }),
         });
         const gd = await gr.json();
         if (gd.ok && gd.genres?.length) {
@@ -8363,6 +8370,7 @@ async function analyzeSpTrack() {
           _spAnalyzeData.genres = genres;
           renderSpGenreBadges(genresEl, genres, true);
           renderSpAnalyzePlaylists(genres);
+          if (gd.recommendation) renderSpRecommendation(gd.recommendation);
         } else {
           genresEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">Sin géneros detectados</span>';
         }
@@ -8408,6 +8416,14 @@ function renderSpAudioFeatures(d) {
   } else {
     document.getElementById('sp-az-feat-popularity').innerHTML = '';
   }
+}
+
+function renderSpRecommendation(text) {
+  const el = document.getElementById('sp-az-recommendation');
+  const textEl = document.getElementById('sp-az-recommendation-text');
+  if (!text?.trim()) { el.style.display = 'none'; return; }
+  textEl.textContent = text;
+  el.style.display = 'block';
 }
 
 function renderSpGenreBadges(el, genres, fromAI) {

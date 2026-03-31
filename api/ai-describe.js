@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { name, mode, artist, track } = req.body || {};
+  const { name, mode, artist, track, audioFeatures } = req.body || {};
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY no configurada' });
@@ -11,8 +11,14 @@ export default async function handler(req, res) {
 
     if (mode === 'genre') {
       if (!artist?.trim()) return res.status(400).json({ error: 'artist requerido' });
-      prompt = `Clasificá el género musical del artista "${artist.trim()}"${track ? ` (canción: "${track.trim()}")` : ''}. Respondé ÚNICAMENTE con géneros separados por coma, en minúsculas, sin ninguna explicación ni pregunta. Si hay ambigüedad, hacé tu mejor estimación. Máximo 5 géneros cortos. Ejemplo de respuesta válida: cumbia, pop latino, tropical`;
-      maxTokens = 60;
+      const afContext = audioFeatures ? `\nDatos de audio: BPM=${audioFeatures.tempo}, energía=${Math.round(audioFeatures.energy*100)}%, bailabilidad=${Math.round(audioFeatures.danceability*100)}%, positividad=${Math.round(audioFeatures.valence*100)}%, acústica=${Math.round(audioFeatures.acousticness*100)}%.` : '';
+      prompt = `Sos un experto en música latinoamericana y campañas de Spotify. Analizá este track:
+Artista: "${artist.trim()}"${track ? `\nCanción: "${track.trim()}"` : ''}${afContext}
+
+Respondé en este formato exacto (sin texto extra):
+GENEROS: [géneros separados por coma, minúsculas, máximo 5]
+RECOMENDACION: [1 oración sobre en qué tipo de playlists o campaña encajaría esta canción, basándote en el género y los datos de audio]`;
+      maxTokens = 150;
     } else {
       if (!name?.trim()) return res.status(400).json({ error: 'name requerido' });
       prompt = `Sos un experto en SEO musical y posicionamiento en plataformas de streaming. Creá una descripción para una playlist de Spotify llamada "${name.trim()}", orientada a búsquedas en 2026. Usá palabras clave de alto volumen relacionadas con el género, mood y ocasión que sugiere el nombre. Máximo 200 caracteres, sin emojis, en español neutro. Solo dame el resultado final, sin explicaciones ni comillas.`;
@@ -39,8 +45,17 @@ export default async function handler(req, res) {
     const text = d.content?.[0]?.text?.trim() || '';
 
     if (mode === 'genre') {
-      const genres = text.split(',').map(g => g.trim().toLowerCase()).filter(g => g.length > 0 && g.length < 40 && !g.includes('?') && !g.includes('necesit'));
-      return res.json({ ok: true, genres, fromAI: true });
+      let genres = [], recommendation = '';
+      const genresMatch = text.match(/GENEROS:\s*(.+)/i);
+      const recMatch = text.match(/RECOMENDACION:\s*(.+)/i);
+      if (genresMatch) {
+        genres = genresMatch[1].split(',').map(g => g.trim().toLowerCase()).filter(g => g.length > 0 && g.length < 40);
+      } else {
+        // fallback: todo el texto como géneros
+        genres = text.split(',').map(g => g.trim().toLowerCase()).filter(g => g.length > 0 && g.length < 40 && !g.includes('?'));
+      }
+      if (recMatch) recommendation = recMatch[1].trim();
+      return res.json({ ok: true, genres, recommendation, fromAI: true });
     }
 
     return res.json({ ok: true, description: text });
