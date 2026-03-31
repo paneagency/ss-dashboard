@@ -7964,6 +7964,8 @@ function renderSpotifyPlaylists(playlists) {
           ? `<img class="sp-cover" src="${p.image}" alt="${p.name.replace(/"/g,'')}" loading="lazy">`
           : `<div class="sp-cover-ph">🎵</div>`}
         <div class="sp-cover-overlay" onclick="event.stopPropagation()">
+          <button class="sp-cover-btn" onclick="analyzeSpotifyPlaylist(${i})" title="Analizar playlist">🎯</button>
+          <button class="sp-cover-btn" onclick="openPlaylistStatsModal(${i})" title="Ver estadísticas">📊</button>
           <button class="sp-cover-btn" onclick="spCopyLink(${i})" title="Copiar link">🔗</button>
           <a href="${p.url}" target="_blank" class="sp-cover-btn" title="Abrir en Spotify" onclick="event.stopPropagation()">↗</a>
         </div>
@@ -7974,7 +7976,7 @@ function renderSpotifyPlaylists(playlists) {
           <span style="color:#1db954;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%">${p.grupo || ''}</span>
           <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             ${p.followers ? `<span>👥 ${p.followers >= 1000 ? (p.followers/1000).toFixed(0)+'K' : p.followers}</span>` : ''}
-            ${p.delta !== null ? `<span style="font-weight:700;color:${p.delta > 0 ? '#1db954' : p.delta < 0 ? '#ef4444' : 'var(--muted)'}">${p.delta > 0 ? '+' : ''}${p.delta}</span>` : ''}
+            ${p.delta !== null ? `<span style="color:${p.delta > 0 ? '#1db954' : p.delta < 0 ? '#ef4444' : 'var(--muted)'}">${p.delta > 0 ? '+' : ''}${p.delta}</span>` : ''}
           </span>
         </div>
       </div>
@@ -8185,6 +8187,95 @@ function spCopyLink(idx) {
   if (!p) return;
   navigator.clipboard.writeText(p.url);
   showToast('Link copiado', 'success');
+}
+
+async function openPlaylistStatsModal(idx) {
+  const p = (_spPlaylists || [])[idx];
+  if (!p) return;
+
+  // Ensure history data is loaded
+  if (!_spGrowthData) {
+    try {
+      const r = await fetch('/api/snapshot?action=history');
+      const d = await r.json();
+      if (d.ok) _spGrowthData = processSpGrowthData(d.data);
+    } catch(_) {}
+  }
+
+  const entry = _spGrowthData?.[p.id];
+  const snapshots = entry?.snapshots || [];
+
+  const existing = document.getElementById('sp-stats-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sp-stats-modal-overlay';
+  overlay.className = 'ss-modal-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  const rows = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+  const hasData = rows.length >= 2;
+  const latest = rows[rows.length - 1];
+  const prev = rows[rows.length - 2];
+  const delta = hasData ? latest.followers - prev.followers : null;
+  const fmt = n => n >= 1000 ? (n/1000).toFixed(1)+'K' : n?.toLocaleString() || '—';
+
+  overlay.innerHTML = `<div class="ss-modal-box" style="max-width:520px">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(29,185,84,0.08),rgba(99,102,241,0.06))">
+      <div style="display:flex;align-items:center;gap:10px">
+        ${p.image ? `<img src="${p.image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover">` : ''}
+        <div>
+          <div style="font-size:14px;font-weight:700">${p.name}</div>
+          <div style="font-size:11px;color:#1db954;text-transform:uppercase;letter-spacing:.05em">${p.grupo || ''}</div>
+        </div>
+      </div>
+      <button onclick="document.getElementById('sp-stats-modal-overlay').remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:4px 8px;border-radius:6px">✕</button>
+    </div>
+    <div style="padding:20px">
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Seguidores</div>
+          <div style="font-size:20px;font-weight:700">${latest ? fmt(latest.followers) : '—'}</div>
+        </div>
+        <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Últ. 24hs</div>
+          <div style="font-size:20px;font-weight:700;color:${delta > 0 ? '#1db954' : delta < 0 ? '#ef4444' : 'var(--text)'}">${delta !== null ? (delta > 0 ? '+' : '') + delta : '—'}</div>
+        </div>
+        <div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Snapshots</div>
+          <div style="font-size:20px;font-weight:700">${rows.length}</div>
+        </div>
+      </div>
+      ${hasData
+        ? `<canvas id="sp-stats-chart" height="140"></canvas>`
+        : `<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px">Sin suficientes datos aún — mínimo 2 snapshots</div>`}
+    </div>
+  </div>`;
+
+  document.body.appendChild(overlay);
+
+  if (hasData && typeof Chart !== 'undefined') {
+    const ctx = document.getElementById('sp-stats-chart');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: rows.map(r => r.date.slice(5)),
+        datasets: [{
+          data: rows.map(r => r.followers),
+          borderColor: '#1db954', backgroundColor: 'rgba(29,185,84,0.08)',
+          borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#1db954',
+          tension: 0.4, fill: true,
+        }],
+      },
+      options: {
+        responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.parsed.y.toLocaleString() + ' seg' } } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#666', font: { size: 11 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#666', font: { size: 11 }, callback: v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v } },
+        },
+      },
+    });
+  }
 }
 
 async function analyzeSpotifyPlaylist(idx) {
