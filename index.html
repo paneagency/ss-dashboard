@@ -1831,33 +1831,59 @@
 
     <!-- Providers view -->
     <div id="sp-view-providers" style="display:none">
-      <div class="chart-card" style="margin-bottom:20px">
-        <div class="chart-title" style="margin-bottom:4px">Agregar playlists de proveedor</div>
-        <div class="chart-subtitle" style="margin-bottom:16px">Pegá una o varias URLs de playlists de Spotify · Los grupos agrupan playlists de un mismo proveedor</div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
-              <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">Nombre del grupo</label>
-              <input id="sp-prov-grupo" placeholder="Ej: Daniel Rios" class="filter-control" list="list-providers" style="width:100%;box-sizing:border-box">
-            </div>
+      <!-- Add form -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(29,185,84,0.12);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">➕</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">Agregar playlists</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">Pegá URLs de Spotify · Los grupos agrupan playlists de un mismo proveedor</div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">URLs de playlists (una por línea)</label>
-            <textarea id="sp-prov-urls" placeholder="https://open.spotify.com/playlist/37i9dQ...&#10;https://open.spotify.com/playlist/5aHFU3..." rows="4"
-              style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:9px 12px;border-radius:10px;font-size:13px;outline:none;resize:vertical;font-family:inherit"
+        </div>
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;align-items:start">
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">Nombre del grupo</label>
+            <input id="sp-prov-grupo" placeholder="Ej: Daniel Rios" list="list-providers"
+              style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 13px;border-radius:10px;font-size:13px;outline:none;transition:border-color .2s,box-shadow .2s"
+              onfocus="this.style.borderColor='var(--indigo)';this.style.boxShadow='0 0 0 3px rgba(99,102,241,0.15)'"
+              onblur="this.style.borderColor='var(--border2)';this.style.boxShadow='none'">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">URLs de playlists <span style="text-transform:none;letter-spacing:0;font-weight:400">(una por línea)</span></label>
+            <textarea id="sp-prov-urls" placeholder="https://open.spotify.com/playlist/37i9dQ...&#10;https://open.spotify.com/playlist/5aHFU3..." rows="3"
+              style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 13px;border-radius:10px;font-size:13px;outline:none;resize:vertical;font-family:inherit;transition:border-color .2s,box-shadow .2s"
               onfocus="this.style.borderColor='var(--indigo)';this.style.boxShadow='0 0 0 3px rgba(99,102,241,0.15)'"
               onblur="this.style.borderColor='var(--border2)';this.style.boxShadow='none'"></textarea>
           </div>
-          <div style="display:flex;gap:10px;align-items:center">
-            <button id="sp-prov-preview-btn" onclick="previewSpProviderUrls()" class="btn-secondary" style="font-size:13px;padding:8px 16px">🔍 Vista previa</button>
-            <button id="sp-prov-add-btn" onclick="addSpProvider()" class="btn-primary" style="font-size:13px;padding:8px 18px">+ Guardar</button>
-            <span id="sp-prov-preview-status" style="font-size:12px;color:var(--muted)"></span>
-          </div>
-          <div id="sp-prov-preview-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:4px"></div>
         </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
+          <button id="sp-prov-preview-btn" onclick="previewSpProviderUrls()"
+            style="display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:9px 18px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s"
+            onmouseover="this.style.borderColor='var(--indigo)';this.style.color='var(--indigo)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text)'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Vista previa
+          </button>
+          <button id="sp-prov-add-btn" onclick="addSpProvider()"
+            style="display:inline-flex;align-items:center;gap:6px;background:#1db954;color:#000;border:none;padding:9px 20px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s"
+            onmouseover="this.style.background='#1ed760';this.style.transform='scale(1.03)'"
+            onmouseout="this.style.background='#1db954';this.style.transform=''">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Guardar
+          </button>
+          <span id="sp-prov-preview-status" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div id="sp-prov-preview-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-top:14px"></div>
       </div>
-      <div class="chart-card">
-        <div class="chart-title" style="margin-bottom:16px">Playlists configuradas por grupo</div>
+
+      <!-- Providers list -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">Proveedores</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Playlists configuradas por grupo</div>
+          </div>
+          <div id="sp-providers-summary" style="font-size:12px;color:var(--muted)"></div>
+        </div>
         <div id="sp-providers-list"><div style="color:var(--muted);font-size:13px">Cargando...</div></div>
       </div>
     </div>
@@ -9416,28 +9442,61 @@ function renderSpProviders() {
   }
   const byGrupo = {};
   _spProviders.forEach(p => { if (!byGrupo[p.grupo]) byGrupo[p.grupo] = []; byGrupo[p.grupo].push(p); });
-  el.innerHTML = Object.entries(byGrupo).map(([grupo, entries], idx) => `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden">
-      <div onclick="toggleSpGrupo(${idx})" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none">
-        <div style="font-size:14px;font-weight:600;color:var(--text)">${grupo} <span style="font-size:11px;color:var(--muted);font-weight:400">(${entries.length} playlist${entries.length !== 1 ? 's' : ''})</span></div>
-        <span id="sp-grupo-arrow-${idx}" style="color:var(--muted);font-size:11px;transition:transform 0.2s;display:inline-block">▶</span>
+
+  // Summary
+  const sumEl = document.getElementById('sp-providers-summary');
+  const totalGroups = Object.keys(byGrupo).length;
+  const totalPlaylists = _spProviders.length;
+  const totalFollowers = _spProviders.reduce((s, p) => s + (p.followers || 0), 0);
+  if (sumEl) sumEl.innerHTML = `
+    <div style="display:flex;gap:12px;align-items:center">
+      <span style="color:var(--muted)">${totalGroups} grupos</span>
+      <span style="color:var(--border)">·</span>
+      <span style="color:var(--muted)">${totalPlaylists.toLocaleString()} playlists</span>
+      ${totalFollowers ? `<span style="color:var(--border)">·</span><span style="color:#1db954;font-weight:600">👥 ${totalFollowers >= 1000000 ? (totalFollowers/1000000).toFixed(1)+'M' : totalFollowers >= 1000 ? (totalFollowers/1000).toFixed(0)+'K' : totalFollowers} seg totales</span>` : ''}
+    </div>`;
+
+  el.innerHTML = Object.entries(byGrupo).map(([grupo, entries], idx) => {
+    const groupFollowers = entries.reduce((s, e) => s + (e.followers || 0), 0);
+    const thumbs = entries.slice(0, 8).map(e =>
+      e.image
+        ? `<img src="${e.image}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;border:2px solid var(--surface)">`
+        : `<div style="width:32px;height:32px;border-radius:6px;background:var(--border2);flex-shrink:0;border:2px solid var(--surface)"></div>`
+    ).join('');
+    const extra = entries.length > 8 ? `<div style="width:32px;height:32px;border-radius:6px;background:var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--muted);flex-shrink:0">+${entries.length - 8}</div>` : '';
+
+    return `
+    <div style="border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden;transition:border-color .15s" id="sp-grupo-wrap-${idx}">
+      <div onclick="toggleSpGrupo(${idx})" style="display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;user-select:none;background:var(--surface2)">
+        <!-- Thumb strip -->
+        <div style="display:flex;gap:-4px;flex-shrink:0" id="sp-grupo-thumbs-${idx}">
+          ${thumbs}${extra}
+        </div>
+        <!-- Info -->
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">${grupo}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${entries.length} playlist${entries.length !== 1 ? 's' : ''}${groupFollowers ? ` · 👥 ${groupFollowers >= 1000000 ? (groupFollowers/1000000).toFixed(1)+'M' : groupFollowers >= 1000 ? (groupFollowers/1000).toFixed(0)+'K' : groupFollowers} seg` : ''}</div>
+        </div>
+        <svg id="sp-grupo-arrow-${idx}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="color:var(--muted);transition:transform .2s;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
-      <div id="sp-grupo-body-${idx}" style="display:none">
-        ${entries.map(e => `
-          <div style="display:flex;align-items:center;gap:10px;padding:7px 16px;border-top:1px solid var(--border2)">
-            ${e.image ? `<img src="${e.image}" style="width:34px;height:34px;border-radius:5px;object-fit:cover;flex-shrink:0">` : '<div style="width:34px;height:34px;border-radius:5px;background:var(--border);flex-shrink:0"></div>'}
-            <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                <a href="https://open.spotify.com/playlist/${e.userId}" target="_blank" style="color:var(--text);text-decoration:none">${e.name || e.userId}</a>
+      <div id="sp-grupo-body-${idx}" style="display:none;border-top:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1px;background:var(--border)">
+          ${entries.map(e => `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2)">
+              ${e.image ? `<img src="${e.image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0">` : '<div style="width:36px;height:36px;border-radius:6px;background:var(--border);flex-shrink:0"></div>'}
+              <div style="flex:1;min-width:0">
+                <a href="https://open.spotify.com/playlist/${e.userId}" target="_blank" style="font-size:12px;font-weight:500;color:var(--text);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(e.name||e.userId).replace(/"/g,'')}">${e.name || e.userId}</a>
+                <div style="font-size:10px;color:var(--muted);margin-top:1px">${e.followers !== undefined ? (e.followers||0).toLocaleString('es-AR') + ' seg' : ''}${e.owner ? ' · ' + e.owner : ''}</div>
               </div>
-              <div style="font-size:11px;color:var(--muted)">${e.followers !== undefined ? (e.followers||0).toLocaleString('es-AR') + ' seg' : ''}${e.owner ? (e.followers !== undefined ? ' · ' : '') + '👤 ' + e.owner : ''}</div>
+              <button onclick="deleteSpProvider(${e.row})" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;line-height:1;flex-shrink:0;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--muted)'" title="Eliminar">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </button>
             </div>
-            <button onclick="deleteSpProvider(${e.row})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;line-height:1;flex-shrink:0" title="Eliminar">🗑️</button>
-          </div>
-        `).join('')}
+          `).join('')}
+        </div>
       </div>
-    </div>
-  `).join('');
+    </div>`
+  }).join('');
 }
 
 function toggleSpGrupo(idx) {
@@ -9446,7 +9505,7 @@ function toggleSpGrupo(idx) {
   if (!body) return;
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
-  if (arrow) arrow.style.transform = open ? '' : 'rotate(90deg)';
+  if (arrow) arrow.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 async function previewSpProviderUrls() {
@@ -9488,19 +9547,24 @@ async function previewSpProviderUrls() {
 
   if (cardsEl) cardsEl.innerHTML = [
     ..._spPendingPlaylists.map(pl => `
-      <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px">
-        ${pl.image ? `<img src="${pl.image}" style="width:38px;height:38px;border-radius:5px;object-fit:cover;flex-shrink:0">` : '<div style="width:38px;height:38px;border-radius:5px;background:var(--border);flex-shrink:0"></div>'}
-        <div style="min-width:0">
-          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name}</div>
-          <div style="font-size:11px;color:var(--muted)">${(pl.followers||0).toLocaleString('es-AR')} seg · ${pl.totalTracks} canciones${pl.owner ? ' · 👤 ' + pl.owner : ''}</div>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid rgba(29,185,84,0.25);border-radius:10px;padding:10px">
+        ${pl.image ? `<img src="${pl.image}" style="width:42px;height:42px;border-radius:7px;object-fit:cover;flex-shrink:0">` : '<div style="width:42px;height:42px;border-radius:7px;background:var(--border);flex-shrink:0"></div>'}
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">👥 ${(pl.followers||0).toLocaleString('es-AR')} · 🎵 ${pl.totalTracks}${pl.owner ? ' · ' + pl.owner : ''}</div>
+        </div>
+        <div style="width:20px;height:20px;border-radius:50%;background:rgba(29,185,84,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#1db954" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
       </div>`),
     ...failedResults.map(d => `
-      <div style="display:flex;align-items:center;gap:8px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:9px">
-        <div style="width:38px;height:38px;border-radius:5px;background:rgba(239,68,68,0.15);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px">✕</div>
+      <div style="display:flex;align-items:center;gap:10px;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:10px">
+        <div style="width:42px;height:42px;border-radius:7px;background:rgba(239,68,68,0.12);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </div>
         <div style="min-width:0">
-          <div style="font-size:12px;font-weight:500;color:#ef4444">${d.playlistId || 'ID desconocido'}</div>
-          <div style="font-size:11px;color:var(--muted)">${d.spotifyError?.error?.status === 404 ? 'No existe o fue eliminada' : (d.spotifyError?.error?.message || d.error || `Error ${d.status || '(sin respuesta)'}`)}</div>
+          <div style="font-size:12px;font-weight:500;color:#ef4444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.playlistId || 'ID desconocido'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${d.spotifyError?.error?.status === 404 ? 'No existe o fue eliminada' : (d.spotifyError?.error?.message || d.error || `Error ${d.status || '(sin respuesta)'}`)}</div>
         </div>
       </div>`),
   ].join('');
