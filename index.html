@@ -8336,6 +8336,7 @@ async function analyzeSpTrack() {
 
     // Popularidad
     const popEl = document.getElementById('sp-az-popularity');
+    console.log('trackPopularity:', d.trackPopularity);
     popEl.textContent = d.trackPopularity != null ? `Popularidad Spotify: ${d.trackPopularity}/100` : '';
 
     // Géneros como badges
