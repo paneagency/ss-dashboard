@@ -68,7 +68,7 @@ export default async function handler(req, res) {
         }),
         fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
           headers: { Authorization: `Bearer ${token}` },
-        }).then(r => r.ok ? r.json() : null).then(d => { if (d) audioFeatures = d; }),
+        }).then(r => { console.log('audio-features status:', r.status); return r.ok ? r.json() : null; }).then(d => { if (d) audioFeatures = d; }),
       ]);
 
       return res.json({
