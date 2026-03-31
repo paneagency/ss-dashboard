@@ -203,35 +203,34 @@ export default async function handler(req, res) {
           }, tracks });
       }
 
-      // Find position of a track in one of our playlists (uses OAuth)
+      // Find position of a track in one of our playlists (via Make webhook)
       if (action === 'position') {
         const { trackId: qTrackId } = req.query;
         if (!playlistId || !qTrackId) return res.status(400).json({ error: 'playlistId y trackId requeridos' });
-        const { accessToken: oauthToken } = await getAccessToken(qUserId || null);
 
-        // Get total tracks
-        const infoRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, {
-          headers: { Authorization: `Bearer ${oauthToken}` },
+        const makeUrl = process.env.MAKE_SPOTIFY_READ_URL;
+        if (!makeUrl) return res.status(500).json({ error: 'MAKE_SPOTIFY_READ_URL no configurada' });
+
+        const makeRes = await fetch(makeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playlistId }),
         });
-        if (!infoRes.ok) return res.status(404).json({ error: 'Playlist no encontrada' });
-        const info = await infoRes.json();
-        const total = info.tracks?.total ?? 0;
-        const playlistName = info.name;
+        const makeText = await makeRes.text();
+        let full = {};
+        try { full = JSON.parse(makeText); } catch(_) {
+          return res.status(500).json({ error: `Make parse error: ${makeText.slice(0,200)}` });
+        }
+        if (!makeRes.ok || full.error) {
+          return res.status(500).json({ error: full.error?.message || full.error || `Make HTTP ${makeRes.status}` });
+        }
 
+        const items = full.tracks?.items || [];
+        const total = full.tracks?.total ?? items.length;
+        const playlistName = full.name || 'Playlist';
         let position = null;
-        let offset = 0;
-        while (position === null && offset < total && offset < 1000) {
-          const r = await fetch(
-            `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(id))&limit=100&offset=${offset}`,
-            { headers: { Authorization: `Bearer ${oauthToken}` } }
-          );
-          if (!r.ok) break;
-          const data = await r.json();
-          const items = data.items || [];
-          for (let i = 0; i < items.length; i++) {
-            if (items[i]?.track?.id === qTrackId) { position = offset + i + 1; break; }
-          }
-          offset += 100;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i]?.track?.id === qTrackId) { position = i + 1; break; }
         }
         return res.json({ ok: true, position, total, playlistName });
       }
