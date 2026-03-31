@@ -7967,13 +7967,13 @@ function renderSpotifyPlaylists(playlists) {
   }
   grid.innerHTML = playlists.map((p, i) => `
     <div class="sp-card">
-      <div class="sp-cover-wrap" onclick="openPlaylistStatsModal(${i})" style="cursor:pointer">
+      <div class="sp-cover-wrap" style="cursor:pointer">
         ${p.image
           ? `<img class="sp-cover" src="${p.image}" alt="${p.name.replace(/"/g,'')}" loading="lazy">`
           : `<div class="sp-cover-ph">🎵</div>`}
-        <div class="sp-cover-overlay" onclick="event.stopPropagation()">
-          <button class="sp-cover-btn" onclick="analyzeSpotifyPlaylist(${i})" title="Analizar playlist">🎯</button>
-          <button class="sp-cover-btn" onclick="spCopyLink(${i})" title="Copiar link">🔗</button>
+        <div class="sp-cover-overlay" onclick="openPlaylistStatsModal(${i})">
+          <button class="sp-cover-btn" onclick="event.stopPropagation();analyzeSpotifyPlaylist(${i})" title="Analizar playlist">🎯</button>
+          <button class="sp-cover-btn" onclick="event.stopPropagation();spCopyLink(${i})" title="Copiar link">🔗</button>
           <a href="${p.url}" target="_blank" class="sp-cover-btn" title="Abrir en Spotify" onclick="event.stopPropagation()">↗</a>
         </div>
       </div>
