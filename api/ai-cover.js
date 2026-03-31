@@ -1,13 +1,4 @@
 export default async function handler(req, res) {
-  // Temporal: GET devuelve lista de modelos para debug
-  if (req.method === 'GET') {
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    const d = await r.json();
-    const names = (d.models || []).map(m => m.name);
-    return res.json({ models: names });
-  }
-
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { name } = req.body || {};
@@ -19,24 +10,23 @@ export default async function handler(req, res) {
   try {
     const prompt = `Spotify playlist cover art for a music playlist called "${name.trim()}". Vibrant colors, artistic, abstract, no text, no letters, no words, square format, music themed, high quality digital illustration.`;
 
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key=${apiKey}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseModalities: ['IMAGE'] },
+        instances: [{ prompt }],
+        parameters: { sampleCount: 1, aspectRatio: '1:1', personGeneration: 'dont_allow' },
       }),
     });
 
     const d = await r.json();
     if (!r.ok) throw new Error(d.error?.message || `API error ${r.status}`);
 
-    const parts = d.candidates?.[0]?.content?.parts || [];
-    const imgPart = parts.find(p => p.inlineData?.data);
-    if (!imgPart) throw new Error('No image generated');
+    const b64 = d.predictions?.[0]?.bytesBase64Encoded;
+    const mimeType = d.predictions?.[0]?.mimeType || 'image/png';
+    if (!b64) throw new Error('No image generated');
 
-    const { mimeType, data } = imgPart.inlineData;
-    return res.json({ ok: true, imageData: `data:${mimeType};base64,${data}` });
+    return res.json({ ok: true, imageData: `data:${mimeType};base64,${b64}` });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
