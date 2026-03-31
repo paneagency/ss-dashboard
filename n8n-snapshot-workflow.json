@@ -1,0 +1,197 @@
+{
+  "name": "Daily Playlist Snapshot",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "triggerAtHour": 2,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "node-1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nstaticData.playlists = [];\nreturn $input.all();"
+      },
+      "id": "node-2",
+      "name": "Clear Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "resource": "playlist",
+        "operation": "getUserPlaylists",
+        "returnAll": true
+      },
+      "id": "node-3",
+      "name": "Get User Playlists",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [640, 300],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "name": "Rejunte List"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "node-4",
+      "name": "Loop Over Playlists",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "resource": "playlist",
+        "operation": "get",
+        "id": "={{ $json.id }}"
+      },
+      "id": "node-5",
+      "name": "Get Playlist",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [1080, 160],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "name": "Rejunte List"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "playlist",
+        "operation": "getTracks",
+        "id": "={{ $json.id }}",
+        "returnAll": true
+      },
+      "id": "node-6",
+      "name": "Get Playlist Tracks",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [1300, 160],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "name": "Rejunte List"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reducir datos a solo lo necesario — evita que n8n supere el límite de tamaño\nreturn $input.all()\n  .filter(item => item?.json?.track?.id)\n  .map((item, idx) => ({\n    json: {\n      position: idx + 1,\n      trackId: item.json.track.id\n    }\n  }));"
+      },
+      "id": "node-7",
+      "name": "Strip Track Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const staticData = $getWorkflowStaticData('global');\n  if (!staticData.playlists) staticData.playlists = [];\n\n  const playlist = $('Get Playlist').item?.json;\n  if (playlist?.id) {\n    const tracks = $input.all()\n      .map(item => ({ position: item.json.position, id: item.json.trackId }));\n\n    staticData.playlists.push({\n      id: playlist.id,\n      name: playlist.name,\n      followers: playlist.followers?.total ?? 0,\n      totalTracks: playlist.tracks?.total ?? tracks.length,\n      tracks\n    });\n  }\n} catch(e) {\n  // Ignorar error — siempre devolver algo para que el loop continue\n}\n\nreturn [{ json: { saved: 'done' } }];"
+      },
+      "id": "node-8",
+      "name": "Accumulate Playlist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1740, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst playlists = staticData.playlists || [];\nreturn [{ json: { playlists } }];"
+      },
+      "id": "node-9",
+      "name": "Build Final Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ss-dashboard-flame.vercel.app/api/snapshot",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}"
+      },
+      "id": "node-10",
+      "name": "POST Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 440]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [{ "node": "Clear Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Clear Data": {
+      "main": [
+        [{ "node": "Get User Playlists", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get User Playlists": {
+      "main": [
+        [{ "node": "Loop Over Playlists", "type": "main", "index": 0 }]
+      ]
+    },
+    "Loop Over Playlists": {
+      "main": [
+        [{ "node": "Build Final Payload", "type": "main", "index": 0 }],
+        [{ "node": "Get Playlist", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Playlist": {
+      "main": [
+        [{ "node": "Get Playlist Tracks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Playlist Tracks": {
+      "main": [
+        [{ "node": "Strip Track Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Strip Track Data": {
+      "main": [
+        [{ "node": "Accumulate Playlist", "type": "main", "index": 0 }]
+      ]
+    },
+    "Accumulate Playlist": {
+      "main": [
+        [{ "node": "Loop Over Playlists", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Final Payload": {
+      "main": [
+        [{ "node": "POST Snapshot", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
