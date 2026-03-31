@@ -491,6 +491,23 @@
     .sp-az-feat-value { font-size:20px;font-weight:700;margin-bottom:8px; }
     .sp-az-feat-bar { height:5px;border-radius:3px;background:var(--border2);overflow:hidden; }
     .sp-az-feat-fill { height:100%;border-radius:3px;transition:width 0.6s cubic-bezier(0.34,1.3,0.64,1); }
+    /* Songstats panel */
+    .ss-panel { border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--surface); }
+    .ss-panel-header { display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(29,185,84,0.07),rgba(99,102,241,0.06)); }
+    .ss-metrics { display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;background:var(--border); }
+    .ss-metric { padding:16px 18px;background:var(--surface);display:flex;flex-direction:column;gap:4px; }
+    .ss-metric-label { font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted); }
+    .ss-metric-value { font-size:22px;font-weight:800;letter-spacing:-0.03em;line-height:1; }
+    .ss-metric-sub { font-size:11px;color:var(--muted); }
+    .ss-badge-cached { display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:var(--muted);background:var(--surface2);border:1px solid var(--border2);padding:2px 8px;border-radius:20px; }
+    .ss-credits-bar { display:flex;align-items:center;gap:8px;padding:10px 20px;background:var(--surface2);border-top:1px solid var(--border);font-size:11px;color:var(--muted); }
+    .ss-credits-track { flex:1;height:4px;border-radius:2px;background:var(--border2);overflow:hidden; }
+    .ss-credits-fill { height:100%;border-radius:2px;background:linear-gradient(90deg,#1db954,#6366f1);transition:width 0.5s; }
+    @keyframes ss-shimmer { 0%{opacity:0.5} 50%{opacity:1} 100%{opacity:0.5} }
+    .ss-loading { animation:ss-shimmer 1.4s infinite; }
+    /* Stats modal */
+    .ss-modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:1050;display:flex;align-items:center;justify-content:center;padding:20px; }
+    .ss-modal-box { background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:560px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,0.5); }
     .sp-char-count.warn { color:#f59e0b; }
     .sp-subtab { padding:7px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s; }
     .sp-subtab.active { background:var(--indigo);color:#fff;border-color:var(--indigo); }
@@ -1897,6 +1914,9 @@
           </div>
           <div id="sp-az-position-result" style="margin-top:14px;font-size:14px;display:none"></div>
         </div>
+
+        <!-- Songstats panel -->
+        <div id="sp-az-stats" style="display:none;margin-top:20px"></div>
       </div>
 
       <!-- Loading -->
@@ -3344,16 +3364,25 @@ function openClientDetail(row) {
   document.getElementById('dd-estado').onchange = () => updateEstadoBadge(document.getElementById('dd-estado').value);
 
   // Footer
+  // Extract artist Spotify ID from stored URL
+  const spotifyUrl = c.spotify || '';
+  const artistIdMatch = spotifyUrl.match(/artist\/([A-Za-z0-9]+)/);
+  const clientArtistId = artistIdMatch ? artistIdMatch[1] : null;
+  const statsBtn = clientArtistId
+    ? `<button class="btn btn-ghost" style="display:flex;align-items:center;gap:5px" onclick="openSongstatsModal('${clientArtistId}',null,'${esc(c.artista||'')}','')">📊 Stats</button>`
+    : '';
+
   const footer = document.getElementById('detalle-footer');
   if (isNew) {
     footer.innerHTML = `<button class="btn btn-ghost" onclick="closeClientDetail()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveClientDetail()">Crear cliente</button>`;
   } else if (canEdit) {
     footer.innerHTML = `<button class="btn btn-ghost" style="color:var(--red);margin-right:auto" onclick="closeClientDetail();deleteClient(${row},'${esc(c.artista||'')}')">🗑️ Eliminar</button>
+      ${statsBtn}
       <button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>
       <button class="btn btn-primary" onclick="saveClientDetail()">Guardar</button>`;
   } else {
-    footer.innerHTML = `<button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>`;
+    footer.innerHTML = `${statsBtn}<button class="btn btn-ghost" onclick="closeClientDetail()">Cerrar</button>`;
   }
 
   document.getElementById('modal-detalle-cliente').style.display = 'flex';
@@ -8358,6 +8387,12 @@ async function analyzeSpTrack() {
     let genres = d.genres || [];
     resultEl.style.display = 'block';
     spPopulatePositionDropdown();
+
+    // Songstats (fire & forget — auto-trigger)
+    document.getElementById('sp-az-stats').style.display = 'none';
+    if (d.artistSpotifyId || _spAnalyzeData.trackId) {
+      fetchSpAzSongstats(d.artistSpotifyId, _spAnalyzeData.trackId, d.allArtists || d.artist, d.track);
+    }
     if (genres.length) {
       renderSpGenreBadges(genresEl, genres, false);
       renderSpAnalyzePlaylists(genres);
@@ -8427,6 +8462,158 @@ function renderSpRecommendation(text) {
   if (!text?.trim()) { el.style.display = 'none'; return; }
   textEl.textContent = text;
   el.style.display = 'block';
+}
+
+// ── Songstats integration ─────────────────────────────────────
+
+function fmtStat(n) {
+  if (n == null || n === '') return '—';
+  const num = typeof n === 'string' ? parseFloat(n.replace(/,/g,'')) : n;
+  if (isNaN(num)) return String(n);
+  if (num >= 1e9) return (num/1e9).toFixed(1).replace(/\.0$/,'') + 'B';
+  if (num >= 1e6) return (num/1e6).toFixed(1).replace(/\.0$/,'') + 'M';
+  if (num >= 1e3) return (num/1e3).toFixed(1).replace(/\.0$/,'') + 'K';
+  return num.toLocaleString();
+}
+
+function buildSongstatsPanel(data, artistName, trackName) {
+  const { artist, track, artistCached, trackCached, credits } = data;
+  const hasArtist = artist && !artist.error;
+  const hasTrack  = track  && !track.error;
+
+  if (!hasArtist && !hasTrack) {
+    return `<div class="ss-panel"><div style="padding:20px;color:var(--muted);font-size:13px;text-align:center">
+      ${(artist?.error || track?.error) ? '⚠️ ' + (artist?.error || track?.error) : 'Sin datos disponibles'}
+    </div></div>`;
+  }
+
+  const cachedHtml = (artistCached || trackCached)
+    ? `<span class="ss-badge-cached">💾 Caché</span>` : '';
+  const credLeft = credits?.remaining ?? '?';
+  const credUsed = credits?.used ?? 0;
+  const credLimit = credits?.limit ?? 20;
+  const credPct = Math.min(100, Math.round(credUsed/credLimit*100));
+
+  let metricsHtml = '';
+
+  if (hasArtist) {
+    const a = artist;
+    metricsHtml += `
+      <div class="ss-metric">
+        <div class="ss-metric-label">Oyentes / mes</div>
+        <div class="ss-metric-value" style="color:#1db954">${fmtStat(a.monthlyListeners)}</div>
+        <div class="ss-metric-sub">Monthly listeners</div>
+      </div>
+      <div class="ss-metric">
+        <div class="ss-metric-label">Seguidores</div>
+        <div class="ss-metric-value" style="color:#6366f1">${fmtStat(a.followers)}</div>
+        <div class="ss-metric-sub">En Spotify</div>
+      </div>
+      <div class="ss-metric">
+        <div class="ss-metric-label">En playlists</div>
+        <div class="ss-metric-value" style="color:#f59e0b">${fmtStat(a.playlistCount)}</div>
+        <div class="ss-metric-sub">Playlists activas</div>
+      </div>
+      <div class="ss-metric">
+        <div class="ss-metric-label">Alcance</div>
+        <div class="ss-metric-value" style="color:#ec4899">${fmtStat(a.playlistReach)}</div>
+        <div class="ss-metric-sub">Playlist reach</div>
+      </div>`;
+  }
+  if (hasTrack) {
+    const t = track;
+    metricsHtml += `
+      <div class="ss-metric">
+        <div class="ss-metric-label">Streams totales</div>
+        <div class="ss-metric-value" style="color:#1db954">${fmtStat(t.streamsTotal)}</div>
+        <div class="ss-metric-sub">Canción</div>
+      </div>
+      <div class="ss-metric">
+        <div class="ss-metric-label">Streams / mes</div>
+        <div class="ss-metric-value" style="color:#06b6d4">${fmtStat(t.streamsMonthly ?? t.streamsDaily)}</div>
+        <div class="ss-metric-sub">${t.streamsMonthly != null ? 'Mensual' : 'Diario'}</div>
+      </div>
+      <div class="ss-metric">
+        <div class="ss-metric-label">En playlists</div>
+        <div class="ss-metric-value" style="color:#f59e0b">${fmtStat(t.playlistCount)}</div>
+        <div class="ss-metric-sub">Playlists track</div>
+      </div>`;
+  }
+
+  return `<div class="ss-panel">
+    <div class="ss-panel-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1.5 14.5v-9l7 4.5-7 4.5z" fill="#1db954"/></svg>
+        <div>
+          <div style="font-size:13px;font-weight:700">Songstats</div>
+          <div style="font-size:11px;color:var(--muted)">${trackName ? trackName + ' · ' : ''}${artistName}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">${cachedHtml}</div>
+    </div>
+    <div class="ss-metrics">${metricsHtml}</div>
+    <div class="ss-credits-bar">
+      <span>Llamadas hoy</span>
+      <div class="ss-credits-track"><div class="ss-credits-fill" style="width:${credPct}%"></div></div>
+      <span style="font-weight:600;color:var(--text)">${credUsed}/${credLimit}</span>
+      <span style="margin-left:4px">(${credLeft} restantes)</span>
+    </div>
+  </div>`;
+}
+
+async function fetchSpAzSongstats(artistId, trackId, artistName, trackName) {
+  const el = document.getElementById('sp-az-stats');
+  if (!el) return;
+  const mode = artistId && trackId ? 'both' : artistId ? 'artist' : 'track';
+  el.innerHTML = `<div class="ss-panel ss-loading"><div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Obteniendo estadísticas...</div></div>`;
+  el.style.display = 'block';
+  try {
+    const r = await fetch('/api/songstats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName }),
+    });
+    const d = await r.json();
+    el.innerHTML = buildSongstatsPanel(d, artistName, trackName);
+  } catch(e) {
+    el.innerHTML = `<div class="ss-panel"><div style="padding:16px;color:var(--muted);font-size:12px">No se pudieron obtener estadísticas: ${e.message}</div></div>`;
+  }
+}
+
+// Standalone modal (client detail)
+async function openSongstatsModal(artistId, trackId, artistName, trackName) {
+  // Remove any existing modal
+  const existing = document.getElementById('ss-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ss-modal-overlay';
+  overlay.className = 'ss-modal-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  const mode = artistId && trackId ? 'both' : artistId ? 'artist' : 'track';
+  overlay.innerHTML = `<div class="ss-modal-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-size:15px;font-weight:700">📊 Songstats — ${artistName}</div>
+      <button onclick="document.getElementById('ss-modal-overlay').remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:2px 6px">✕</button>
+    </div>
+    <div id="ss-modal-body" style="padding:20px">
+      <div class="ss-loading" style="text-align:center;color:var(--muted);padding:30px;font-size:13px">Cargando estadísticas...</div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  try {
+    const r = await fetch('/api/songstats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName }),
+    });
+    const d = await r.json();
+    document.getElementById('ss-modal-body').innerHTML = buildSongstatsPanel(d, artistName, trackName);
+  } catch(e) {
+    document.getElementById('ss-modal-body').innerHTML = `<div style="color:var(--muted);font-size:13px">Error: ${e.message}</div>`;
+  }
 }
 
 function renderSpGenreBadges(el, genres, fromAI) {
