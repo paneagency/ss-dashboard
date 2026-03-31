@@ -7104,6 +7104,14 @@ async function executeNoRenueva(closeModal = false) {
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
     document.getElementById('modal-spotify-remove').style.display = 'none';
     showToast(`${camp.artista} marcada como ${_noRenovaSinCobrar ? 'finalizada (cobro pendiente)' : 'finalizada'}`, 'success');
+    // Fire & forget: snapshot Songstats al archivar campaña
+    const clientNoRen = window._clientesMap?.[camp.artista.toLowerCase().trim()];
+    const spUrlNoRen = clientNoRen?.spotify || '';
+    const spMatchNoRen = spUrlNoRen.match(/artist\/([A-Za-z0-9]+)/);
+    if (spMatchNoRen) {
+      fetch('/api/songstats', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ spotifyArtistId: spMatchNoRen[1], artistName: camp.artista, save: true }) }).catch(()=>{});
+    }
     await loadCampanias();
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
