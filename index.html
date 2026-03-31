@@ -8268,7 +8268,15 @@ async function openPlaylistStatsModal(idx) {
         }],
       },
       options: {
-        responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.parsed.y.toLocaleString() + ' seg' } } },
+        responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: {
+          label: ctx => ' ' + ctx.parsed.y.toLocaleString() + ' seg',
+          afterLabel: ctx => {
+            const i = ctx.dataIndex;
+            if (i === 0) return '';
+            const d = ctx.parsed.y - rows[i - 1].followers;
+            return (d > 0 ? ' +' : ' ') + d.toLocaleString() + ' ese día';
+          },
+        } } },
         scales: {
           x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#666', font: { size: 11 } } },
           y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#666', font: { size: 11 }, callback: v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v } },
