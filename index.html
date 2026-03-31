@@ -8604,10 +8604,9 @@ async function fetchSpAzSongstats(artistId, trackId, artistName, trackName) {
   try {
     const r = await fetch('/api/songstats', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName, save: true, debug: true }),
+      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName, save: true }),
     });
     const d = await r.json();
-    console.log('[Songstats full]', JSON.stringify(d, null, 2));
     el.innerHTML = buildSongstatsPanel(d, artistName, trackName);
   } catch(e) {
     el.innerHTML = `<div class="ss-panel"><div style="padding:16px;color:var(--muted);font-size:12px">No se pudieron obtener estadísticas: ${e.message}</div></div>`;
@@ -8641,10 +8640,9 @@ async function openSongstatsModal(artistId, trackId, artistName, trackName) {
   try {
     const r = await fetch('/api/songstats', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName, debug: true }),
+      body: JSON.stringify({ mode, spotifyArtistId: artistId || undefined, spotifyTrackId: trackId || undefined, artistName, trackName }),
     });
     const d = await r.json();
-    console.log('[Songstats modal debug]', JSON.stringify(d._debug, null, 2));
     document.getElementById('ss-modal-body').innerHTML = buildSongstatsPanel(d, artistName, trackName);
   } catch(e) {
     document.getElementById('ss-modal-body').innerHTML = `<div style="color:var(--muted);font-size:13px">Error: ${e.message}</div>`;
