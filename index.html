@@ -7938,6 +7938,7 @@ async function saveSpotifyPlaylist() {
   try {
     let targetId = _spEditingId;
     if (targetId) {
+      // Edición: usa API directa
       const r = await fetch('/api/spotify-manage', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'update', playlistId: targetId, name, description, public: isPublic }),
@@ -7945,13 +7946,20 @@ async function saveSpotifyPlaylist() {
       const d = await r.json();
       if (!d.ok) throw new Error(d.error);
     } else {
-      const r = await fetch('/api/spotify-manage', {
+      // Creación: dispara webhook de Make (incluye portada si hay)
+      const payload = { name, description, public: isPublic };
+      if (_spCoverBase64) payload.imageBase64 = _spCoverBase64;
+      else if (coverUrl) payload.imageUrl = coverUrl;
+      const r = await fetch('https://hook.us2.make.com/hhfyuw8lbp57asg84wtzuj0qtknuh4n6', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'create', name, description, public: isPublic }),
+        body: JSON.stringify(payload),
       });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error);
-      targetId = d.playlistId;
+      if (!r.ok) throw new Error(`Make webhook error: ${r.status}`);
+      showToast('Playlist enviada — aparecerá en Spotify en instantes', 'success');
+      closeSpotifyModal();
+      _spLoaded = false;
+      setTimeout(() => loadSpotifyTab(true), 4000);
+      return;
     }
     if ((_spCoverBase64 || coverUrl) && targetId) {
       const cr = await fetch('/api/spotify-manage', {
