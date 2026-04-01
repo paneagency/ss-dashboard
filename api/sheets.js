@@ -296,13 +296,13 @@ module.exports = async (req, res) => {
         const endDate = new Date().toISOString().slice(0, 10);
         const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-        // Query 1: total views from playlists (supported query: filter by traffic source, no video dimension)
+        // Query 1: views by traffic source type (dimension required) — find PLAYLIST row client-side
         const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
         analyticsUrl.searchParams.set('ids', `channel==${channelId}`);
         analyticsUrl.searchParams.set('startDate', startDate);
         analyticsUrl.searchParams.set('endDate', endDate);
+        analyticsUrl.searchParams.set('dimensions', 'insightTrafficSourceType');
         analyticsUrl.searchParams.set('metrics', 'views,estimatedMinutesWatched');
-        analyticsUrl.searchParams.set('filters', 'insightTrafficSourceType==PLAYLIST');
         const analyticsRes = await fetch(analyticsUrl.toString(), {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -311,8 +311,10 @@ module.exports = async (req, res) => {
           const errMsg = analyticsData.error?.message || JSON.stringify(analyticsData.error) || 'Analytics API error';
           return res.json({ ok: false, error: errMsg, channelId, debug: { allChannels: all.map(c => ({ id: c.id, title: c.snippet?.title })) } });
         }
-        const totalViews = analyticsData.rows?.[0]?.[0] || 0;
-        const totalMinutes = analyticsData.rows?.[0]?.[1] || 0;
+        // Find the PLAYLIST row (insightTrafficSourceType dimension is col 0)
+        const plRow = (analyticsData.rows || []).find(r => r[0] === 'PLAYLIST') || [];
+        const totalViews = plRow[1] || 0;
+        const totalMinutes = plRow[2] || 0;
 
         // Query 2: top videos by views (all sources) for display
         const videosUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
