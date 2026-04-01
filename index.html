@@ -5741,7 +5741,8 @@ async function loadCampanias() {
     // Poblar datalist de representantes
     fillDatalist('list-representantes', _campanias.map(c => c.representante).filter(Boolean));
     // Poblar filtro de representantes
-    const reps = [...new Set(_campanias.map(c => c.representante).filter(Boolean))].sort();
+    const validReps = new Set((_representantes || []).map(r => r.nombre).filter(Boolean));
+    const reps = [...new Set(_campanias.map(c => c.representante).filter(r => r && validReps.has(r)))].sort();
     const repSel = document.getElementById('camp-filter-rep');
     if (repSel) {
       repSel.innerHTML = '<option value="all">Todos los representantes</option>' +
