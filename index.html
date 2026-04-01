@@ -10424,6 +10424,7 @@ async function ytStudioSync(btn) {
       if (btn) { btn.disabled = false; btn.textContent = '🔄 Obtener datos reales'; }
       if (data.error === 'auth_expired') {
         document.getElementById('yt-cookie-guide').style.display = '';
+        alert(`DEBUG auth_expired — status: ${data.status || '?'}\n\n${data.detail || '(sin detalle)'}`);
       } else {
         alert(`Error (${data.status || '?'}): ${data.error}\n\n${data.detail || ''}`);
       }
