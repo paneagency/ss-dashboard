@@ -273,10 +273,30 @@ module.exports = async (req, res) => {
         const tokenData = await tokenRes.json();
         if (!tokenRes.ok) return res.json({ ok: false, error: tokenData.error_description || tokenData.error });
         const accessToken = tokenData.access_token;
+
+        // Find the right channel ID — tries mine=true, then managedByMe=true (Brand Accounts)
+        let channelId = 'MINE';
+        const channelRes = await fetch('https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const channelData = await channelRes.json();
+        const allChannels = channelData.items || [];
+        // Also fetch managed channels (Brand Accounts)
+        const managedRes = await fetch('https://www.googleapis.com/youtube/v3/channels?part=id,snippet,statistics&managedByMe=true&maxResults=50', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }).then(r => r.json()).catch(() => ({ items: [] }));
+        const managed = managedRes.items || [];
+        // Pick channel with most subscribers (likely Modo List), else fall back to MINE
+        const all = [...allChannels, ...managed];
+        if (all.length > 0) {
+          const best = all.sort((a, b) => parseInt(b.statistics?.subscriberCount || 0) - parseInt(a.statistics?.subscriberCount || 0))[0];
+          channelId = best.id || 'MINE';
+        }
+
         const endDate = new Date().toISOString().slice(0, 10);
         const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
         const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
-        analyticsUrl.searchParams.set('ids', 'channel==MINE');
+        analyticsUrl.searchParams.set('ids', `channel==${channelId}`);
         analyticsUrl.searchParams.set('startDate', startDate);
         analyticsUrl.searchParams.set('endDate', endDate);
         analyticsUrl.searchParams.set('metrics', 'views');
@@ -288,10 +308,13 @@ module.exports = async (req, res) => {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         const analyticsData = await analyticsRes.json();
-        if (!analyticsRes.ok) return res.json({ ok: false, error: analyticsData.error?.message || 'Analytics API error' });
+        if (!analyticsRes.ok) {
+          const errMsg = analyticsData.error?.message || JSON.stringify(analyticsData.error) || 'Analytics API error';
+          return res.json({ ok: false, error: errMsg, channelId, debug: { allChannels: all.map(c => ({ id: c.id, title: c.snippet?.title })) } });
+        }
         const rows = (analyticsData.rows || []).map(r => ({ videoId: r[0], views: r[1] }));
         const totalViews = rows.reduce((s, r) => s + r.views, 0);
-        return res.json({ ok: true, rows, totalViews, startDate, endDate });
+        return res.json({ ok: true, rows, totalViews, startDate, endDate, channelId });
       }
 
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });
