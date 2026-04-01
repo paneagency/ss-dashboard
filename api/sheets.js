@@ -328,6 +328,16 @@ module.exports = async (req, res) => {
         const videosRes = await fetch(videosUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
         const videosData = videosRes.ok ? await videosRes.json() : { rows: [] };
         const rows = (videosData.rows || []).map(r => ({ videoId: r[0], views: r[1] }));
+        // Enrich with video titles from YouTube Data API
+        if (rows.length && process.env.YOUTUBE_API_KEY) {
+          try {
+            const ids = rows.map(r => r.videoId).join(',');
+            const titlesData = await ytGet('videos', { part: 'snippet', id: ids });
+            const titleMap = {};
+            (titlesData.items || []).forEach(item => { titleMap[item.id] = item.snippet?.title || ''; });
+            rows.forEach(r => { r.title = titleMap[r.videoId] || ''; });
+          } catch(_) {}
+        }
 
         return res.json({ ok: true, totalViews, totalMinutes, rows, startDate, endDate, channelId });
       }

@@ -10338,7 +10338,7 @@ async function loadYtAnalytics() {
     if (videosEl && top.length) {
       videosEl.innerHTML = top.map(r => {
         const t = trackMap[r.videoId];
-        const label = t ? `${t.artista}${t.cancion ? ' – ' + t.cancion : ''}` : r.videoId;
+        const label = t ? `${t.artista}${t.cancion ? ' – ' + t.cancion : ''}` : (r.title || r.videoId);
         const plLabel = t ? (_ytPlaylists.find(p => p.playlistId === t.playlistId)?.nombre || t.playlistId) : '';
         return `<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:0">
           <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px" title="${label}">${label}</div>
