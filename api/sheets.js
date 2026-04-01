@@ -296,39 +296,52 @@ module.exports = async (req, res) => {
         const endDate = new Date().toISOString().slice(0, 10);
         const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-        // Query 1: views by traffic source type (dimension required) — find PLAYLIST row client-side
+        // Load our playlist names from sheet for display
+        const plSheetResp = await sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:B',
+        }).catch(() => ({ data: { values: [] } }));
+        const plNameMap = {};
+        (plSheetResp.data.values || []).slice(1).forEach(r => {
+          if (r[0]) plNameMap[r[0].trim()] = r[1]?.trim() || r[0].trim();
+        });
+
+        // Query 1: per-playlist views (views generated within each playlist session)
         const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
         analyticsUrl.searchParams.set('ids', `channel==${channelId}`);
         analyticsUrl.searchParams.set('startDate', startDate);
         analyticsUrl.searchParams.set('endDate', endDate);
-        analyticsUrl.searchParams.set('dimensions', 'insightTrafficSourceType');
-        analyticsUrl.searchParams.set('metrics', 'views,estimatedMinutesWatched');
+        analyticsUrl.searchParams.set('dimensions', 'playlist');
+        analyticsUrl.searchParams.set('metrics', 'views,playlistStarts,viewsPerPlaylistStart');
+        analyticsUrl.searchParams.set('sort', '-views');
+        analyticsUrl.searchParams.set('maxResults', '50');
         const analyticsRes = await fetch(analyticsUrl.toString(), {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         const analyticsData = await analyticsRes.json();
         if (!analyticsRes.ok) {
           const errMsg = analyticsData.error?.message || JSON.stringify(analyticsData.error) || 'Analytics API error';
-          return res.json({ ok: false, error: errMsg, channelId, debug: { allChannels: all.map(c => ({ id: c.id, title: c.snippet?.title })) } });
+          return res.json({ ok: false, error: errMsg, channelId });
         }
-        // Find the PLAYLIST row (insightTrafficSourceType dimension is col 0)
-        const plRow = (analyticsData.rows || []).find(r => r[0] === 'PLAYLIST') || [];
-        const totalViews = plRow[1] || 0;
-        const totalMinutes = plRow[2] || 0;
+        const playlists = (analyticsData.rows || []).map(r => ({
+          playlistId: r[0], nombre: plNameMap[r[0]] || r[0],
+          views: r[1], starts: r[2], viewsPerStart: Math.round(r[3] * 10) / 10,
+        }));
+        const totalViews = playlists.reduce((s, p) => s + p.views, 0);
 
-        // Query 2: top videos by views (all sources) for display
+        // Query 2: top songs within playlists (video dimension, only curated/playlist views)
         const videosUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
         videosUrl.searchParams.set('ids', `channel==${channelId}`);
         videosUrl.searchParams.set('startDate', startDate);
         videosUrl.searchParams.set('endDate', endDate);
-        videosUrl.searchParams.set('metrics', 'views');
         videosUrl.searchParams.set('dimensions', 'video');
+        videosUrl.searchParams.set('metrics', 'views,estimatedMinutesWatched');
+        videosUrl.searchParams.set('filters', 'isCurated==1');
         videosUrl.searchParams.set('sort', '-views');
         videosUrl.searchParams.set('maxResults', '20');
         const videosRes = await fetch(videosUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
         const videosData = videosRes.ok ? await videosRes.json() : { rows: [] };
         const rows = (videosData.rows || []).map(r => ({ videoId: r[0], views: r[1] }));
-        // Enrich with video titles from YouTube Data API
+        // Enrich with video titles
         if (rows.length && process.env.YOUTUBE_API_KEY) {
           try {
             const ids = rows.map(r => r.videoId).join(',');
@@ -339,7 +352,7 @@ module.exports = async (req, res) => {
           } catch(_) {}
         }
 
-        return res.json({ ok: true, totalViews, totalMinutes, rows, startDate, endDate, channelId });
+        return res.json({ ok: true, totalViews, playlists, rows, startDate, endDate, channelId });
       }
 
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });

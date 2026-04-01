@@ -10325,24 +10325,26 @@ async function loadYtAnalytics() {
     }
     _ytAnalyticsData = data;
     if (loadingEl) loadingEl.style.display = 'none';
-    if (totalEl) {
-      const mins = Math.round((data.totalMinutes || 0) / 1000);
-      totalEl.textContent = (data.totalViews || 0).toLocaleString('es-AR');
-      totalEl.title = mins ? `${mins.toLocaleString('es-AR')}k min. vistos` : '';
-    }
-    // Build videoId→track map from our tracks sheet
-    const trackMap = {};
-    _ytAllTracks.forEach(t => { if (t.videoId) trackMap[t.videoId] = t; });
-    // Show top videos
-    const top = (data.rows || []).slice(0, 8);
-    if (videosEl && top.length) {
-      videosEl.innerHTML = top.map(r => {
+    if (totalEl) totalEl.textContent = (data.totalViews || 0).toLocaleString('es-AR');
+    // Show top playlists by views generated
+    const topPl = (data.playlists || []).slice(0, 6);
+    if (videosEl && topPl.length) {
+      videosEl.innerHTML = topPl.map(p => {
+        return `<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:0;cursor:default" title="${p.playlistId}">
+          <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px">${p.nombre}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:1px">${p.starts?.toLocaleString('es-AR')||0} inicios · ${p.viewsPerStart||0} vistas/inicio</div>
+          <div style="font-size:13px;font-weight:700;color:#ff4444;margin-top:2px">${p.views.toLocaleString('es-AR')}</div>
+        </div>`;
+      }).join('');
+    } else if (videosEl && (data.rows || []).length) {
+      // Fallback: show top songs if no playlist dimension data
+      const trackMap = {};
+      _ytAllTracks.forEach(t => { if (t.videoId) trackMap[t.videoId] = t; });
+      videosEl.innerHTML = (data.rows || []).slice(0, 6).map(r => {
         const t = trackMap[r.videoId];
         const label = t ? `${t.artista}${t.cancion ? ' – ' + t.cancion : ''}` : (r.title || r.videoId);
-        const plLabel = t ? (_ytPlaylists.find(p => p.playlistId === t.playlistId)?.nombre || t.playlistId) : '';
         return `<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:0">
-          <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px" title="${label}">${label}</div>
-          ${plLabel ? `<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${plLabel}</div>` : ''}
+          <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px" title="${label}">${label}</div>
           <div style="font-size:13px;font-weight:700;color:#ff4444;margin-top:2px">${r.views.toLocaleString('es-AR')}</div>
         </div>`;
       }).join('');
