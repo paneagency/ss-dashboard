@@ -295,15 +295,14 @@ module.exports = async (req, res) => {
 
         const endDate = new Date().toISOString().slice(0, 10);
         const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+        // Query 1: total views from playlists (supported query: filter by traffic source, no video dimension)
         const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
         analyticsUrl.searchParams.set('ids', `channel==${channelId}`);
         analyticsUrl.searchParams.set('startDate', startDate);
         analyticsUrl.searchParams.set('endDate', endDate);
-        analyticsUrl.searchParams.set('metrics', 'views');
-        analyticsUrl.searchParams.set('dimensions', 'video');
+        analyticsUrl.searchParams.set('metrics', 'views,estimatedMinutesWatched');
         analyticsUrl.searchParams.set('filters', 'insightTrafficSourceType==PLAYLIST');
-        analyticsUrl.searchParams.set('sort', '-views');
-        analyticsUrl.searchParams.set('maxResults', '200');
         const analyticsRes = await fetch(analyticsUrl.toString(), {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -312,9 +311,23 @@ module.exports = async (req, res) => {
           const errMsg = analyticsData.error?.message || JSON.stringify(analyticsData.error) || 'Analytics API error';
           return res.json({ ok: false, error: errMsg, channelId, debug: { allChannels: all.map(c => ({ id: c.id, title: c.snippet?.title })) } });
         }
-        const rows = (analyticsData.rows || []).map(r => ({ videoId: r[0], views: r[1] }));
-        const totalViews = rows.reduce((s, r) => s + r.views, 0);
-        return res.json({ ok: true, rows, totalViews, startDate, endDate, channelId });
+        const totalViews = analyticsData.rows?.[0]?.[0] || 0;
+        const totalMinutes = analyticsData.rows?.[0]?.[1] || 0;
+
+        // Query 2: top videos by views (all sources) for display
+        const videosUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
+        videosUrl.searchParams.set('ids', `channel==${channelId}`);
+        videosUrl.searchParams.set('startDate', startDate);
+        videosUrl.searchParams.set('endDate', endDate);
+        videosUrl.searchParams.set('metrics', 'views');
+        videosUrl.searchParams.set('dimensions', 'video');
+        videosUrl.searchParams.set('sort', '-views');
+        videosUrl.searchParams.set('maxResults', '20');
+        const videosRes = await fetch(videosUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+        const videosData = videosRes.ok ? await videosRes.json() : { rows: [] };
+        const rows = (videosData.rows || []).map(r => ({ videoId: r[0], views: r[1] }));
+
+        return res.json({ ok: true, totalViews, totalMinutes, rows, startDate, endDate, channelId });
       }
 
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });

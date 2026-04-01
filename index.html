@@ -10325,7 +10325,11 @@ async function loadYtAnalytics() {
     }
     _ytAnalyticsData = data;
     if (loadingEl) loadingEl.style.display = 'none';
-    if (totalEl) totalEl.textContent = (data.totalViews || 0).toLocaleString('es-AR');
+    if (totalEl) {
+      const mins = Math.round((data.totalMinutes || 0) / 1000);
+      totalEl.textContent = (data.totalViews || 0).toLocaleString('es-AR');
+      totalEl.title = mins ? `${mins.toLocaleString('es-AR')}k min. vistos` : '';
+    }
     // Build videoId→track map from our tracks sheet
     const trackMap = {};
     _ytAllTracks.forEach(t => { if (t.videoId) trackMap[t.videoId] = t; });
