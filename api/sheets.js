@@ -355,114 +355,44 @@ module.exports = async (req, res) => {
       }
 
       if (req.method === 'GET' && ytMode === 'playlistSongs') {
-        const { playlistId, channelId } = req.query;
+        const { playlistId } = req.query;
         if (!playlistId) return res.json({ ok: false, error: 'missing playlistId' });
+        if (!process.env.YOUTUBE_API_KEY) return res.json({ ok: false, error: 'YOUTUBE_API_KEY missing' });
 
-        const refreshToken = await kvGet('youtube:refresh_token');
-        if (!refreshToken) return res.json({ ok: false, error: 'not_connected' });
-
-        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'refresh_token',
-            refresh_token: refreshToken,
-            client_id: process.env.GOOGLE_CLIENT_ID,
-            client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          }),
-        });
-        const tokenData = await tokenRes.json();
-        if (!tokenRes.ok) return res.json({ ok: false, error: tokenData.error_description || tokenData.error });
-        const accessToken = tokenData.access_token;
-
-        const endDate = new Date().toISOString().slice(0, 10);
-        const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-        // 1. Analytics: per-video views for this specific playlist
-        const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
-        analyticsUrl.searchParams.set('ids', `channel==${channelId || 'MINE'}`);
-        analyticsUrl.searchParams.set('startDate', startDate);
-        analyticsUrl.searchParams.set('endDate', endDate);
-        analyticsUrl.searchParams.set('dimensions', 'video');
-        analyticsUrl.searchParams.set('filters', `playlist==${playlistId}`);
-        analyticsUrl.searchParams.set('metrics', 'views,estimatedMinutesWatched');
-        analyticsUrl.searchParams.set('sort', '-views');
-        analyticsUrl.searchParams.set('maxResults', '50');
-        const analyticsRes = await fetch(analyticsUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
-        const analyticsData = await analyticsRes.json();
-        if (!analyticsRes.ok) {
-          return res.json({ ok: false, error: analyticsData.error?.message || 'Analytics error' });
-        }
-
-        const analyticsRows = analyticsData.rows || [];
-        const videoIds = analyticsRows.map(r => r[0]);
-
-        // 2. Parallel: video titles + playlist thumbnail + playlist items (positions)
-        const [titleData, plInfoData, plPage1] = await Promise.all([
-          videoIds.length && process.env.YOUTUBE_API_KEY
-            ? ytGet('videos', { part: 'snippet', id: videoIds.slice(0, 50).join(',') }).catch(() => ({ items: [] }))
-            : Promise.resolve({ items: [] }),
-          process.env.YOUTUBE_API_KEY
-            ? ytGet('playlists', { part: 'snippet,contentDetails', id: playlistId }).catch(() => ({ items: [] }))
-            : Promise.resolve({ items: [] }),
-          process.env.YOUTUBE_API_KEY
-            ? ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50 }).catch(() => ({ items: [] }))
-            : Promise.resolve({ items: [] }),
+        // Data API only — YouTube Analytics API does not support per-video breakdown
+        // for playlists with 3rd-party content (channel doesn't own those videos)
+        const [plInfoData, plPage1] = await Promise.all([
+          ytGet('playlists', { part: 'snippet,contentDetails', id: playlistId }).catch(() => ({ items: [] })),
+          ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50 }).catch(() => ({ items: [] })),
         ]);
 
-        // Collect all playlist items (up to 200 for position mapping)
+        // Paginate up to 200 items
         const allPlItems = [...(plPage1.items || [])];
-        if (plPage1.nextPageToken) {
+        let nextToken = plPage1.nextPageToken;
+        while (nextToken && allPlItems.length < 200) {
           try {
-            const plPage2 = await ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50, pageToken: plPage1.nextPageToken });
-            allPlItems.push(...(plPage2.items || []));
-            if (plPage2.nextPageToken) {
-              const plPage3 = await ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50, pageToken: plPage2.nextPageToken });
-              allPlItems.push(...(plPage3.items || []));
-              if (plPage3.nextPageToken) {
-                const plPage4 = await ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50, pageToken: plPage3.nextPageToken });
-                allPlItems.push(...(plPage4.items || []));
-              }
-            }
-          } catch(_) {}
+            const page = await ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50, pageToken: nextToken });
+            allPlItems.push(...(page.items || []));
+            nextToken = page.nextPageToken;
+          } catch(_) { break; }
         }
-
-        const titleMap = {}, thumbMap = {};
-        (titleData.items || []).forEach(item => {
-          titleMap[item.id] = item.snippet?.title || '';
-          thumbMap[item.id] = item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || '';
-        });
 
         const plItem = plInfoData.items?.[0];
         const plThumb = plItem?.snippet?.thumbnails?.medium?.url || plItem?.snippet?.thumbnails?.default?.url || '';
-        const plTotalItems = plItem?.contentDetails?.itemCount || null;
+        const plTotalItems = parseInt(plItem?.contentDetails?.itemCount) || allPlItems.length;
 
-        // Position map: videoId → 1-indexed position
-        const positionMap = {};
-        allPlItems.forEach((item, idx) => {
-          const vid = item.snippet?.resourceId?.videoId;
-          if (vid && !positionMap[vid]) positionMap[vid] = idx + 1;
-        });
+        const songs = allPlItems.map((item, idx) => {
+          const sn = item.snippet || {};
+          return {
+            videoId: sn.resourceId?.videoId || '',
+            title: sn.title || '',
+            thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
+            position: idx + 1,
+            channelTitle: sn.videoOwnerChannelTitle || '',
+          };
+        }).filter(s => s.videoId && s.title !== 'Private video' && s.title !== 'Deleted video');
 
-        // 3. Build songs array
-        const songs = analyticsRows.map(r => ({
-          videoId: r[0],
-          title: titleMap[r[0]] || r[0],
-          thumb: thumbMap[r[0]] || '',
-          views: r[1],
-          minutes: Math.round((r[2] || 0) * 10) / 10,
-          position: positionMap[r[0]] || null,
-        }));
-
-        const totalViews = songs.reduce((s, v) => s + v.views, 0);
-
-        // 4. Position data for power-law model
-        const positionData = songs
-          .filter(s => s.position !== null && s.views > 0)
-          .sort((a, b) => a.position - b.position)
-          .map(s => ({ position: s.position, views: s.views }));
-
-        return res.json({ ok: true, songs, positionData, plThumb, plTotalItems, totalViews, startDate, endDate });
+        return res.json({ ok: true, songs, plThumb, plTotalItems });
       }
 
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });

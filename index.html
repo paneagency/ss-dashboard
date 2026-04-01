@@ -10353,18 +10353,17 @@ function openYtPlSongsModal(playlistId) {
   modal.style.display = 'flex';
   document.getElementById('yt-plsongs-name').textContent = nombre;
   document.getElementById('yt-plsongs-kpis').innerHTML = '';
-  document.getElementById('yt-plsongs-period').textContent = '';
+  document.getElementById('yt-plsongs-period').textContent = 'Últimos 28 días';
   document.getElementById('yt-plsongs-loading').style.display = '';
   document.getElementById('yt-plsongs-loading').textContent = 'Cargando canciones…';
   document.getElementById('yt-plsongs-content').style.display = 'none';
   document.getElementById('yt-plsongs-thumb-img').style.display = 'none';
   _ytPlSongsModel = null;
-  const channelId = _ytAnalyticsData?.channelId || 'MINE';
-  fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}&channelId=${encodeURIComponent(channelId)}`)
+  fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}`)
     .then(r => r.json())
     .then(data => {
       if (!data.ok) { document.getElementById('yt-plsongs-loading').textContent = `Error: ${data.error}`; return; }
-      renderYtPlSongs(data, nombre, pl);
+      renderYtPlSongs(data, pl);
     })
     .catch(e => { document.getElementById('yt-plsongs-loading').textContent = `Error: ${e.message}`; });
 }
@@ -10375,87 +10374,79 @@ function closeYtPlSongsModal() {
   _ytPlSongsModel = null;
 }
 
-function fitPositionModel(posData) {
-  const d = posData.filter(p => p.position > 0 && p.views > 0);
-  if (d.length < 3) return null;
-  // Log-log linear regression: log(views) = log(A) + B * log(position)
-  const n = d.length;
-  const lx = d.map(p => Math.log(p.position));
-  const ly = d.map(p => Math.log(p.views));
-  const sx = lx.reduce((a,b) => a+b, 0), sy = ly.reduce((a,b) => a+b, 0);
-  const sxy = lx.reduce((s, x, i) => s + x * ly[i], 0);
-  const sx2 = lx.reduce((s, x) => s + x*x, 0);
-  const B = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
-  const A = Math.exp((sy - B * sx) / n);
-  return (pos) => Math.max(0, Math.round(A * Math.pow(pos, B)));
+// Theoretical position model using Zipf power-law calibrated from playlist totals
+// views(pos) = totalViews × pos^(-α) / Σ(j^(-α), j=1..n)
+function buildTheoreticalModel(totalViews, numSongs, alpha) {
+  const n = Math.max(numSongs, 50);
+  // Calibrate alpha: if playlist is short use 0.7, longer use 0.55
+  const a = alpha || (n <= 30 ? 0.7 : n <= 60 ? 0.6 : 0.55);
+  const weights = Array.from({ length: n }, (_, i) => Math.pow(i + 1, -a));
+  const total = weights.reduce((s, w) => s + w, 0);
+  return (pos) => pos > 0 ? Math.max(0, Math.round(totalViews * Math.pow(pos, -a) / total)) : 0;
 }
 
-function renderYtPlSongs(data, nombre, plAnalytics) {
+function renderYtPlSongs(data, plAnalytics) {
   document.getElementById('yt-plsongs-loading').style.display = 'none';
   document.getElementById('yt-plsongs-content').style.display = '';
   if (data.plThumb) {
     const img = document.getElementById('yt-plsongs-thumb-img');
     img.src = data.plThumb; img.style.display = '';
   }
-  const fmtDate = d => { const [y,m,day] = d.split('-'); return `${parseInt(day)} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m-1]}`; };
-  document.getElementById('yt-plsongs-period').textContent = `${fmtDate(data.startDate)} – ${fmtDate(data.endDate)} 2026 · 28 días`;
+  // avgMinutes from Analytics API comes in seconds despite the name — convert
+  const avgSec = plAnalytics?.avgMinutes || 0;
+  const avgMin = avgSec > 120 ? Math.round(avgSec / 60) : Math.round(avgSec);
   const kpiData = [
-    { label: 'Vistas desde playlist', val: (data.totalViews || 0).toLocaleString('es-AR') },
+    plAnalytics?.estimatedViews ? { label: 'Vistas estimadas', val: `~${plAnalytics.estimatedViews.toLocaleString('es-AR')}` } : null,
     plAnalytics?.starts ? { label: 'Inicios', val: plAnalytics.starts.toLocaleString('es-AR') } : null,
     plAnalytics?.viewsPerStart ? { label: 'Vistas / inicio', val: plAnalytics.viewsPerStart } : null,
-    plAnalytics?.avgMinutes ? { label: 'T. promedio', val: `${plAnalytics.avgMinutes} min` } : null,
+    avgMin ? { label: 'T. promedio', val: `${avgMin} min` } : null,
     data.plTotalItems ? { label: 'Canciones', val: data.plTotalItems } : null,
   ].filter(Boolean);
   document.getElementById('yt-plsongs-kpis').innerHTML = kpiData.map(k =>
     `<div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;white-space:nowrap">${k.label}</div><div style="font-size:17px;font-weight:800;color:var(--text);line-height:1.3">${k.val}</div></div>`
   ).join('');
+  // Songs table — ordered by position (playlist order)
   const songs = data.songs || [];
-  const maxViews = songs[0]?.views || 1;
-  document.getElementById('yt-plsongs-table').innerHTML = songs.map((s, i) => {
-    const pct = data.totalViews ? ((s.views / data.totalViews) * 100).toFixed(1) : 0;
-    const barW = Math.round((s.views / maxViews) * 100);
-    const posBadge = s.position ? `<span style="background:rgba(255,68,68,0.15);color:#ff4444;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;flex-shrink:0">#${s.position}</span>` : '';
+  const songsSorted = [...songs].sort((a, b) => a.position - b.position);
+  // Build theoretical model to show estimated views per song
+  const totalEst = plAnalytics?.estimatedViews || 0;
+  const numSongs = data.plTotalItems || songs.length;
+  _ytPlSongsModel = totalEst > 0 ? buildTheoreticalModel(totalEst, numSongs) : null;
+  document.getElementById('yt-plsongs-table').innerHTML = songsSorted.map(s => {
+    const estViews = _ytPlSongsModel ? _ytPlSongsModel(s.position) : null;
+    const pct = totalEst && estViews ? ((estViews / totalEst) * 100).toFixed(1) : null;
+    const barW = estViews && totalEst ? Math.round((estViews / (_ytPlSongsModel(1) || 1)) * 100) : 0;
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
-      <div style="width:20px;text-align:right;font-size:11px;color:var(--muted);flex-shrink:0">${i+1}</div>
+      <div style="width:22px;text-align:right;font-size:11px;color:rgba(255,68,68,0.7);font-weight:700;flex-shrink:0">${s.position}</div>
       ${s.thumb ? `<img src="${s.thumb}" style="width:44px;height:25px;object-fit:cover;border-radius:3px;flex-shrink:0">` : '<div style="width:44px;height:25px;background:rgba(255,255,255,0.06);border-radius:3px;flex-shrink:0"></div>'}
       <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;overflow:hidden">
-          <span style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.title}</span>
-          ${posBadge}
-        </div>
-        <div style="height:3px;background:rgba(255,255,255,0.08);border-radius:2px"><div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#ff4444,#ff7070);border-radius:2px"></div></div>
+        <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${s.title}</div>
+        ${estViews ? `<div style="height:3px;background:rgba(255,255,255,0.08);border-radius:2px"><div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#ff4444,#ff7070);border-radius:2px"></div></div>` : ''}
       </div>
-      <div style="text-align:right;flex-shrink:0;min-width:64px">
-        <div style="font-size:13px;font-weight:700;color:var(--text)">${s.views.toLocaleString('es-AR')}</div>
+      ${estViews ? `<div style="text-align:right;flex-shrink:0;min-width:72px">
+        <div style="font-size:12px;font-weight:700;color:#ff4444">~${estViews.toLocaleString('es-AR')}</div>
         <div style="font-size:10px;color:var(--muted)">${pct}%</div>
-      </div>
+      </div>` : ''}
     </div>`;
-  }).join('') || '<div style="color:var(--muted);font-size:12px;padding:12px 0">Sin datos de vistas por canción para este período.</div>';
-  // Position model
-  const positionData = data.positionData || [];
-  _ytPlSongsModel = fitPositionModel(positionData);
+  }).join('') || '<div style="color:var(--muted);font-size:12px;padding:12px 0">Sin canciones disponibles.</div>';
+  // Position model grid
   const posEl = document.getElementById('yt-plsongs-positions');
   if (_ytPlSongsModel) {
     const targets = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
-    const estimates = targets.map(pos => {
-      const est = _ytPlSongsModel(pos);
-      const actual = positionData.find(p => p.position === pos);
-      return { pos, est, actual: actual?.views };
-    });
+    const estimates = targets.map(pos => ({ pos, est: _ytPlSongsModel(pos) }));
     const maxEst = estimates[0].est || 1;
     posEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:6px">
-      ${estimates.map(({ pos, est, actual }) => {
+      ${estimates.map(({ pos, est }) => {
         const barW = Math.round((est / maxEst) * 100);
         return `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
           <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:0.04em">POS. ${pos}</div>
           <div style="font-size:15px;font-weight:800;color:#ff4444;margin:2px 0">~${est.toLocaleString('es-AR')}</div>
-          ${actual != null ? `<div style="font-size:9px;color:var(--muted)">Real: ${actual.toLocaleString('es-AR')}</div>` : '<div style="font-size:9px;color:rgba(255,255,255,0.18)">estimado</div>'}
           <div style="height:3px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:4px"><div style="height:100%;width:${barW}%;background:#ff4444;border-radius:2px;opacity:0.7"></div></div>
         </div>`;
       }).join('')}
     </div>`;
   } else {
-    posEl.innerHTML = `<div style="color:var(--muted);font-size:12px">Se necesitan al menos 3 canciones con posición conocida para el modelo (disponibles: ${positionData.length}).</div>`;
+    posEl.innerHTML = `<div style="color:var(--muted);font-size:12px">Sin datos analíticos para construir el modelo.</div>`;
   }
   document.getElementById('yt-pos-calc-input').value = '';
   document.getElementById('yt-pos-calc-result').textContent = '';
@@ -10493,13 +10484,13 @@ function calcYtPosition() {
       <div id="yt-plsongs-content" style="display:none">
         <!-- Songs -->
         <div style="padding:14px 20px">
-          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Canciones — vistas generadas desde esta playlist</div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Canciones en playlist — estimación por posición</div>
           <div id="yt-plsongs-table"></div>
         </div>
         <!-- Position model -->
         <div style="padding:14px 20px;border-top:1px solid var(--border)">
           <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px">Modelo de posición</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Vistas estimadas según la posición de la canción en la playlist · Regresión power-law sobre datos reales</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Modelo teórico Zipf power-law calibrado con los totales de esta playlist (inicios × v/inicio) · Las vistas por canción no están disponibles via API pública de YouTube</div>
           <div id="yt-plsongs-positions"></div>
           <!-- Calculator -->
           <div style="margin-top:14px;background:rgba(255,68,68,0.05);border:1px solid rgba(255,68,68,0.2);border-radius:10px;padding:12px 16px">
