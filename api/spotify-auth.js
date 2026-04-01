@@ -66,13 +66,13 @@ export default async function handler(req, res) {
     return res.redirect(`https://accounts.spotify.com/authorize?${params}`);
   }
 
-  // Error returned by Spotify (e.g. user denied)
-  if (error) {
+  // Error returned by Spotify (e.g. user denied) — skip for yt-callback
+  if (error && action !== 'yt-callback') {
     return res.status(400).send(`<h2 style="font-family:monospace;padding:2rem">Error: ${error}</h2>`);
   }
 
   // Step 2: exchange authorization code for tokens + auto-save to KV
-  if (code) {
+  if (code && action !== 'yt-callback') {
     try {
       const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
       const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
