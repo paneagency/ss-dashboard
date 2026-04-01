@@ -217,7 +217,7 @@ export default async function handler(req, res) {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: gClientId,
-      scope: 'https://www.googleapis.com/auth/yt-analytics.readonly',
+      scope: 'https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/youtube.readonly',
       redirect_uri: 'https://ss-dashboard-flame.vercel.app/api/spotify-auth?action=yt-callback',
       access_type: 'offline',
       prompt: 'consent',
