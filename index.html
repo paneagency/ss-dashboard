@@ -10362,7 +10362,7 @@ function openYtPlSongsModal(playlistId) {
   document.getElementById('yt-plsongs-content').style.display = 'none';
   document.getElementById('yt-plsongs-thumb-img').style.display = 'none';
   document.getElementById('yt-import-panel').style.display = 'none';
-  document.getElementById('yt-cookie-guide').style.display = 'none';
+  document.getElementById('yt-sync-script-panel').style.display = 'none';
   _ytPlSongsModel = null; _currentYtSongs = null;
   Promise.all([
     fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false, songs: [] })),
@@ -10408,33 +10408,15 @@ function ytImportClear() {
   openYtPlSongsModal(_currentYtPlaylistId);
 }
 
-async function ytStudioSync(btn) {
-  const playlistId = _currentYtPlaylistId;
-  if (!playlistId) return;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizando…'; }
-  document.getElementById('yt-cookie-guide').style.display = 'none';
-  try {
-    const r = await fetch('/api/sheets?mode=yt-studioSync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playlistId })
-    });
-    const data = await r.json();
-    if (!data.ok) {
-      if (btn) { btn.disabled = false; btn.textContent = '🔄 Obtener datos reales'; }
-      if (data.error === 'auth_expired') {
-        document.getElementById('yt-cookie-guide').style.display = '';
-        alert(`DEBUG auth_expired — status: ${data.status || '?'}\n\n${data.detail || '(sin detalle)'}`);
-      } else {
-        alert(`Error (${data.status || '?'}): ${data.error}\n\n${data.detail || ''}`);
-      }
-      return;
-    }
-    openYtPlSongsModal(playlistId);
-  } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = '🔄 Obtener datos reales'; }
-    alert(`Error: ${e.message}`);
-  }
+function showYtSyncScript() {
+  document.getElementById('yt-sync-script-panel').style.display = '';
+}
+function copyYtSyncScript() {
+  const code = document.getElementById('yt-sync-script-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.getElementById('yt-copy-script-btn');
+    btn.textContent = '✓ Copiado'; setTimeout(() => btn.textContent = '📋 Copiar script', 2000);
+  });
 }
 
 function showYtImportPanel() {
@@ -10693,31 +10675,21 @@ function calcYtPosition() {
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
             <div id="yt-plsongs-table-label" style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em">Canciones en playlist</div>
             <div style="display:flex;gap:6px;align-items:center">
-              <button id="yt-sync-btn" onclick="ytStudioSync(this)" style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);color:#ff6b6b;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#ff4444';this.style.background='rgba(255,68,68,0.15)'" onmouseout="this.style.borderColor='rgba(255,68,68,0.3)';this.style.background='rgba(255,68,68,0.08)'">🔄 Obtener datos reales</button>
+              <button id="yt-sync-btn" onclick="showYtSyncScript()" style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);color:#ff6b6b;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#ff4444';this.style.background='rgba(255,68,68,0.15)'" onmouseout="this.style.borderColor='rgba(255,68,68,0.3)';this.style.background='rgba(255,68,68,0.08)'">🔄 Sincronizar datos reales</button>
               <button id="yt-import-btn" onclick="showYtImportPanel()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#4CAF50';this.style.color='#4CAF50'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">📋 Manual</button>
             </div>
           </div>
-          <!-- Cookie renewal guide (shown when auth expires) -->
-          <div id="yt-cookie-guide" style="display:none;margin-bottom:14px;background:rgba(255,152,0,0.06);border:1px solid rgba(255,152,0,0.3);border-radius:10px;padding:14px 16px">
+          <!-- Sync script panel -->
+          <div id="yt-sync-script-panel" style="display:none;margin-bottom:14px;background:rgba(255,68,68,0.05);border:1px solid rgba(255,68,68,0.25);border-radius:10px;padding:14px 16px">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-              <span style="font-size:18px">🔑</span>
-              <div>
-                <div style="font-size:13px;font-weight:700;color:#FFA726">Cookies de YouTube Studio vencidas</div>
-                <div style="font-size:11px;color:var(--muted)">Hay que renovarlas en Vercel (tarda ~3 minutos)</div>
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:700;color:#ff6b6b">Script de sincronización</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">1· Abrí <strong>studio.youtube.com</strong> · 2· F12 → Consola · 3· Pegá el script · 4· Enter</div>
               </div>
-              <button onclick="document.getElementById('yt-cookie-guide').style.display='none'" style="margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1">✕</button>
+              <button id="yt-copy-script-btn" onclick="copyYtSyncScript()" style="background:rgba(255,68,68,0.15);border:1px solid rgba(255,68,68,0.4);color:#ff6b6b;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📋 Copiar script</button>
+              <button onclick="document.getElementById('yt-sync-script-panel').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px">✕</button>
             </div>
-            <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text)">
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">1</span><span>Abrí <strong>studio.youtube.com</strong> (ya logueado) → cualquier playlist → Analytics</span></div>
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">2</span><span>Hacé click en el ícono de descarga <strong>↓</strong> (arriba a la derecha) → CSV</span></div>
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">3</span><span><strong>F12 → Network</strong> → click en <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px">csv_export?alt=json</code> → Headers → Request Headers</span></div>
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">4</span><span>Copiá el valor de <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px">cookie:</code> completo → pegalo en Vercel como <strong>YT_STUDIO_COOKIES</strong></span></div>
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">5</span><span>Del mismo string, buscá <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px">SAPISID=</code> y copiá solo su valor → pegalo como <strong>YT_SAPISID</strong></span></div>
-              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">6</span><span>Guardá en Vercel → volvé acá y hacé click en <strong>🔄 Obtener datos reales</strong></span></div>
-            </div>
-            <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,152,0,0.2)">
-              <a href="https://vercel.com/dashboard" target="_blank" style="background:#FFA726;color:#000;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block">Ir a Vercel →</a>
-            </div>
+            <pre id="yt-sync-script-code" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:10px;font-size:10px;color:#aaa;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto;margin:0;font-family:monospace;line-height:1.4">(async()=>{await new Promise((ok,err)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js';s.onload=ok;s.onerror=err;document.head.appendChild(s)});const API='https://ss-dashboard-flame.vercel.app/api/sheets';const chId=location.pathname.match(/\/channel\/([^\/]+)/)?.[1];if(!chId){alert('Abrí YouTube Studio primero');return;}const{playlists=[]}=await fetch(`${API}?mode=yt-playlists`).then(r=>r.json()).catch(()=>({}));if(!playlists.length){alert('No hay playlists configuradas en el dashboard');return;}console.log(`🎵 Sincronizando ${playlists.length} playlists...`);const now=new Date(),end=parseInt(now.toISOString().slice(0,10).replace(/-/g,'')),start=parseInt(new Date(now-28*864e5).toISOString().slice(0,10).replace(/-/g,''));const cfg=window.ytcfg?.data_||{};const ctx={client:{clientName:'WEB_CREATOR',clientVersion:cfg.INNERTUBE_CLIENT_VERSION||'1.20260401.00.00',hl:cfg.HL||'es',gl:cfg.GL||'AR',utcOffsetMinutes:-new Date().getTimezoneOffset()},user:{onBehalfOfUser:chId}};function mkPayload(pid){const R=[{dimension:{type:'PLAYLIST'},inValues:[pid]},{dimension:{type:'IN_CURATED_CONTENT'},inValues:['IN_CURATED_CONTENT']}];const T={dateIdRange:{inclusiveStart:start,exclusiveEnd:end}};const B={restricts:R,timeRange:T,currency:'ARS',returnDataInNewFormat:true,limitedToBatchedData:false};return{exportQuery:{joinRequest:{nodes:[{key:'0_TOTALS_SUMS_QUERY_KEY',value:{query:{dimensions:[],orders:[],metrics:[{type:'PLAYLIST_VIEWS',includeTotal:true}],...B}}},{key:'0_TOP_ENTITIES_TABLE_QUERY_KEY',value:{query:{dimensions:[{type:'VIDEO'}],metrics:[{type:'PLAYLIST_VIEWS',asPercentagesOfTotal:true},{type:'PLAYLIST_VIEWS',includeTotal:true}],orders:[{metric:{type:'PLAYLIST_VIEWS'},direction:'ANALYTICS_ORDER_DIRECTION_DESC'}],limit:{pageSize:500,pageOffset:0},...B}}}],context:{channelId:chId},trackingLabel:'web_explore_playlist'}},context:ctx};}function parseCSV(t){const L=t.replace(/\r/g,'').replace(/^\uFEFF/,'').split('\n').filter(l=>l.trim());if(L.length<2)return[];const H=L[0].split(',');let vi=H.findIndex(h=>/lista de reproducci/i.test(h));if(vi<0)vi=4;const S=[];for(let i=1;i<L.length;i++){const C=[];let q=false,c='';for(const ch of L[i]){if(ch==='"'){q=!q;continue;}if(ch===','&&!q){C.push(c);c='';continue;}c+=ch;}C.push(c);const id=C[0]?.trim();if(!id||/^total$/i.test(id))continue;const v=parseInt(C[vi])||0;if(!v)continue;S.push({videoId:id,title:C[1]?.trim()||id,views:v});}return S;}let ok=0,fail=0;for(const pl of playlists){try{const r=await fetch('https://studio.youtube.com/youtubei/v1/yta_web/csv_export?alt=json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mkPayload(pl.playlistId))});if(!r.ok){console.warn(`❌ ${pl.nombre}: HTTP ${r.status}`);fail++;continue;}const d=await r.json();if(!d.zippedData){console.warn(`❌ ${pl.nombre}: sin datos`);fail++;continue;}const zip=fflate.unzipSync(Uint8Array.from(atob(d.zippedData),c=>c.charCodeAt(0)));const key=Object.keys(zip).find(k=>/tabla|table/i.test(k))||Object.keys(zip)[0];if(!key){fail++;continue;}const songs=parseCSV(new TextDecoder().decode(zip[key]));if(!songs.length){fail++;continue;}await fetch(`${API}?mode=yt-studioSave`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playlistId:pl.playlistId,songs})});console.log(`✅ ${pl.nombre}: ${songs.length} canciones`);ok++;await new Promise(r=>setTimeout(r,800));}catch(e){console.error(`❌ ${pl.nombre}:`,e.message);fail++;}}const msg=`🎉 ¡Listo! ${ok} playlists sincronizadas${fail?` (${fail} fallaron)`:''}. Volvé al dashboard.`;console.log(msg);alert(msg);})();</pre>
           </div>
           <!-- Import panel -->
           <div id="yt-import-panel" style="display:none;margin-bottom:14px;background:rgba(76,175,80,0.05);border:1px solid rgba(76,175,80,0.2);border-radius:10px;padding:12px 14px">

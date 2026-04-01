@@ -663,6 +663,18 @@ module.exports = async (req, res) => {
         return res.json({ ok: true, ...result });
       }
 
+      // ── POST save data sent from browser console script ──────────────────
+      if (ytMode === 'studioSave') {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        if (req.method === 'OPTIONS') return res.status(200).end();
+        const { playlistId, songs } = req.body || {};
+        if (!playlistId || !songs?.length) return res.json({ ok: false, error: 'missing data' });
+        await kvSet(`ytStudio_${playlistId}`, { songs, updatedAt: new Date().toISOString() }, 30 * 24 * 3600);
+        return res.json({ ok: true, saved: songs.length });
+      }
+
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });
     }
 
