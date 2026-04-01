@@ -6406,11 +6406,15 @@ function renderCampCalendario(data, today) {
   const monthName   = _campCalMonth.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
   const dayNames    = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
+  const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
   let html = `
-    <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin-bottom:20px">
-      <button class="btn btn-ghost btn-sm" style="width:34px;height:34px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;font-size:16px" onclick="campCalNav(-1)">←</button>
-      <span style="font-size:17px;font-weight:700;text-transform:capitalize;min-width:180px;text-align:center;letter-spacing:-0.01em">${monthName}</span>
-      <button class="btn btn-ghost btn-sm" style="width:34px;height:34px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;font-size:16px" onclick="campCalNav(1)">→</button>
+    <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:center;gap:20px">
+        <button class="btn btn-ghost btn-sm" style="width:34px;height:34px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;font-size:16px" onclick="campCalNav(-1)">←</button>
+        <span style="font-size:17px;font-weight:700;text-transform:capitalize;min-width:180px;text-align:center;letter-spacing:-0.01em">${monthName}</span>
+        <button class="btn btn-ghost btn-sm" style="width:34px;height:34px;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;font-size:16px" onclick="campCalNav(1)">→</button>
+      </div>
+      ${!isCurrentMonth ? `<button onclick="_campCalMonth=new Date();renderCampaniasTab()" style="background:none;border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:3px 12px;font-size:11px;font-weight:600;color:var(--indigo);cursor:pointer;letter-spacing:.03em;transition:all 0.15s" onmouseover="this.style.background='rgba(99,102,241,0.1)'" onmouseout="this.style.background='none'">Hoy</button>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px">
       ${dayNames.map((d,i) => `<div style="text-align:center;font-size:10px;color:${i===0||i===6?'rgba(248,81,73,0.5)':'var(--muted)'};padding:4px 0;font-weight:700;letter-spacing:.06em;text-transform:uppercase">${d}</div>`).join('')}
