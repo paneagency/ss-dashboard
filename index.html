@@ -9846,21 +9846,26 @@ let _ytPlaylists = [], _ytAllTracks = [], _ytAds = [];
 let _ytActivePlaylist = null;
 let _ytLoaded = false;
 let _ytPlPreviewTimer = null, _ytVideoPreviewTimer = null;
+let _ytAnalyticsConnected = false, _ytAnalyticsData = null;
 
 async function loadYoutubeTab() {
   if (_ytLoaded) return;
   _ytLoaded = true;
   try {
-    const [plResp, tracksResp, adsResp] = await Promise.all([
+    const [plResp, tracksResp, adsResp, analyticsStatus] = await Promise.all([
       fetch('/api/sheets?mode=yt-playlists').then(r => r.json()),
       fetch('/api/sheets?mode=yt-tracks').then(r => r.json()),
       fetch('/api/sheets?mode=yt-ads').then(r => r.json()),
+      fetch('/api/sheets?mode=yt-analyticsStatus').then(r => r.json()).catch(() => ({ connected: false })),
     ]);
     _ytPlaylists = plResp.playlists || [];
     _ytAllTracks = tracksResp.tracks || [];
     _ytAds = adsResp.ads || [];
+    _ytAnalyticsConnected = analyticsStatus.connected || false;
     renderYtPlaylists();
     renderYtAds();
+    renderYtAnalyticsBar();
+    if (_ytAnalyticsConnected) loadYtAnalytics();
   } catch(e) {
     console.error('YouTube load error:', e);
   }
@@ -10275,12 +10280,12 @@ async function refreshYtAdViews() {
   const btn = document.getElementById('yt-refresh-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Actualizando...'; }
   try {
-    // Refresh playlists views + ads views in parallel
-    const [plRes, adRes] = await Promise.all([
+    const fetches = [
       fetch('/api/sheets?mode=yt-refreshPlViews', { method: 'POST' }).then(r => r.json()).catch(() => ({})),
       fetch('/api/sheets?mode=yt-refreshAdViews', { method: 'POST' }).then(r => r.json()).catch(() => ({})),
-    ]);
-    // Reload both
+    ];
+    if (_ytAnalyticsConnected) fetches.push(loadYtAnalytics());
+    await Promise.all(fetches);
     const [plData, adsData] = await Promise.all([
       fetch('/api/sheets?mode=yt-playlists').then(r => r.json()),
       fetch('/api/sheets?mode=yt-ads').then(r => r.json()),
@@ -10291,6 +10296,56 @@ async function refreshYtAdViews() {
     renderYtAds();
   } catch(e) { alert(e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '↻ Actualizar vistas'; } }
+}
+
+function renderYtAnalyticsBar() {
+  const bar = document.getElementById('yt-analytics-bar');
+  const connectBtn = document.getElementById('yt-analytics-connect-btn');
+  if (_ytAnalyticsConnected) {
+    if (bar) bar.style.display = 'flex';
+    if (connectBtn) connectBtn.style.display = 'none';
+  } else {
+    if (bar) bar.style.display = 'none';
+    if (connectBtn) connectBtn.style.display = 'inline-flex';
+  }
+}
+
+async function loadYtAnalytics() {
+  const loadingEl = document.getElementById('yt-analytics-loading');
+  const totalEl = document.getElementById('yt-analytics-total');
+  const videosEl = document.getElementById('yt-analytics-videos');
+  if (loadingEl) loadingEl.style.display = '';
+  if (totalEl) totalEl.textContent = '—';
+  if (videosEl) videosEl.innerHTML = '';
+  try {
+    const data = await fetch('/api/sheets?mode=yt-analytics').then(r => r.json());
+    if (!data.ok) {
+      if (loadingEl) loadingEl.textContent = data.error === 'not_connected' ? 'No conectado' : `Error: ${data.error}`;
+      return;
+    }
+    _ytAnalyticsData = data;
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (totalEl) totalEl.textContent = (data.totalViews || 0).toLocaleString('es-AR');
+    // Build videoId→track map from our tracks sheet
+    const trackMap = {};
+    _ytAllTracks.forEach(t => { if (t.videoId) trackMap[t.videoId] = t; });
+    // Show top videos
+    const top = (data.rows || []).slice(0, 8);
+    if (videosEl && top.length) {
+      videosEl.innerHTML = top.map(r => {
+        const t = trackMap[r.videoId];
+        const label = t ? `${t.artista}${t.cancion ? ' – ' + t.cancion : ''}` : r.videoId;
+        const plLabel = t ? (_ytPlaylists.find(p => p.playlistId === t.playlistId)?.nombre || t.playlistId) : '';
+        return `<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:0">
+          <div style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px" title="${label}">${label}</div>
+          ${plLabel ? `<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">${plLabel}</div>` : ''}
+          <div style="font-size:13px;font-weight:700;color:#ff4444;margin-top:2px">${r.views.toLocaleString('es-AR')}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    if (loadingEl) loadingEl.textContent = `Error: ${e.message}`;
+  }
 }
 
 </script>
@@ -10394,12 +10449,26 @@ async function refreshYtAdViews() {
 <!-- ── TAB YOUTUBE ─────────────────────────────────────────────── -->
 <section id="tab-youtube" class="tab-panel">
   <!-- Sub-tabs row -->
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding-bottom:14px;border-bottom:1px solid var(--border)">
     <button id="yt-subtab-playlists" class="sp-subtab active" onclick="setYtSubTab('playlists')">🎵 Playlists</button>
     <button id="yt-subtab-ads" class="sp-subtab" onclick="setYtSubTab('ads')">📊 Ads</button>
     <div style="flex:1"></div>
+    <a id="yt-analytics-connect-btn" href="/api/spotify-auth?action=yt-login" target="_blank" style="display:none;align-items:center;gap:6px;background:transparent;border:1px solid var(--border2);color:var(--muted);border-radius:100px;padding:7px 14px;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;transition:all 0.15s" onmouseover="this.style.borderColor='#ff4444';this.style.color='#ff4444'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>Conectar Analytics</a>
     <button id="yt-refresh-btn" onclick="refreshYtAdViews()" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border2);color:var(--muted);border-radius:100px;padding:7px 14px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s" onmouseover="this.style.borderColor='#ff4444';this.style.color='#ff4444'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">↻ Actualizar vistas</button>
     <button onclick="openYtNewPlModal()" style="display:inline-flex;align-items:center;gap:7px;background:#ff4444;color:#fff;border:none;border-radius:100px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;letter-spacing:0.01em" onmouseover="this.style.background='#ff6666';this.style.transform='scale(1.04)'" onmouseout="this.style.background='#ff4444';this.style.transform=''"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva Playlist</button>
+  </div>
+
+  <!-- Analytics bar (shown when connected) -->
+  <div id="yt-analytics-bar" style="display:none;background:linear-gradient(135deg,rgba(255,68,68,0.06),rgba(255,68,68,0.02));border:1px solid rgba(255,68,68,0.15);border-radius:12px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px;min-width:0">
+      <div style="width:28px;height:28px;border-radius:6px;background:rgba(255,68,68,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="#ff4444"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Vistas desde playlists · últimos 28 días</div>
+        <div id="yt-analytics-total" style="font-size:20px;font-weight:800;color:var(--text);line-height:1.2">—</div>
+      </div>
+    </div>
+    <div id="yt-analytics-videos" style="flex:1;display:flex;gap:8px;flex-wrap:wrap;min-width:0"></div>
+    <div id="yt-analytics-loading" style="color:var(--muted);font-size:12px">Cargando Analytics...</div>
   </div>
 
   <!-- ── PLAYLISTS sub-tab ──────────────────────────────────── -->

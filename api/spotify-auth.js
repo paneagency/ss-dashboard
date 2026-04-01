@@ -209,5 +209,68 @@ export default async function handler(req, res) {
     `);
   }
 
+  // ── YOUTUBE ANALYTICS OAUTH ─────────────────────────────────
+
+  if (action === 'yt-login') {
+    const gClientId = process.env.GOOGLE_CLIENT_ID;
+    if (!gClientId) return res.status(500).send('<pre style="padding:2rem;color:red">GOOGLE_CLIENT_ID no configurado en Vercel.</pre>');
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: gClientId,
+      scope: 'https://www.googleapis.com/auth/yt-analytics.readonly',
+      redirect_uri: 'https://ss-dashboard-flame.vercel.app/api/spotify-auth?action=yt-callback',
+      access_type: 'offline',
+      prompt: 'consent',
+    });
+    return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  }
+
+  if (action === 'yt-callback') {
+    const gClientId = process.env.GOOGLE_CLIENT_ID;
+    const gClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!gClientId || !gClientSecret) return res.status(500).send('<pre style="padding:2rem;color:red">GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET no configurados.</pre>');
+    if (error) return res.status(400).send(`<h2 style="font-family:monospace;padding:2rem">Error: ${error}</h2>`);
+    if (!code) return res.status(400).send('<h2 style="font-family:monospace;padding:2rem">Sin código de autorización</h2>');
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'https://ss-dashboard-flame.vercel.app/api/spotify-auth?action=yt-callback',
+          client_id: gClientId,
+          client_secret: gClientSecret,
+        }),
+      });
+      const data = await tokenRes.json();
+      if (!tokenRes.ok) return res.status(500).send(`<pre style="padding:2rem;color:red">Error Google OAuth: ${JSON.stringify(data)}</pre>`);
+      if (data.refresh_token) {
+        await kvSet('youtube:refresh_token', data.refresh_token);
+        console.log('Saved YouTube Analytics refresh token to KV');
+      }
+      const meRes = await fetch('https://www.googleapis.com/oauth2/v1/userinfo', {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+      const me = await meRes.json();
+      return res.send(`
+        <html><body style="font-family:monospace;padding:2rem;background:#111;color:#eee;max-width:600px;margin:0 auto">
+          <h2 style="color:#ff4444">✅ YouTube Analytics conectado</h2>
+          <p><strong>Cuenta:</strong> ${me.name || '—'}</p>
+          <p><strong>Email:</strong> ${me.email || '—'}</p>
+          ${!data.refresh_token ? '<p style="color:#e74c3c">⚠️ Sin refresh token — reintentá desde cero.</p>' : '<p style="color:#1db954">Token guardado en KV correctamente.</p>'}
+          <p style="color:#aaa;margin-top:1.5rem">YouTube Analytics listo. Podés cerrar esta página y recargar el dashboard.</p>
+        </body></html>
+      `);
+    } catch (e) {
+      return res.status(500).send(`<pre style="padding:2rem;color:red">Error: ${e.message}</pre>`);
+    }
+  }
+
+  if (action === 'yt-status') {
+    const token = await kvGet('youtube:refresh_token');
+    return res.json({ connected: !!token });
+  }
+
   return res.status(400).send('<p style="font-family:monospace;padding:2rem">Usá <code>?action=login</code> para iniciar el flujo de autorización.</p>');
 }

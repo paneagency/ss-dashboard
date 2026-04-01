@@ -5,6 +5,19 @@ const SHEET_GID      = 162664118;
 const SHEET_RANGE    = 'A:L';
 const YT_API_BASE    = 'https://www.googleapis.com/youtube/v3';
 
+async function kvGet(key) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['GET', key]),
+  });
+  const data = await r.json();
+  return data.result || null;
+}
+
 async function ytGet(endpoint, params) {
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) throw new Error('YOUTUBE_API_KEY no configurado en Vercel');
@@ -235,6 +248,50 @@ module.exports = async (req, res) => {
           } catch(_) {}
         }
         return res.json({ ok: true, updated });
+      }
+
+      if (req.method === 'GET' && ytMode === 'analyticsStatus') {
+        const token = await kvGet('youtube:refresh_token');
+        return res.json({ connected: !!token });
+      }
+
+      if (req.method === 'GET' && ytMode === 'analytics') {
+        const refreshToken = await kvGet('youtube:refresh_token');
+        if (!refreshToken) return res.json({ ok: false, error: 'not_connected' });
+        const gClientId = process.env.GOOGLE_CLIENT_ID;
+        const gClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+            client_id: gClientId,
+            client_secret: gClientSecret,
+          }),
+        });
+        const tokenData = await tokenRes.json();
+        if (!tokenRes.ok) return res.json({ ok: false, error: tokenData.error_description || tokenData.error });
+        const accessToken = tokenData.access_token;
+        const endDate = new Date().toISOString().slice(0, 10);
+        const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
+        analyticsUrl.searchParams.set('ids', 'channel==MINE');
+        analyticsUrl.searchParams.set('startDate', startDate);
+        analyticsUrl.searchParams.set('endDate', endDate);
+        analyticsUrl.searchParams.set('metrics', 'views');
+        analyticsUrl.searchParams.set('dimensions', 'video');
+        analyticsUrl.searchParams.set('filters', 'insightTrafficSourceType==PLAYLIST');
+        analyticsUrl.searchParams.set('sort', '-views');
+        analyticsUrl.searchParams.set('maxResults', '200');
+        const analyticsRes = await fetch(analyticsUrl.toString(), {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const analyticsData = await analyticsRes.json();
+        if (!analyticsRes.ok) return res.json({ ok: false, error: analyticsData.error?.message || 'Analytics API error' });
+        const rows = (analyticsData.rows || []).map(r => ({ videoId: r[0], views: r[1] }));
+        const totalViews = rows.reduce((s, r) => s + r.views, 0);
+        return res.json({ ok: true, rows, totalViews, startDate, endDate });
       }
 
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });
