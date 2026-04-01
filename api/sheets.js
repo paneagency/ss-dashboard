@@ -630,7 +630,10 @@ module.exports = async (req, res) => {
             'Origin': 'https://studio.youtube.com',
             'X-Origin': 'https://studio.youtube.com',
             'Referer': 'https://studio.youtube.com/',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'X-Goog-Authuser': '0',
+            'X-Youtube-Client-Name': '62',
+            'X-Youtube-Client-Version': '1.20260401.00.00',
           },
           body: JSON.stringify(payload)
         });
