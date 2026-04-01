@@ -9852,9 +9852,9 @@ async function loadYoutubeTab() {
   _ytLoaded = true;
   try {
     const [plResp, tracksResp, adsResp] = await Promise.all([
-      fetch('/api/youtube?mode=playlists').then(r => r.json()),
-      fetch('/api/youtube?mode=tracks').then(r => r.json()),
-      fetch('/api/youtube?mode=ads').then(r => r.json()),
+      fetch('/api/sheets?mode=yt-playlists').then(r => r.json()),
+      fetch('/api/sheets?mode=yt-tracks').then(r => r.json()),
+      fetch('/api/sheets?mode=yt-ads').then(r => r.json()),
     ]);
     _ytPlaylists = plResp.playlists || [];
     _ytAllTracks = tracksResp.tracks || [];
@@ -9914,7 +9914,7 @@ function renderYtPlaylists() {
 async function ytFetchPlThumb(pl) {
   if (!pl.playlistId) return;
   try {
-    const r = await fetch(`/api/youtube?mode=playlistInfo&playlistId=${encodeURIComponent(pl.playlistId)}`);
+    const r = await fetch(`/api/sheets?mode=yt-playlistInfo&playlistId=${encodeURIComponent(pl.playlistId)}`);
     const data = await r.json();
     if (!data.ok || !data.playlist?.thumbnail) return;
     const safeId = pl.playlistId.replace(/[^a-z0-9]/gi, '_');
@@ -9949,7 +9949,7 @@ async function openYtPlaylistDetail(playlistId) {
   document.getElementById('yt-track-ganancia-preview').textContent = '';
 
   try {
-    const r = await fetch(`/api/youtube?mode=tracks&playlistId=${encodeURIComponent(playlistId)}`);
+    const r = await fetch(`/api/sheets?mode=yt-tracks&playlistId=${encodeURIComponent(playlistId)}`);
     const data = await r.json();
     const tracks = data.tracks || [];
     // Update local cache
@@ -10036,7 +10036,7 @@ function ytCalcTrackGanancia() {
 async function deleteYtTrack(row, e) {
   e.stopPropagation();
   if (!confirm('¿Eliminar este track?')) return;
-  const r = await fetch('/api/youtube?mode=track', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row }) });
+  const r = await fetch('/api/sheets?mode=yt-track', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row }) });
   const data = await r.json();
   if (data.ok) {
     _ytAllTracks = _ytAllTracks.filter(t => t.row !== row);
@@ -10066,7 +10066,7 @@ async function ytPreviewPlaylist() {
   if (!id) { document.getElementById('yt-pl-preview').style.display = 'none'; return; }
   _ytPlPreviewTimer = setTimeout(async () => {
     try {
-      const r = await fetch(`/api/youtube?mode=playlistInfo&playlistId=${encodeURIComponent(id)}`);
+      const r = await fetch(`/api/sheets?mode=yt-playlistInfo&playlistId=${encodeURIComponent(id)}`);
       const data = await r.json();
       const el = document.getElementById('yt-pl-preview');
       if (data.ok && data.playlist) {
@@ -10098,7 +10098,7 @@ async function ytPreviewVideo() {
   if (!videoId) { el.style.display = 'none'; return; }
   _ytVideoPreviewTimer = setTimeout(async () => {
     try {
-      const r = await fetch(`/api/youtube?mode=videoInfo&videoId=${videoId}`);
+      const r = await fetch(`/api/sheets?mode=yt-videoInfo&videoId=${videoId}`);
       const data = await r.json();
       if (data.ok && data.video) {
         el.style.display = 'flex';
@@ -10126,7 +10126,7 @@ async function saveYtPlaylist() {
   const btn = document.getElementById('yt-save-pl-btn');
   btn.disabled = true; btn.textContent = 'Guardando...';
   try {
-    const r = await fetch('/api/youtube?mode=playlist', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const r = await fetch('/api/sheets?mode=yt-playlist', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playlistId, nombre, precioK: parseFloat(precioK)||0, gastoUsd: parseFloat(gastoUsd)||0, diarioUsd: parseFloat(diarioUsd)||0 }) });
     const data = await r.json();
     if (data.ok) {
@@ -10147,7 +10147,7 @@ async function saveYtTrack() {
   try {
     const cobrado = parseFloat(document.getElementById('yt-form-track-cobrado').value) || 0;
     const gasto = parseFloat(document.getElementById('yt-form-track-gasto').value) || 0;
-    const r = await fetch('/api/youtube?mode=track', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const r = await fetch('/api/sheets?mode=yt-track', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         playlistId: _ytActivePlaylist,
         artista,
@@ -10223,7 +10223,7 @@ async function saveYtAd() {
   const btn = document.getElementById('yt-save-ad-btn');
   btn.disabled = true; btn.textContent = 'Guardando...';
   try {
-    const r = await fetch('/api/youtube?mode=ad', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const r = await fetch('/api/sheets?mode=yt-ad', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         artista, videoUrl,
         objetivoK: parseFloat(document.getElementById('yt-form-ad-objetivo').value) || 0,
@@ -10237,7 +10237,7 @@ async function saveYtAd() {
     if (data.ok) {
       ['yt-form-ad-artista','yt-form-ad-url','yt-form-ad-objetivo','yt-form-ad-precio','yt-form-ad-inicio','yt-form-ad-fin','yt-form-ad-vendedor'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
       document.getElementById('yt-ad-video-preview').style.display = 'none';
-      const r2 = await fetch('/api/youtube?mode=ads').then(res => res.json());
+      const r2 = await fetch('/api/sheets?mode=yt-ads').then(res => res.json());
       _ytAds = r2.ads || [];
       renderYtAds();
     } else {
@@ -10247,7 +10247,7 @@ async function saveYtAd() {
 }
 
 async function ytArchiveAd(row) {
-  const r = await fetch('/api/youtube?mode=ad', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row, estado: 'finalizada' }) });
+  const r = await fetch('/api/sheets?mode=yt-ad', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row, estado: 'finalizada' }) });
   const data = await r.json();
   if (data.ok) {
     const ad = _ytAds.find(a => a.row === row);
@@ -10258,7 +10258,7 @@ async function ytArchiveAd(row) {
 
 async function deleteYtAd(row) {
   if (!confirm('¿Eliminar esta campaña de ads?')) return;
-  const r = await fetch('/api/youtube?mode=ad', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row }) });
+  const r = await fetch('/api/sheets?mode=yt-ad', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row }) });
   const data = await r.json();
   if (data.ok) { _ytAds = _ytAds.filter(a => a.row !== row); renderYtAds(); }
 }
@@ -10267,10 +10267,10 @@ async function refreshYtAdViews() {
   const btn = document.getElementById('yt-refresh-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Actualizando...'; }
   try {
-    const r = await fetch('/api/youtube?mode=refreshAdViews', { method: 'POST' });
+    const r = await fetch('/api/sheets?mode=yt-refreshAdViews', { method: 'POST' });
     const data = await r.json();
     if (data.ok) {
-      const r2 = await fetch('/api/youtube?mode=ads').then(res => res.json());
+      const r2 = await fetch('/api/sheets?mode=yt-ads').then(res => res.json());
       _ytAds = r2.ads || [];
       renderYtAds();
     } else {
