@@ -601,6 +601,12 @@
     }
     .camp-cal-day.today { border-color: var(--indigo); background: rgba(99,102,241,0.06); }
     .camp-cal-day:not(:empty):hover { border-color: var(--border2); }
+    #camp-cal-backdrop { display:none;position:fixed;inset:0;z-index:1099;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px) }
+    #camp-cal-backdrop.show { display:block }
+    #camp-cal-popover { transition:max-width 0.2s,width 0.2s,left 0.2s,top 0.2s,transform 0.2s }
+    #camp-cal-popover.expanded { left:50%!important;top:50%!important;transform:translate(-50%,-50%);max-width:600px!important;width:90vw!important;max-height:82vh;overflow-y:auto }
+    #camp-cal-popover.expanded .pop-pauta { max-height:none!important;border:none!important;padding-top:0!important }
+    #camp-cal-popover.expanded .pop-pauta-wrap { border-top:1px solid var(--border);padding-top:12px;margin-top:4px }
     .camp-cal-day-chip {
       font-size: 11px; border-radius: 5px; padding: 3px 6px;
       margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis;
@@ -1611,9 +1617,13 @@
     <div id="campanias-list"></div>
   </section>
 
-  <!-- Popover: detalle campaña calendario -->
+  <!-- Backdrop + Popover: detalle campaña calendario -->
+  <div id="camp-cal-backdrop" onclick="closeCampCalPopover()"></div>
   <div id="camp-cal-popover" style="display:none;position:fixed;z-index:1100;max-width:360px;width:90vw;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.5);padding:16px">
-    <button onclick="closeCampCalPopover()" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;line-height:1">✕</button>
+    <div style="position:absolute;top:10px;right:12px;display:flex;gap:6px;align-items:center">
+      <button id="camp-pop-expand-btn" onclick="toggleCampPopoverExpand()" title="Expandir" style="background:none;border:none;color:var(--muted);cursor:pointer;line-height:1;font-size:14px;padding:2px;border-radius:4px;transition:color 0.15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">⤢</button>
+      <button onclick="closeCampCalPopover()" style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;line-height:1">✕</button>
+    </div>
     <div id="camp-cal-popover-content"></div>
   </div>
 
@@ -6468,7 +6478,20 @@ let _campCalDetailRow = null;
 function closeCampCalPopover() {
   _campCalDetailRow = null;
   const pop = document.getElementById('camp-cal-popover');
-  if (pop) pop.style.display = 'none';
+  if (pop) { pop.style.display = 'none'; pop.classList.remove('expanded'); }
+  const bd = document.getElementById('camp-cal-backdrop');
+  if (bd) bd.classList.remove('show');
+}
+function toggleCampPopoverExpand() {
+  const pop = document.getElementById('camp-cal-popover');
+  const bd  = document.getElementById('camp-cal-backdrop');
+  const btn = document.getElementById('camp-pop-expand-btn');
+  if (!pop) return;
+  const expanding = !pop.classList.contains('expanded');
+  pop.classList.toggle('expanded', expanding);
+  bd.classList.toggle('show', expanding);
+  btn.textContent = expanding ? '⤡' : '⤢';
+  btn.title = expanding ? 'Reducir' : 'Expandir';
 }
 function showCampCalDetail(evt, row) {
   evt.stopPropagation();
@@ -6528,8 +6551,14 @@ function showCampCalDetail(evt, row) {
       ${!sinPago ? `<button class="btn btn-sm btn-renovar" onclick="renovarRapido(${row});closeCampCalPopover()">↻ Renovar</button>` : ''}
       <button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${row});closeCampCalPopover()">✕ No renueva</button>
     </div>
-    ${hasPauta ? `<div style="font-size:12px;color:var(--muted);white-space:pre-wrap;line-height:1.5;max-height:120px;overflow-y:auto;border-top:1px solid var(--border);padding-top:8px">${pautaEsc}</div>` : ''}
+    ${hasPauta ? `<div class="pop-pauta-wrap"><div class="pop-pauta" style="font-size:12px;color:var(--muted);white-space:pre-wrap;line-height:1.5;max-height:120px;overflow-y:auto">${pautaEsc}</div></div>` : ''}
   `;
+
+  // Reset estado expandido
+  pop.classList.remove('expanded');
+  document.getElementById('camp-cal-backdrop').classList.remove('show');
+  const expandBtn = document.getElementById('camp-pop-expand-btn');
+  if (expandBtn) { expandBtn.textContent = '⤢'; expandBtn.title = 'Expandir'; }
 
   // Posicionar cerca del chip
   pop.style.display = 'block';
