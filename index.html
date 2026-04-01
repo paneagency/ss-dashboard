@@ -1583,20 +1583,14 @@
   <!-- TAB: CUENTAS (admin only) -->
   <!-- TAB: CAMPAÑAS -->
   <section id="tab-campanias" class="tab-panel">
-    <div class="section-header">
-      <div>
-        <div class="section-title">📅 Campañas Activas</div>
-        <div class="section-subtitle">Promociones en curso y vencimientos</div>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <select id="camp-filter-vendor" class="filter-control" onchange="renderCampaniasTab()" style="min-width:160px">
-          <option value="all">Todos los vendedores</option>
-        </select>
-        <select id="camp-filter-rep" class="filter-control" onchange="renderCampaniasTab()" style="min-width:160px">
-          <option value="all">Todos los representantes</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="loadCampanias()">↻ Actualizar</button>
-      </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <select id="camp-filter-vendor" class="filter-control" onchange="renderCampaniasTab()" style="min-width:160px">
+        <option value="all">Todos los vendedores</option>
+      </select>
+      <select id="camp-filter-rep" class="filter-control" onchange="renderCampaniasTab()" style="min-width:160px">
+        <option value="all">Todos los representantes</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="loadCampanias()">↻ Actualizar</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;padding:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:24px;width:fit-content">
       <button class="btn btn-sm camp-view-btn active" data-view="calendario" onclick="setCampView('calendario')">📅 Calendario</button>
