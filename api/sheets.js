@@ -638,7 +638,10 @@ module.exports = async (req, res) => {
           body: JSON.stringify(payload)
         });
 
-        if (r.status === 401 || r.status === 403) return res.json({ ok: false, error: 'auth_expired', status: r.status });
+        if (r.status === 401 || r.status === 403) {
+          let body = ''; try { body = (await r.text()).slice(0, 400); } catch(_) {}
+          return res.json({ ok: false, error: 'auth_expired', status: r.status, detail: body });
+        }
         if (!r.ok) return res.json({ ok: false, error: `yt_status_${r.status}`, status: r.status });
         const data = await r.json();
         if (!data.zippedData) {
