@@ -5806,7 +5806,7 @@ function renderCampaniasTab() {
     data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0);
   } else if (_campView === 'sinpago') {
     data = data.filter(c => c.estado === 'pendiente_pago');
-    data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
+    data = [...data].sort((a, b) => new Date(b.fechaVencimiento) - new Date(a.fechaVencimiento));
   } else {
     data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
   }
