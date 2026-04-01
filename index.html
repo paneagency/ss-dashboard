@@ -1583,22 +1583,23 @@
   <!-- TAB: CUENTAS (admin only) -->
   <!-- TAB: CAMPAÑAS -->
   <section id="tab-campanias" class="tab-panel">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <select id="camp-filter-vendor" class="filter-control" onchange="renderCampaniasTab()" style="min-width:160px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;gap:6px;padding:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:24px">
+        <button class="btn btn-sm camp-view-btn active" data-view="calendario" onclick="setCampView('calendario')">📅 Calendario</button>
+        <button class="btn btn-sm camp-view-btn" data-view="hoy" onclick="setCampView('hoy')">⚡ Hoy</button>
+        <button class="btn btn-sm camp-view-btn" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
+        <button class="btn btn-sm camp-view-btn" data-view="vencidas" onclick="setCampView('vencidas')">⚠️ Vencidas</button>
+        <button class="btn btn-sm camp-view-btn" data-view="sinpago" onclick="setCampView('sinpago')">💳 Sin Pago</button>
+        <button class="btn btn-sm camp-view-btn" data-view="historial" onclick="setCampView('historial')">📋 Historial</button>
+      </div>
+      <div style="flex:1"></div>
+      <select id="camp-filter-vendor" class="filter-control" onchange="renderCampaniasTab()" style="min-width:140px;font-size:12px">
         <option value="all">Todos los vendedores</option>
       </select>
-      <select id="camp-filter-rep" class="filter-control" onchange="renderCampaniasTab()" style="min-width:160px">
+      <select id="camp-filter-rep" class="filter-control" onchange="renderCampaniasTab()" style="min-width:140px;font-size:12px">
         <option value="all">Todos los representantes</option>
       </select>
-      <button class="btn btn-ghost btn-sm" onclick="loadCampanias()">↻ Actualizar</button>
-    </div>
-    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;padding:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:24px;width:fit-content">
-      <button class="btn btn-sm camp-view-btn active" data-view="calendario" onclick="setCampView('calendario')">📅 Calendario</button>
-      <button class="btn btn-sm camp-view-btn" data-view="hoy" onclick="setCampView('hoy')">⚡ Hoy</button>
-      <button class="btn btn-sm camp-view-btn" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
-      <button class="btn btn-sm camp-view-btn" data-view="vencidas" onclick="setCampView('vencidas')">⚠️ Vencidas</button>
-      <button class="btn btn-sm camp-view-btn" data-view="sinpago" onclick="setCampView('sinpago')">💳 Sin Pago</button>
-      <button class="btn btn-sm camp-view-btn" data-view="historial" onclick="setCampView('historial')">📋 Historial</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadCampanias()" style="font-size:12px;padding:5px 12px;border-radius:20px">↻ Actualizar</button>
     </div>
     <div style="position:relative;margin-bottom:16px">
       <svg style="position:absolute;left:13px;top:50%;transform:translateY(-50%);opacity:0.35;pointer-events:none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
