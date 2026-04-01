@@ -10425,7 +10425,7 @@ async function ytStudioSync(btn) {
       if (data.error === 'auth_expired') {
         document.getElementById('yt-cookie-guide').style.display = '';
       } else {
-        alert(`Error al sincronizar: ${data.error}`);
+        alert(`Error (${data.status || '?'}): ${data.error}\n\n${data.detail || ''}`);
       }
       return;
     }
