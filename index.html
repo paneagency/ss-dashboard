@@ -10362,6 +10362,7 @@ function openYtPlSongsModal(playlistId) {
   document.getElementById('yt-plsongs-content').style.display = 'none';
   document.getElementById('yt-plsongs-thumb-img').style.display = 'none';
   document.getElementById('yt-import-panel').style.display = 'none';
+  document.getElementById('yt-cookie-guide').style.display = 'none';
   _ytPlSongsModel = null; _currentYtSongs = null;
   Promise.all([
     fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false, songs: [] })),
@@ -10411,6 +10412,7 @@ async function ytStudioSync(btn) {
   const playlistId = _currentYtPlaylistId;
   if (!playlistId) return;
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizando…'; }
+  document.getElementById('yt-cookie-guide').style.display = 'none';
   try {
     const r = await fetch('/api/sheets?mode=yt-studioSync', {
       method: 'POST',
@@ -10419,15 +10421,18 @@ async function ytStudioSync(btn) {
     });
     const data = await r.json();
     if (!data.ok) {
-      alert(`Error al sincronizar: ${data.error}`);
       if (btn) { btn.disabled = false; btn.textContent = '🔄 Obtener datos reales'; }
+      if (data.error === 'auth_expired') {
+        document.getElementById('yt-cookie-guide').style.display = '';
+      } else {
+        alert(`Error al sincronizar: ${data.error}`);
+      }
       return;
     }
-    // Re-open modal to show fresh data
     openYtPlSongsModal(playlistId);
   } catch(e) {
-    alert(`Error: ${e.message}`);
     if (btn) { btn.disabled = false; btn.textContent = '🔄 Obtener datos reales'; }
+    alert(`Error: ${e.message}`);
   }
 }
 
@@ -10689,6 +10694,28 @@ function calcYtPosition() {
             <div style="display:flex;gap:6px;align-items:center">
               <button id="yt-sync-btn" onclick="ytStudioSync(this)" style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);color:#ff6b6b;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#ff4444';this.style.background='rgba(255,68,68,0.15)'" onmouseout="this.style.borderColor='rgba(255,68,68,0.3)';this.style.background='rgba(255,68,68,0.08)'">🔄 Obtener datos reales</button>
               <button id="yt-import-btn" onclick="showYtImportPanel()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#4CAF50';this.style.color='#4CAF50'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">📋 Manual</button>
+            </div>
+          </div>
+          <!-- Cookie renewal guide (shown when auth expires) -->
+          <div id="yt-cookie-guide" style="display:none;margin-bottom:14px;background:rgba(255,152,0,0.06);border:1px solid rgba(255,152,0,0.3);border-radius:10px;padding:14px 16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <span style="font-size:18px">🔑</span>
+              <div>
+                <div style="font-size:13px;font-weight:700;color:#FFA726">Cookies de YouTube Studio vencidas</div>
+                <div style="font-size:11px;color:var(--muted)">Hay que renovarlas en Vercel (tarda ~3 minutos)</div>
+              </div>
+              <button onclick="document.getElementById('yt-cookie-guide').style.display='none'" style="margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1">✕</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text)">
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">1</span><span>Abrí <strong>studio.youtube.com</strong> (ya logueado) → cualquier playlist → Analytics</span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">2</span><span>Hacé click en el ícono de descarga <strong>↓</strong> (arriba a la derecha) → CSV</span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">3</span><span><strong>F12 → Network</strong> → click en <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px">csv_export?alt=json</code> → Headers → Request Headers</span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">4</span><span>Copiá el valor de <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px">cookie:</code> completo → pegalo en Vercel como <strong>YT_STUDIO_COOKIES</strong></span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">5</span><span>Del mismo string, buscá <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px">SAPISID=</code> y copiá solo su valor → pegalo como <strong>YT_SAPISID</strong></span></div>
+              <div style="display:flex;gap:10px;align-items:flex-start"><span style="background:#FFA726;color:#000;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex-shrink:0;margin-top:1px">6</span><span>Guardá en Vercel → volvé acá y hacé click en <strong>🔄 Obtener datos reales</strong></span></div>
+            </div>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,152,0,0.2)">
+              <a href="https://vercel.com/dashboard" target="_blank" style="background:#FFA726;color:#000;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block">Ir a Vercel →</a>
             </div>
           </div>
           <!-- Import panel -->

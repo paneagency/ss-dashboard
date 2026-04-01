@@ -633,9 +633,14 @@ module.exports = async (req, res) => {
           body: JSON.stringify(payload)
         });
 
+        if (r.status === 401 || r.status === 403) return res.json({ ok: false, error: 'auth_expired' });
         if (!r.ok) return res.json({ ok: false, error: `YouTube Studio respondió ${r.status}` });
         const data = await r.json();
-        if (!data.zippedData) return res.json({ ok: false, error: 'Sin zippedData en respuesta', detail: JSON.stringify(data).slice(0,300) });
+        if (!data.zippedData) {
+          const txt = JSON.stringify(data).slice(0, 300);
+          const isAuth = /401|403|UNAUTHENTICATED|invalidCredentials/i.test(txt);
+          return res.json({ ok: false, error: isAuth ? 'auth_expired' : 'Sin zippedData en respuesta', detail: txt });
+        }
 
         const zipBuf = Buffer.from(data.zippedData, 'base64');
         const files = parseZipBuffer(zipBuf);
