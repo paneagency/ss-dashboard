@@ -3547,6 +3547,16 @@ async function loadRepresentantes() {
     _representantes = d.representantes || [];
     window._representantesMap = {};
     _representantes.forEach(r => { window._representantesMap[r.nombre] = r; });
+    // Sync dropdown filtro campañas con lista actualizada
+    const repSel = document.getElementById('camp-filter-rep');
+    if (repSel && _campanias.length) {
+      const validReps = new Set(_representantes.map(r => r.nombre).filter(Boolean));
+      const reps = [...new Set(_campanias.map(c => c.representante).filter(r => r && validReps.has(r)))].sort();
+      const prev = repSel.value;
+      repSel.innerHTML = '<option value="all">Todos los representantes</option>' +
+        reps.map(r => `<option value="${r}">${r}</option>`).join('');
+      if (prev && reps.includes(prev)) repSel.value = prev;
+    }
   } catch(e) { _representantes = []; }
 }
 
