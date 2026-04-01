@@ -305,14 +305,14 @@ module.exports = async (req, res) => {
           if (r[0]) plNameMap[r[0].trim()] = r[1]?.trim() || r[0].trim();
         });
 
-        // Query 1: per-playlist views (views generated within each playlist session)
+        // Query: per-playlist analytics
         const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
         analyticsUrl.searchParams.set('ids', `channel==${channelId}`);
         analyticsUrl.searchParams.set('startDate', startDate);
         analyticsUrl.searchParams.set('endDate', endDate);
         analyticsUrl.searchParams.set('dimensions', 'playlist');
-        analyticsUrl.searchParams.set('metrics', 'views,playlistStarts,viewsPerPlaylistStart');
-        analyticsUrl.searchParams.set('sort', '-views');
+        analyticsUrl.searchParams.set('metrics', 'playlistStarts,viewsPerPlaylistStart,averageTimeInPlaylist');
+        analyticsUrl.searchParams.set('sort', '-playlistStarts');
         analyticsUrl.searchParams.set('maxResults', '50');
         const analyticsRes = await fetch(analyticsUrl.toString(), {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -322,37 +322,36 @@ module.exports = async (req, res) => {
           const errMsg = analyticsData.error?.message || JSON.stringify(analyticsData.error) || 'Analytics API error';
           return res.json({ ok: false, error: errMsg, channelId });
         }
-        const playlists = (analyticsData.rows || []).map(r => ({
-          playlistId: r[0], nombre: plNameMap[r[0]] || r[0],
-          views: r[1], starts: r[2], viewsPerStart: Math.round(r[3] * 10) / 10,
-        }));
-        const totalViews = playlists.reduce((s, p) => s + p.views, 0);
 
-        // Query 2: top songs within playlists (video dimension, only curated/playlist views)
-        const videosUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
-        videosUrl.searchParams.set('ids', `channel==${channelId}`);
-        videosUrl.searchParams.set('startDate', startDate);
-        videosUrl.searchParams.set('endDate', endDate);
-        videosUrl.searchParams.set('dimensions', 'video');
-        videosUrl.searchParams.set('metrics', 'views,estimatedMinutesWatched');
-        videosUrl.searchParams.set('filters', 'isCurated==1');
-        videosUrl.searchParams.set('sort', '-views');
-        videosUrl.searchParams.set('maxResults', '20');
-        const videosRes = await fetch(videosUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
-        const videosData = videosRes.ok ? await videosRes.json() : { rows: [] };
-        const rows = (videosData.rows || []).map(r => ({ videoId: r[0], views: r[1] }));
-        // Enrich with video titles
-        if (rows.length && process.env.YOUTUBE_API_KEY) {
+        // Build playlist name map: first from our sheet, then fetch missing from YouTube API
+        const rows = analyticsData.rows || [];
+        const unknownIds = rows.map(r => r[0]).filter(id => !plNameMap[id]);
+        if (unknownIds.length && process.env.YOUTUBE_API_KEY) {
           try {
-            const ids = rows.map(r => r.videoId).join(',');
-            const titlesData = await ytGet('videos', { part: 'snippet', id: ids });
-            const titleMap = {};
-            (titlesData.items || []).forEach(item => { titleMap[item.id] = item.snippet?.title || ''; });
-            rows.forEach(r => { r.title = titleMap[r.videoId] || ''; });
+            // Fetch in batches of 50
+            for (let i = 0; i < unknownIds.length; i += 50) {
+              const batch = unknownIds.slice(i, i + 50).join(',');
+              const plData = await ytGet('playlists', { part: 'snippet', id: batch });
+              (plData.items || []).forEach(item => {
+                plNameMap[item.id] = item.snippet?.title || item.id;
+              });
+            }
           } catch(_) {}
         }
 
-        return res.json({ ok: true, totalViews, playlists, rows, startDate, endDate, channelId });
+        // estimatedViews = starts × viewsPerStart (counts ALL videos incl. 3rd party)
+        const playlists = rows.map(r => ({
+          playlistId: r[0],
+          nombre: plNameMap[r[0]] || r[0],
+          starts: r[1],
+          viewsPerStart: Math.round(r[2] * 10) / 10,
+          avgMinutes: Math.round(r[3] * 10) / 10,
+          estimatedViews: Math.round(r[1] * r[2]),
+        })).sort((a, b) => b.estimatedViews - a.estimatedViews);
+
+        const totalViews = playlists.reduce((s, p) => s + p.estimatedViews, 0);
+
+        return res.json({ ok: true, totalViews, playlists, startDate, endDate, channelId });
       }
 
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });
