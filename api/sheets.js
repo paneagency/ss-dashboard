@@ -1,4 +1,6 @@
 const { google } = require('googleapis');
+const crypto = require('crypto');
+const zlib = require('zlib');
 
 const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
 const SHEET_GID      = 162664118;
@@ -16,6 +18,133 @@ async function kvGet(key) {
   });
   const data = await r.json();
   return data.result || null;
+}
+
+async function kvSet(key, value, exSeconds) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return;
+  const cmd = exSeconds
+    ? ['SET', key, JSON.stringify(value), 'EX', exSeconds]
+    : ['SET', key, JSON.stringify(value)];
+  await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(cmd),
+  });
+}
+
+// ── YouTube Studio helpers ─────────────────────────────────────────────────
+
+function computeSapisidHash(sapisid) {
+  const ts = Math.floor(Date.now() / 1000);
+  const h = crypto.createHash('sha1').update(`${ts} ${sapisid} https://studio.youtube.com`).digest('hex');
+  return `SAPISIDHASH ${ts}_${h}_u SAPISID1PHASH ${ts}_${h}_u SAPISID3PHASH ${ts}_${h}_u`;
+}
+
+function parseZipBuffer(buf) {
+  const files = {};
+  let pos = 0;
+  while (pos + 30 <= buf.length) {
+    if (buf[pos] !== 0x50 || buf[pos+1] !== 0x4B || buf[pos+2] !== 0x03 || buf[pos+3] !== 0x04) break;
+    const compression = buf.readUInt16LE(pos + 8);
+    const compressedSize = buf.readUInt32LE(pos + 18);
+    const nameLen = buf.readUInt16LE(pos + 26);
+    const extraLen = buf.readUInt16LE(pos + 28);
+    const name = buf.slice(pos + 30, pos + 30 + nameLen).toString('utf8');
+    const dataStart = pos + 30 + nameLen + extraLen;
+    if (compressedSize > 0) {
+      const compData = buf.slice(dataStart, dataStart + compressedSize);
+      try {
+        files[name] = compression === 8
+          ? zlib.inflateRawSync(compData).toString('utf8')
+          : compData.toString('utf8');
+      } catch(_) {}
+    }
+    pos = dataStart + compressedSize;
+  }
+  return files;
+}
+
+function parseCsvLine(line) {
+  const cols = [];
+  let inQ = false, cur = '';
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ; continue; }
+    if (ch === ',' && !inQ) { cols.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  cols.push(cur);
+  return cols;
+}
+
+function parseTableCsv(text) {
+  const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const header = parseCsvLine(lines[0]);
+  let viewsIdx = header.findIndex(h => /lista de reproducci/i.test(h) || /playlist.*view/i.test(h));
+  if (viewsIdx < 0) viewsIdx = 4;
+  const songs = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    const videoId = cols[0]?.trim();
+    if (!videoId || /^total$/i.test(videoId)) continue;
+    const views = parseInt(cols[viewsIdx]) || 0;
+    if (!views) continue;
+    songs.push({ videoId, title: cols[1]?.trim() || videoId, views });
+  }
+  return songs;
+}
+
+function buildYtStudioPayload(playlistId, channelId, startInt, endInt) {
+  const restricts = [
+    { dimension: { type: 'PLAYLIST' }, inValues: [playlistId] },
+    { dimension: { type: 'IN_CURATED_CONTENT' }, inValues: ['IN_CURATED_CONTENT'] }
+  ];
+  const timeRange = { dateIdRange: { inclusiveStart: startInt, exclusiveEnd: endInt } };
+  const base = { restricts, timeRange, currency: 'ARS', returnDataInNewFormat: true, limitedToBatchedData: false };
+  return {
+    exportQuery: {
+      joinRequest: {
+        nodes: [
+          { key: '0_TOTALS_SUMS_QUERY_KEY', value: { query: { dimensions: [], orders: [], metrics: [
+            { type: 'PLAYLIST_VIEWS', includeTotal: true },
+            { type: 'EXTERNAL_VIEWS', includeTotal: true },
+            { type: 'PLAYLIST_AVERAGE_VIEWS_PER_START', includeTotal: true },
+            { type: 'PLAYLIST_WATCH_TIME_HOURS', includeTotal: true },
+            { type: 'EXTERNAL_WATCH_TIME', includeTotal: true },
+            { type: 'AVERAGE_WATCH_TIME', includeTotal: true },
+            { type: 'SUBSCRIBERS_NET_CHANGE', includeTotal: true },
+            { type: 'TOTAL_ESTIMATED_EARNINGS', includeTotal: true }
+          ], ...base } } },
+          { key: '0_TOTALS_TIMELINE_QUERY_KEY', value: { query: { dimensions: [{ type: 'DAY' }], metrics: [{ type: 'PLAYLIST_VIEWS' }],
+            orders: [{ dimension: { type: 'DAY' }, direction: 'ANALYTICS_ORDER_DIRECTION_ASC' }], ...base } } },
+          { key: '0_TOP_ENTITIES_TABLE_QUERY_KEY', value: { query: {
+            dimensions: [{ type: 'VIDEO' }],
+            metrics: [
+              { type: 'PLAYLIST_VIEWS', asPercentagesOfTotal: true }, { type: 'PLAYLIST_VIEWS', includeTotal: true },
+              { type: 'EXTERNAL_VIEWS', asPercentagesOfTotal: true }, { type: 'EXTERNAL_VIEWS', includeTotal: true },
+              { type: 'PLAYLIST_AVERAGE_VIEWS_PER_START', asPercentagesOfTotal: true }, { type: 'PLAYLIST_AVERAGE_VIEWS_PER_START', includeTotal: true },
+              { type: 'PLAYLIST_WATCH_TIME_HOURS', asPercentagesOfTotal: true }, { type: 'PLAYLIST_WATCH_TIME_HOURS', includeTotal: true },
+              { type: 'EXTERNAL_WATCH_TIME', asPercentagesOfTotal: true }, { type: 'EXTERNAL_WATCH_TIME', includeTotal: true },
+              { type: 'AVERAGE_WATCH_TIME', asPercentagesOfTotal: true }, { type: 'AVERAGE_WATCH_TIME', includeTotal: true },
+              { type: 'SUBSCRIBERS_NET_CHANGE', asPercentagesOfTotal: true }, { type: 'SUBSCRIBERS_NET_CHANGE', includeTotal: true },
+              { type: 'TOTAL_ESTIMATED_EARNINGS', asPercentagesOfTotal: true }, { type: 'TOTAL_ESTIMATED_EARNINGS', includeTotal: true }
+            ],
+            orders: [{ metric: { type: 'PLAYLIST_VIEWS' }, direction: 'ANALYTICS_ORDER_DIRECTION_DESC' }],
+            limit: { pageSize: 500, pageOffset: 0 },
+            ...base
+          } } }
+        ],
+        context: { channelId },
+        trackingLabel: 'web_explore_playlist'
+      }
+    },
+    context: {
+      client: { clientName: 'WEB_CREATOR', clientVersion: '1.20260401.00.00', hl: 'es', gl: 'AR', utcOffsetMinutes: -180 },
+      user: { onBehalfOfUser: channelId }
+    }
+  };
 }
 
 async function ytGet(endpoint, params) {
@@ -461,6 +590,64 @@ module.exports = async (req, res) => {
         }).filter(s => s.videoId && s.title !== 'Private video' && s.title !== 'Deleted video');
 
         return res.json({ ok: true, hasRealViews: false, songs, plThumb, plTotalItems, analyticsError: analyticsData.error?.message });
+      }
+
+      // ── GET cached YouTube Studio real data ──────────────────────────────
+      if (req.method === 'GET' && ytMode === 'studioGet') {
+        const { playlistId } = req.query;
+        if (!playlistId) return res.json({ ok: false });
+        const raw = await kvGet(`ytStudio_${playlistId}`);
+        if (!raw) return res.json({ ok: false });
+        const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return res.json({ ok: true, ...data });
+      }
+
+      // ── POST sync YouTube Studio real data (csv_export API) ──────────────
+      if (req.method === 'POST' && ytMode === 'studioSync') {
+        const { playlistId } = req.body || {};
+        if (!playlistId) return res.json({ ok: false, error: 'missing playlistId' });
+        const cookies = process.env.YT_STUDIO_COOKIES;
+        const sapisid = process.env.YT_SAPISID;
+        const channelId = process.env.YT_CHANNEL_ID;
+        if (!cookies || !sapisid || !channelId)
+          return res.json({ ok: false, error: 'Configura YT_STUDIO_COOKIES, YT_SAPISID y YT_CHANNEL_ID en Vercel' });
+
+        const now = new Date();
+        const endInt = parseInt(now.toISOString().slice(0,10).replace(/-/g,''));
+        const startInt = parseInt(new Date(now - 28*24*60*60*1000).toISOString().slice(0,10).replace(/-/g,''));
+
+        const payload = buildYtStudioPayload(playlistId, channelId, startInt, endInt);
+        const authorization = computeSapisidHash(sapisid);
+
+        const r = await fetch('https://studio.youtube.com/youtubei/v1/yta_web/csv_export?alt=json', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': cookies,
+            'Authorization': authorization,
+            'Origin': 'https://studio.youtube.com',
+            'X-Origin': 'https://studio.youtube.com',
+            'Referer': 'https://studio.youtube.com/',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!r.ok) return res.json({ ok: false, error: `YouTube Studio respondió ${r.status}` });
+        const data = await r.json();
+        if (!data.zippedData) return res.json({ ok: false, error: 'Sin zippedData en respuesta', detail: JSON.stringify(data).slice(0,300) });
+
+        const zipBuf = Buffer.from(data.zippedData, 'base64');
+        const files = parseZipBuffer(zipBuf);
+        const tableKey = Object.keys(files).find(k => /tabla|table/i.test(k)) || Object.keys(files)[0];
+        if (!tableKey) return res.json({ ok: false, error: 'No se encontró archivo de tabla en el ZIP', files: Object.keys(files) });
+
+        const songs = parseTableCsv(files[tableKey]);
+        if (!songs.length) return res.json({ ok: false, error: 'No se pudieron parsear canciones del CSV' });
+
+        const result = { songs, updatedAt: new Date().toISOString(), startDate: String(startInt), endDate: String(endInt) };
+        await kvSet(`ytStudio_${playlistId}`, result, 7 * 24 * 3600);
+        return res.json({ ok: true, ...result });
       }
 
       return res.status(400).json({ error: `YouTube mode '${ytMode}' no reconocido` });

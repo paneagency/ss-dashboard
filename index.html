@@ -10363,16 +10363,27 @@ function openYtPlSongsModal(playlistId) {
   document.getElementById('yt-plsongs-thumb-img').style.display = 'none';
   document.getElementById('yt-import-panel').style.display = 'none';
   _ytPlSongsModel = null; _currentYtSongs = null;
-  fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}`)
-    .then(r => r.json())
-    .then(data => {
-      if (!data.ok) { document.getElementById('yt-plsongs-loading').textContent = `Error: ${data.error}`; return; }
-      _currentYtSongs = data.songs || [];
-      // Check localStorage for previously imported real data
-      const cached = ytImportLoad(playlistId);
-      renderYtPlSongs(data, pl, cached);
-    })
-    .catch(e => { document.getElementById('yt-plsongs-loading').textContent = `Error: ${e.message}`; });
+  Promise.all([
+    fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false, songs: [] })),
+    fetch(`/api/sheets?mode=yt-studioGet&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false }))
+  ]).then(([data, kvData]) => {
+    if (!data.ok) { document.getElementById('yt-plsongs-loading').textContent = `Error: ${data.error}`; return; }
+    _currentYtSongs = data.songs || [];
+    // Priority: KV real data > localStorage import
+    const localCached = ytImportLoad(playlistId);
+    let cached = localCached;
+    if (kvData?.ok && kvData.songs?.length) {
+      // Match KV songs with playlist positions using the loaded songs list
+      const posMap = {};
+      (_currentYtSongs || []).forEach(s => { if (s.videoId) posMap[s.videoId] = s.position; });
+      cached = {
+        rows: kvData.songs.map(s => ({ videoId: s.videoId, title: s.title, views: s.views, thumb: posMap[s.videoId] ? (_currentYtSongs.find(p => p.videoId === s.videoId)?.thumb || '') : '', position: posMap[s.videoId] || null })),
+        date: kvData.updatedAt?.slice(0,10) || '',
+        source: 'kv'
+      };
+    }
+    renderYtPlSongs(data, pl, cached);
+  }).catch(e => { document.getElementById('yt-plsongs-loading').textContent = `Error: ${e.message}`; });
 }
 
 function closeYtPlSongsModal() {
@@ -10394,6 +10405,30 @@ function ytImportClear() {
   const pl = (_ytAnalyticsData?.playlists || []).find(p => p.playlistId === _currentYtPlaylistId);
   // Reload from scratch
   openYtPlSongsModal(_currentYtPlaylistId);
+}
+
+async function ytStudioSync(btn) {
+  const playlistId = _currentYtPlaylistId;
+  if (!playlistId) return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizando…'; }
+  try {
+    const r = await fetch('/api/sheets?mode=yt-studioSync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlistId })
+    });
+    const data = await r.json();
+    if (!data.ok) {
+      alert(`Error al sincronizar: ${data.error}`);
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Obtener datos reales'; }
+      return;
+    }
+    // Re-open modal to show fresh data
+    openYtPlSongsModal(playlistId);
+  } catch(e) {
+    alert(`Error: ${e.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Obtener datos reales'; }
+  }
 }
 
 function showYtImportPanel() {
@@ -10532,9 +10567,13 @@ function renderYtPlSongs(data, plAnalytics, cached) {
   const importBtn = document.getElementById('yt-import-btn');
 
   if (cached?.rows?.length) {
-    // ── REAL DATA from YouTube Studio import ──
-    if (tableLabel) tableLabel.innerHTML = `Vistas reales · YouTube Studio <span style="background:rgba(76,175,80,0.15);color:#4CAF50;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">DATOS REALES · ${cached.date || ''}</span> <button onclick="ytImportClear()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 4px" title="Borrar importación">✕</button>`;
-    if (importBtn) importBtn.textContent = '↻ Actualizar datos';
+    // ── REAL DATA from YouTube Studio (KV auto-sync or manual import) ──
+    const isAutoSync = cached.source === 'kv';
+    const sourceLabel = isAutoSync ? 'AUTO-SYNC' : 'IMPORTADO';
+    if (tableLabel) tableLabel.innerHTML = `Vistas reales · YouTube Studio <span style="background:rgba(76,175,80,0.15);color:#4CAF50;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">${sourceLabel} · ${cached.date || ''}</span>${isAutoSync ? '' : ` <button onclick="ytImportClear()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 4px" title="Borrar importación">✕</button>`}`;
+    const syncBtn = document.getElementById('yt-sync-btn');
+    if (syncBtn) syncBtn.textContent = '🔄 Re-sincronizar';
+    if (importBtn) importBtn.textContent = '📋 Manual';
     const rows = cached.rows;
     const total = rows.reduce((s, r) => s + r.views, 0);
     const maxV = rows[0]?.views || 1;
@@ -10647,7 +10686,10 @@ function calcYtPosition() {
         <div style="padding:14px 20px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
             <div id="yt-plsongs-table-label" style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em">Canciones en playlist</div>
-            <button id="yt-import-btn" onclick="showYtImportPanel()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#4CAF50';this.style.color='#4CAF50'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">📋 Importar YouTube Studio</button>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button id="yt-sync-btn" onclick="ytStudioSync(this)" style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);color:#ff6b6b;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#ff4444';this.style.background='rgba(255,68,68,0.15)'" onmouseout="this.style.borderColor='rgba(255,68,68,0.3)';this.style.background='rgba(255,68,68,0.08)'">🔄 Obtener datos reales</button>
+              <button id="yt-import-btn" onclick="showYtImportPanel()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#4CAF50';this.style.color='#4CAF50'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">📋 Manual</button>
+            </div>
           </div>
           <!-- Import panel -->
           <div id="yt-import-panel" style="display:none;margin-bottom:14px;background:rgba(76,175,80,0.05);border:1px solid rgba(76,175,80,0.2);border-radius:10px;padding:12px 14px">
