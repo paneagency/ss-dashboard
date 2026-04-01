@@ -617,13 +617,15 @@ module.exports = async (req, res) => {
         const startInt = parseInt(new Date(now - 28*24*60*60*1000).toISOString().slice(0,10).replace(/-/g,''));
 
         const payload = buildYtStudioPayload(playlistId, channelId, startInt, endInt);
-        const authorization = computeSapisidHash(sapisid);
+        const cleanCookies = cookies.replace(/[\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim();
+        const cleanSapisid = sapisid.replace(/[\r\n\s]/g, '').trim();
+        const authorization = computeSapisidHash(cleanSapisid);
 
         const r = await fetch('https://studio.youtube.com/youtubei/v1/yta_web/csv_export?alt=json', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Cookie': cookies,
+            'Cookie': cleanCookies,
             'Authorization': authorization,
             'Origin': 'https://studio.youtube.com',
             'X-Origin': 'https://studio.youtube.com',
