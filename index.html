@@ -1599,6 +1599,7 @@
       <select id="camp-filter-rep" class="filter-control" onchange="renderCampaniasTab()" style="min-width:140px;font-size:12px">
         <option value="all">Todos los representantes</option>
       </select>
+      <button id="btn-copiar-vencidas" onclick="copiarVencidas()" style="display:none;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);color:var(--red);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(248,81,73,0.18)'" onmouseout="this.style.background='rgba(248,81,73,0.1)'">📋 Copiar Deuda</button>
       <button class="btn btn-ghost btn-sm" onclick="loadCampanias()" style="font-size:12px;padding:5px 12px;border-radius:20px">↻ Actualizar</button>
     </div>
     <div style="position:relative;margin-bottom:16px">
@@ -5770,9 +5771,12 @@ function renderCampaniasTab() {
 
   // Vista historial: flujo separado
   if (_campView === 'historial') {
+    document.getElementById('btn-copiar-vencidas').style.display = 'none';
     renderCampHistorial();
     return;
   }
+
+  document.getElementById('btn-copiar-vencidas').style.display = _campView === 'vencidas' ? 'inline-flex' : 'none';
 
   const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
   const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
@@ -6584,6 +6588,29 @@ function toggleCampExpand(idx, tipo) {
     document.getElementById(`camp-expand-${t}-${idx}`)?.classList.remove('open');
   });
   el.classList.toggle('open');
+}
+
+function copiarVencidas() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
+  const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
+  const searchQ      = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
+  let data = (_campanias || []).filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0);
+  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor);
+  if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
+  if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
+  data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
+  if (!data.length) { showToast('No hay vencidas para copiar', 'error'); return; }
+  const lines = data.map(c => {
+    const d = new Date(c.fechaVencimiento + 'T12:00:00');
+    const fecha = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    const precio = c.precio ? `${parseFloat(c.precio).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0})} usd` : '—';
+    return `• ${fecha}- ${c.artista} ${precio}`;
+  }).join('\n');
+  const text = `*VENCIMIENTOS*\n\n${lines}`;
+  navigator.clipboard.writeText(text)
+    .then(() => showToast('Deuda copiada al portapapeles', 'success'))
+    .catch(() => showToast('No se pudo copiar', 'error'));
 }
 
 function copiarPauta(idx) {
