@@ -84,8 +84,8 @@ module.exports = async (req, res) => {
       const ytMode = mode.slice(3); // strip 'yt-' prefix
 
       if (req.method === 'GET' && ytMode === 'playlists') {
-        const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:F' }).catch(() => ({ data: { values: [] } }));
-        const playlists = (resp.data.values || []).slice(1).map((r, i) => ({ row: i+2, playlistId: r[0]?.trim()||'', nombre: r[1]?.trim()||'', precioK: parseFloat(r[2])||0, gastoArs: parseFloat(r[3])||0, gastoUsd: parseFloat(r[4])||0, diarioUsd: parseFloat(r[5])||0 })).filter(p => p.playlistId);
+        const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:G' }).catch(() => ({ data: { values: [] } }));
+        const playlists = (resp.data.values || []).slice(1).map((r, i) => ({ row: i+2, playlistId: r[0]?.trim()||'', nombre: r[1]?.trim()||'', precioK: parseFloat(r[2])||0, gastoArs: parseFloat(r[3])||0, gastoUsd: parseFloat(r[4])||0, diarioUsd: parseFloat(r[5])||0, imagen: r[6]?.trim()||'' })).filter(p => p.playlistId);
         return res.json({ ok: true, playlists });
       }
 
@@ -123,10 +123,20 @@ module.exports = async (req, res) => {
       }
 
       if (req.method === 'POST' && ytMode === 'playlist') {
-        const { playlistId, nombre, precioK, gastoArs, gastoUsd, diarioUsd } = req.body || {};
+        let { playlistId, nombre, precioK, gastoArs, gastoUsd, diarioUsd, imagen } = req.body || {};
         if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
-        await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:F', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', resource: { values: [[playlistId.trim(), nombre||'', precioK||'', gastoArs||'', gastoUsd||'', diarioUsd||'']] } });
-        return res.json({ ok: true });
+        playlistId = playlistId.trim();
+        // Auto-fetch thumbnail if not provided and API key is available
+        if (!imagen && process.env.YOUTUBE_API_KEY) {
+          try {
+            const d = await ytGet('playlists', { part: 'snippet', id: playlistId });
+            const t = d.items?.[0]?.snippet?.thumbnails;
+            imagen = t?.standard?.url || t?.high?.url || t?.medium?.url || t?.default?.url || '';
+            if (!nombre) nombre = d.items?.[0]?.snippet?.title || '';
+          } catch(_) {}
+        }
+        await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:G', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', resource: { values: [[playlistId, nombre||'', precioK||'', gastoArs||'', gastoUsd||'', diarioUsd||'', imagen||'']] } });
+        return res.json({ ok: true, imagen: imagen||'' });
       }
 
       if (req.method === 'POST' && ytMode === 'track') {

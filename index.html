@@ -9877,6 +9877,23 @@ function setYtSubTab(tab) {
 }
 
 // ── Playlists ─────────────────────────────────────────────────
+function extractYtPlaylistId(input) {
+  if (!input) return '';
+  input = input.trim();
+  // Try URL parsing first (handles any youtube.com or youtu.be link)
+  try {
+    const url = new URL(input.includes('://') ? input : 'https://' + input);
+    const listParam = url.searchParams.get('list');
+    if (listParam) return listParam;
+  } catch(_) {}
+  // Fallback regex for list= in any string
+  const m = input.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  if (m) return m[1];
+  // Assume it's a raw ID if it has no spaces and reasonable length
+  if (!input.includes(' ') && input.length > 5) return input;
+  return input;
+}
+
 function renderYtPlaylists() {
   const grid = document.getElementById('yt-playlist-grid');
   if (!_ytPlaylists.length) {
@@ -9887,10 +9904,12 @@ function renderYtPlaylists() {
     const tracks = _ytAllTracks.filter(t => t.playlistId === pl.playlistId);
     const totalCobrado = tracks.reduce((s, t) => s + (t.cobrado || 0), 0);
     const totalGanancia = tracks.reduce((s, t) => s + (t.ganancia || 0), 0);
-    const safeId = pl.playlistId.replace(/[^a-z0-9]/gi, '_');
+    const thumbHtml = pl.imagen
+      ? `<div style="width:100%;aspect-ratio:16/9;overflow:hidden"><img src="${pl.imagen}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"></div>`
+      : `<div style="width:100%;aspect-ratio:16/9;background:linear-gradient(135deg,#ff4444,#880000);display:flex;align-items:center;justify-content:center;font-size:36px;color:rgba(255,255,255,0.7)">▶</div>`;
     return `
       <div class="yt-pl-card" onclick="openYtPlaylistDetail('${pl.playlistId}')">
-        <div id="yt-thumb-${safeId}" style="width:100%;aspect-ratio:16/9;background:linear-gradient(135deg,#ff4444,#880000);display:flex;align-items:center;justify-content:center;font-size:36px;color:rgba(255,255,255,0.7)">▶</div>
+        ${thumbHtml}
         <div style="padding:12px 14px 14px">
           <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pl.nombre || pl.playlistId}</div>
           <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted)">
@@ -9907,30 +9926,13 @@ function renderYtPlaylists() {
       </div>
     `;
   }).join('');
-  // Fetch thumbnails async
-  _ytPlaylists.forEach(pl => ytFetchPlThumb(pl));
 }
 
-async function ytFetchPlThumb(pl) {
-  if (!pl.playlistId) return;
-  try {
-    const r = await fetch(`/api/sheets?mode=yt-playlistInfo&playlistId=${encodeURIComponent(pl.playlistId)}`);
-    const data = await r.json();
-    if (!data.ok || !data.playlist?.thumbnail) return;
-    const safeId = pl.playlistId.replace(/[^a-z0-9]/gi, '_');
-    const el = document.getElementById(`yt-thumb-${safeId}`);
-    if (el) {
-      el.style.cssText = 'width:100%;aspect-ratio:16/9;overflow:hidden';
-      el.innerHTML = `<img src="${data.playlist.thumbnail}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block">`;
-    }
-    // Update detail modal header if open
-    if (_ytActivePlaylist === pl.playlistId) {
-      const dThumb = document.getElementById('yt-detail-thumb');
-      if (dThumb) dThumb.innerHTML = `<img src="${data.playlist.thumbnail}" style="width:64px;height:48px;object-fit:cover">`;
-      const dStats = document.getElementById('yt-detail-stats');
-      if (dStats && data.playlist.itemCount) dStats.textContent = `${data.playlist.itemCount} videos`;
-    }
-  } catch(_) {}
+function ytSetThumbInDetail(imagen) {
+  const dThumb = document.getElementById('yt-detail-thumb');
+  if (!dThumb) return;
+  dThumb.style.cssText = 'width:64px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0';
+  dThumb.innerHTML = `<img src="${imagen}" style="width:64px;height:48px;object-fit:cover;display:block">`;
 }
 
 // ── Playlist detail modal ─────────────────────────────────────
@@ -9938,8 +9940,12 @@ async function openYtPlaylistDetail(playlistId) {
   _ytActivePlaylist = playlistId;
   const pl = _ytPlaylists.find(p => p.playlistId === playlistId) || {};
   document.getElementById('yt-detail-title').textContent = pl.nombre || playlistId;
-  document.getElementById('yt-detail-thumb').innerHTML = '▶';
-  document.getElementById('yt-detail-thumb').style.cssText = 'width:64px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0;background:linear-gradient(135deg,#ff4444,#cc0000);display:flex;align-items:center;justify-content:center;font-size:22px';
+  if (pl.imagen) {
+    ytSetThumbInDetail(pl.imagen);
+  } else {
+    document.getElementById('yt-detail-thumb').innerHTML = '▶';
+    document.getElementById('yt-detail-thumb').style.cssText = 'width:64px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0;background:linear-gradient(135deg,#ff4444,#cc0000);display:flex;align-items:center;justify-content:center;font-size:22px';
+  }
   document.getElementById('yt-detail-stats').textContent = '';
   document.getElementById('yt-detail-tracks').innerHTML = '<div style="color:var(--muted);padding:30px;text-align:center;font-size:13px">Cargando...</div>';
   document.getElementById('yt-detail-footer').innerHTML = '';
@@ -9959,8 +9965,6 @@ async function openYtPlaylistDetail(playlistId) {
   } catch(e) {
     document.getElementById('yt-detail-tracks').innerHTML = `<div style="color:#ef4444;padding:20px;text-align:center">Error: ${e.message}</div>`;
   }
-  // Fetch thumbnail async
-  ytFetchPlThumb(pl);
 }
 
 function renderYtTracksTable(tracks) {
@@ -10062,8 +10066,11 @@ function closeYtNewPlModal() {
 
 async function ytPreviewPlaylist() {
   clearTimeout(_ytPlPreviewTimer);
-  const id = document.getElementById('yt-form-pl-id').value.trim();
-  if (!id) { document.getElementById('yt-pl-preview').style.display = 'none'; return; }
+  const raw = document.getElementById('yt-form-pl-id').value.trim();
+  if (!raw) { document.getElementById('yt-pl-preview').style.display = 'none'; return; }
+  // Extract actual playlist ID from URL if needed
+  const id = extractYtPlaylistId(raw);
+  if (id !== raw) document.getElementById('yt-form-pl-id').value = id;
   _ytPlPreviewTimer = setTimeout(async () => {
     try {
       const r = await fetch(`/api/sheets?mode=yt-playlistInfo&playlistId=${encodeURIComponent(id)}`);
@@ -10462,8 +10469,8 @@ async function refreshYtAdViews() {
     <div style="padding:20px 22px">
       <div style="margin-bottom:14px">
         <label class="yt-field-label">ID de la Playlist YouTube *</label>
-        <input id="yt-form-pl-id" class="yt-input" placeholder="PLxxxxxxxxxxxxxxxxxxxxx" oninput="ytPreviewPlaylist()">
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">Encontralo en la URL: youtube.com/playlist?list=<strong>ESTE_VALOR</strong></div>
+        <input id="yt-form-pl-id" class="yt-input" placeholder="Pegá la URL o el ID de la playlist" oninput="ytPreviewPlaylist()">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Acepta cualquier link de YouTube — se extrae el ID automáticamente</div>
       </div>
       <div id="yt-pl-preview" style="display:none;margin-bottom:14px;padding:10px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;gap:12px"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
