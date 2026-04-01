@@ -9916,6 +9916,7 @@ function renderYtPlaylists() {
             <span>🎵 ${tracks.length} track${tracks.length !== 1 ? 's' : ''}</span>
             ${pl.precioK ? `<span style="color:#ff6666">$${pl.precioK}/K</span>` : ''}
           </div>
+          ${pl.vistas ? `<div style="margin-top:5px;font-size:12px;color:var(--muted)">👁 <strong style="color:var(--text)">${pl.vistas.toLocaleString('es-AR')}</strong> vistas</div>` : ''}
           ${totalCobrado ? `
             <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px">
               <span style="color:var(--muted)">Cobrado</span>
@@ -10274,15 +10275,20 @@ async function refreshYtAdViews() {
   const btn = document.getElementById('yt-refresh-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Actualizando...'; }
   try {
-    const r = await fetch('/api/sheets?mode=yt-refreshAdViews', { method: 'POST' });
-    const data = await r.json();
-    if (data.ok) {
-      const r2 = await fetch('/api/sheets?mode=yt-ads').then(res => res.json());
-      _ytAds = r2.ads || [];
-      renderYtAds();
-    } else {
-      alert(data.error || 'Error al actualizar vistas');
-    }
+    // Refresh playlists views + ads views in parallel
+    const [plRes, adRes] = await Promise.all([
+      fetch('/api/sheets?mode=yt-refreshPlViews', { method: 'POST' }).then(r => r.json()).catch(() => ({})),
+      fetch('/api/sheets?mode=yt-refreshAdViews', { method: 'POST' }).then(r => r.json()).catch(() => ({})),
+    ]);
+    // Reload both
+    const [plData, adsData] = await Promise.all([
+      fetch('/api/sheets?mode=yt-playlists').then(r => r.json()),
+      fetch('/api/sheets?mode=yt-ads').then(r => r.json()),
+    ]);
+    _ytPlaylists = plData.playlists || [];
+    _ytAds = adsData.ads || [];
+    renderYtPlaylists();
+    renderYtAds();
   } catch(e) { alert(e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '↻ Actualizar vistas'; } }
 }

@@ -84,8 +84,8 @@ module.exports = async (req, res) => {
       const ytMode = mode.slice(3); // strip 'yt-' prefix
 
       if (req.method === 'GET' && ytMode === 'playlists') {
-        const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:G' }).catch(() => ({ data: { values: [] } }));
-        const playlists = (resp.data.values || []).slice(1).map((r, i) => ({ row: i+2, playlistId: r[0]?.trim()||'', nombre: r[1]?.trim()||'', precioK: parseFloat(r[2])||0, gastoArs: parseFloat(r[3])||0, gastoUsd: parseFloat(r[4])||0, diarioUsd: parseFloat(r[5])||0, imagen: r[6]?.trim()||'' })).filter(p => p.playlistId);
+        const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:H' }).catch(() => ({ data: { values: [] } }));
+        const playlists = (resp.data.values || []).slice(1).map((r, i) => ({ row: i+2, playlistId: r[0]?.trim()||'', nombre: r[1]?.trim()||'', precioK: parseFloat(r[2])||0, gastoArs: parseFloat(r[3])||0, gastoUsd: parseFloat(r[4])||0, diarioUsd: parseFloat(r[5])||0, imagen: r[6]?.trim()||'', vistas: parseInt(r[7])||0 })).filter(p => p.playlistId);
         return res.json({ ok: true, playlists });
       }
 
@@ -181,6 +181,41 @@ module.exports = async (req, res) => {
         if (sheetId === null) return res.status(404).json({ error: `Hoja ${sheetMap[ytMode]} no encontrada` });
         await sheets.spreadsheets.batchUpdate({ spreadsheetId: SPREADSHEET_ID, resource: { requests: [{ deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: row-1, endIndex: row } } }] } });
         return res.json({ ok: true });
+      }
+
+      if (req.method === 'POST' && ytMode === 'refreshPlViews') {
+        if (!process.env.YOUTUBE_API_KEY) return res.status(400).json({ error: 'YOUTUBE_API_KEY no configurado' });
+        const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:H' }).catch(() => ({ data: { values: [] } }));
+        const pls = (resp.data.values || []).slice(1).map((r, i) => ({ row: i+2, playlistId: r[0]?.trim()||'' })).filter(p => p.playlistId);
+        let updated = 0;
+        for (const pl of pls) {
+          try {
+            // 1. Fetch all video IDs from playlist (paginated, max 50/page)
+            const videoIds = [];
+            let pageToken = '';
+            do {
+              const params = { part: 'contentDetails', playlistId: pl.playlistId, maxResults: '50' };
+              if (pageToken) params.pageToken = pageToken;
+              const d = await ytGet('playlistItems', params);
+              (d.items || []).forEach(item => { const id = item.contentDetails?.videoId; if (id) videoIds.push(id); });
+              pageToken = d.nextPageToken || '';
+            } while (pageToken);
+            if (!videoIds.length) continue;
+            // 2. Fetch view counts in batches of 50
+            let totalViews = 0;
+            for (let i = 0; i < videoIds.length; i += 50) {
+              const batch = videoIds.slice(i, i + 50);
+              const vd = await ytGet('videos', { part: 'statistics', id: batch.join(',') });
+              (vd.items || []).forEach(item => { totalViews += parseInt(item.statistics?.viewCount || 0); });
+              if (i + 50 < videoIds.length) await new Promise(r => setTimeout(r, 150));
+            }
+            // 3. Save to column H
+            await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: `YouTubePlaylists!H${pl.row}`, valueInputOption: 'RAW', resource: { values: [[totalViews]] } });
+            updated++;
+            await new Promise(r => setTimeout(r, 200));
+          } catch(_) {}
+        }
+        return res.json({ ok: true, updated });
       }
 
       if (req.method === 'POST' && ytMode === 'refreshAdViews') {
