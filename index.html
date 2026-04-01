@@ -10454,15 +10454,56 @@ function importYtStudioData() {
   renderYtPlSongs(baseData, pl, { rows, date: new Date().toISOString().slice(0,10) });
 }
 
-// Theoretical position model using Zipf power-law calibrated from playlist totals
-function buildTheoreticalModel(totalViews, numSongs) {
-  const n = Math.max(numSongs, 50);
-  // Two-segment alpha: steeper for first 20%, flatter for the rest
-  // Calibrated empirically from real playlist data
-  const a = n <= 30 ? 0.72 : n <= 60 ? 0.68 : 0.62;
-  const weights = Array.from({ length: n }, (_, i) => Math.pow(i + 1, -a));
-  const total = weights.reduce((s, w) => s + w, 0);
-  return (pos) => pos > 0 ? Math.max(0, Math.round(totalViews * Math.pow(pos, -a) / total)) : 0;
+// Empirical position model calibrated from 4 real Modo List playlists (exported from YouTube Studio)
+// Key insight: rank1_fraction ≈ 1/VPS (views per start strongly predicts distribution shape)
+const YT_REFERENCE_PLAYLISTS = [
+  { name:'Éxitos Argentina', vps:3.63, n:50, total:96510,
+    views:[26454,8946,7213,6089,4713,3696,3319,2513,2138,2023,1923,1909,1860,1631,1615,1272,1229,1126,997,896,876,799,724,723,720,640,629,608,588,576,536,518,517,502,483,475,463,454,443,423,411,409,404,333,326,310,279,266,257,256] },
+  { name:'Rock Nacional', vps:5.41, n:16, total:199797,
+    views:[35101,19534,17532,15455,14316,12541,11557,11060,10679,8921,8571,7961,7635,6918,6218,5798] },
+  { name:'Éxitos Internacionales', vps:8.41, n:50, total:197425,
+    views:[22262,11922,10163,9325,8934,7716,6781,6600,6595,6375,6113,5469,4906,4569,4294,4029,3900,3737,3657,3485,3309,2971,2826,2752,2574,2460,2450,2170,2017,1965,1903,1860,1791,1743,1739,1703,1688,1651,1582,1580,1553,1400,1392,1384,1261,1224,1165,1144,1124,1095] },
+  { name:'Un Poco de Ruido 2026', vps:9.82, n:53, total:557520,
+    views:[57878,40131,36036,33237,30991,28898,27208,25410,23776,21859,20278,15188,12024,11077,10376,10037,9581,9038,8516,8146,7322,6418,5963,5568,5285,5074,4927,4680,4428,4187,4090,3903,3766,3647,3608,3471,3323,3257,3064,2906,2629,2536,2432,2343,2288,2199,2127,2089,2086,2077,2061,2046,2035] }
+];
+
+function buildEmpiricalModel(totalViews, numSongs, viewsPerStart) {
+  const vps = viewsPerStart || 5;
+  const refs = YT_REFERENCE_PLAYLISTS; // sorted by vps ascending
+  // Find bracketing reference playlists
+  let lower = refs[0], upper = refs[refs.length - 1], t = 0;
+  if (vps <= refs[0].vps) {
+    lower = upper = refs[0]; t = 0;
+  } else if (vps >= refs[refs.length - 1].vps) {
+    lower = upper = refs[refs.length - 1]; t = 0;
+  } else {
+    for (let i = 0; i < refs.length - 1; i++) {
+      if (vps >= refs[i].vps && vps <= refs[i + 1].vps) {
+        lower = refs[i]; upper = refs[i + 1];
+        t = (vps - lower.vps) / (upper.vps - lower.vps);
+        break;
+      }
+    }
+  }
+  // Interpolate normalized view fraction at percentile position p ∈ [0,1]
+  function getRefFraction(ref, p) {
+    const exactIdx = Math.max(0, Math.min(0.9999, p)) * (ref.n - 1);
+    const lo = Math.floor(exactIdx), hi = Math.min(lo + 1, ref.n - 1);
+    const f = exactIdx - lo;
+    return (ref.views[lo] + (ref.views[hi] - ref.views[lo]) * f) / ref.total;
+  }
+  const n = Math.max(numSongs, 1);
+  const rawWeights = Array.from({ length: n }, (_, i) => {
+    const p = i / Math.max(n - 1, 1);
+    const fL = getRefFraction(lower, p);
+    const fU = lower === upper ? fL : getRefFraction(upper, p);
+    return fL + (fU - fL) * t;
+  });
+  const sumW = rawWeights.reduce((s, w) => s + w, 0);
+  return (pos) => {
+    const idx = Math.min(pos - 1, n - 1);
+    return Math.max(0, Math.round(totalViews * (rawWeights[idx] || rawWeights[n - 1]) / sumW));
+  };
 }
 
 function renderYtPlSongs(data, plAnalytics, cached) {
@@ -10500,7 +10541,7 @@ function renderYtPlSongs(data, plAnalytics, cached) {
     // Build model from real data
     const posData = rows.filter(r => r.position && r.views > 0).sort((a,b) => a.position - b.position).map(r => ({ position: r.position, views: r.views }));
     _ytPlSongsModel = fitPositionModel(posData);
-    if (!_ytPlSongsModel) _ytPlSongsModel = buildTheoreticalModel(totalEstViews, numSongs);
+    if (!_ytPlSongsModel) _ytPlSongsModel = buildEmpiricalModel(totalEstViews, numSongs, plAnalytics?.viewsPerStart);
     document.getElementById('yt-plsongs-table').innerHTML = rows.map((row, i) => {
       const pct = total ? ((row.views / total) * 100).toFixed(1) : 0;
       const barW = Math.round((row.views / maxV) * 100);
@@ -10524,7 +10565,7 @@ function renderYtPlSongs(data, plAnalytics, cached) {
     if (tableLabel) tableLabel.innerHTML = `Canciones · vistas estimadas por posición <span style="background:rgba(255,165,0,0.12);color:#FFA726;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">ESTIMADO</span>`;
     if (importBtn) importBtn.textContent = '📋 Importar YouTube Studio';
     const songsSorted = [...songs].sort((a, b) => a.position - b.position);
-    _ytPlSongsModel = totalEstViews > 0 ? buildTheoreticalModel(totalEstViews, numSongs) : null;
+    _ytPlSongsModel = totalEstViews > 0 ? buildEmpiricalModel(totalEstViews, numSongs, plAnalytics?.viewsPerStart) : null;
     document.getElementById('yt-plsongs-table').innerHTML = songsSorted.map(s => {
       const estViews = _ytPlSongsModel ? _ytPlSongsModel(s.position) : null;
       const pct = totalEstViews && estViews ? ((estViews / totalEstViews) * 100).toFixed(1) : null;
