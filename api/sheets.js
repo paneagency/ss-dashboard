@@ -491,9 +491,7 @@ module.exports = async (req, res) => {
         // Need OAuth token for Analytics API attempt
         const refreshToken = await kvGet('youtube:refresh_token');
         let accessToken = null;
-        if (!refreshToken) {
-          console.log('[YT playlistSongs] no refresh_token in KV');
-        } else {
+        if (refreshToken) {
           const tr = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -503,8 +501,7 @@ module.exports = async (req, res) => {
             }),
           });
           const td = await tr.json();
-          if (tr.ok) { accessToken = td.access_token; console.log('[YT playlistSongs] token OK'); }
-          else console.error('[YT playlistSongs] token refresh failed', td.error, td.error_description);
+          if (tr.ok) accessToken = td.access_token;
         }
 
         const endDate = new Date().toISOString().slice(0, 10);
@@ -528,20 +525,8 @@ module.exports = async (req, res) => {
           return r.json();
         })() : Promise.resolve({ rows: [] });
 
-        // Countries: use traffic source filter (works with dimensions=country + views)
-        const countriesPromise = accessToken ? (async () => {
-          const url = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
-          url.searchParams.set('ids', 'channel==MINE');
-          url.searchParams.set('startDate', startDate);
-          url.searchParams.set('endDate', endDate);
-          url.searchParams.set('dimensions', 'country');
-          url.searchParams.set('filters', `insightTrafficSourceType==PLAYLIST;insightTrafficSourceDetail==${playlistId}`);
-          url.searchParams.set('metrics', 'views');
-          url.searchParams.set('sort', '-views');
-          url.searchParams.set('maxResults', '10');
-          const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
-          return r.json();
-        })() : Promise.resolve({ rows: [] });
+        // Countries: YouTube Analytics API does not support per-playlist country breakdown
+        const countriesPromise = Promise.resolve({ rows: [] });
 
         // Daily: use playlist filter with playlistStarts (works with dimensions=day)
         const dailyPromise = accessToken ? (async () => {
@@ -564,8 +549,6 @@ module.exports = async (req, res) => {
           countriesPromise.catch(e => { console.error('[YT countries]', e.message); return { rows: [] }; }),
           dailyPromise.catch(e => { console.error('[YT daily]', e.message); return { rows: [] }; }),
         ]);
-        console.log('[YT countries]', JSON.stringify(countriesData).slice(0, 300));
-        console.log('[YT daily]', JSON.stringify(dailyData).slice(0, 300));
 
         // Paginate playlist items up to 200
         const allPlItems = [...(plPage1.items || [])];
