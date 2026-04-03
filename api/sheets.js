@@ -491,7 +491,9 @@ module.exports = async (req, res) => {
         // Need OAuth token for Analytics API attempt
         const refreshToken = await kvGet('youtube:refresh_token');
         let accessToken = null;
-        if (refreshToken) {
+        if (!refreshToken) {
+          console.log('[YT playlistSongs] no refresh_token in KV');
+        } else {
           const tr = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -501,7 +503,8 @@ module.exports = async (req, res) => {
             }),
           });
           const td = await tr.json();
-          if (tr.ok) accessToken = td.access_token;
+          if (tr.ok) { accessToken = td.access_token; console.log('[YT playlistSongs] token OK'); }
+          else console.error('[YT playlistSongs] token refresh failed', td.error, td.error_description);
         }
 
         const endDate = new Date().toISOString().slice(0, 10);
