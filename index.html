@@ -10786,19 +10786,19 @@ function renderYtCountries(countryData) {
     PA:'Panamá',DO:'Rep. Dominicana',CU:'Cuba',PR:'Puerto Rico',NI:'Nicaragua',
     IT:'Italia',DE:'Alemania',FR:'Francia',GB:'Reino Unido',JP:'Japón',KR:'Corea del Sur'
   };
-  const maxViews = top[0].views || 1;
-  chart.innerHTML = top.map(({ country, views }) => {
+  const maxStarts = top[0].starts || 1;
+  chart.innerHTML = top.map(({ country, starts }) => {
     const name = COUNTRY_NAMES[country] || country;
     const flag = country.length === 2
       ? String.fromCodePoint(0x1F1E6 + country.charCodeAt(0) - 65) + String.fromCodePoint(0x1F1E6 + country.charCodeAt(1) - 65)
       : '';
-    const barW = Math.round((views / maxViews) * 100);
+    const barW = Math.round((starts / maxStarts) * 100);
     return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
       <div style="width:110px;font-size:12px;color:var(--text);flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${flag} ${name}</div>
       <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:3px;height:6px">
         <div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#ff4444,#ff6b6b);border-radius:3px"></div>
       </div>
-      <div style="width:54px;text-align:right;font-size:12px;font-weight:700;color:var(--text);flex-shrink:0">${views.toLocaleString('es-AR')}</div>
+      <div style="width:54px;text-align:right;font-size:12px;font-weight:700;color:var(--text);flex-shrink:0">${starts.toLocaleString('es-AR')}</div>
     </div>`;
   }).join('');
 }
@@ -10807,25 +10807,25 @@ function renderYtDaily(dailyData) {
   const section = document.getElementById('yt-daily-section');
   const chart = document.getElementById('yt-daily-chart');
   if (!section || !chart) return;
-  const data = (dailyData || []).filter(d => d.views != null);
+  const data = (dailyData || []).filter(d => d.starts != null);
   if (!data.length) { section.style.display = 'none'; return; }
   section.style.display = '';
   const W = 600, H = 100, padL = 36, padR = 8, padT = 8, padB = 20;
   const innerW = W - padL - padR, innerH = H - padT - padB;
-  const maxV = Math.max(...data.map(d => d.views), 1);
-  const minV = Math.min(...data.map(d => d.views));
+  const maxV = Math.max(...data.map(d => d.starts), 1);
+  const minV = Math.min(...data.map(d => d.starts));
   const n = data.length;
   const xOf = i => padL + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW);
   const yOf = v => padT + innerH - ((v - minV) / (maxV - minV || 1)) * innerH;
   // Area path
-  let area = `M${xOf(0)},${yOf(data[0].views)}`;
-  for (let i = 1; i < n; i++) area += ` L${xOf(i)},${yOf(data[i].views)}`;
+  let area = `M${xOf(0)},${yOf(data[0].starts)}`;
+  for (let i = 1; i < n; i++) area += ` L${xOf(i)},${yOf(data[i].starts)}`;
   area += ` L${xOf(n-1)},${padT + innerH} L${xOf(0)},${padT + innerH} Z`;
   // Line path
-  let line = `M${xOf(0)},${yOf(data[0].views)}`;
-  for (let i = 1; i < n; i++) line += ` L${xOf(i)},${yOf(data[i].views)}`;
+  let line = `M${xOf(0)},${yOf(data[0].starts)}`;
+  for (let i = 1; i < n; i++) line += ` L${xOf(i)},${yOf(data[i].starts)}`;
   // Dots
-  const dots = data.map((d, i) => `<circle cx="${xOf(i)}" cy="${yOf(d.views)}" r="3" fill="#ff4444"/>`).join('');
+  const dots = data.map((d, i) => `<circle cx="${xOf(i)}" cy="${yOf(d.starts)}" r="3" fill="#ff4444"/>`).join('');
   // Y labels
   const yLabels = `
     <text x="${padL - 4}" y="${padT + 4}" text-anchor="end" font-size="9" fill="var(--muted)">${maxV.toLocaleString('es-AR')}</text>
@@ -10897,7 +10897,7 @@ function renderYtDaily(dailyData) {
         </div>
         <!-- Daily evolution -->
         <div id="yt-daily-section" style="display:none;padding:14px 20px;border-top:1px solid var(--border)">
-          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px">Evolución diaria · vistas desde playlist</div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px">Evolución diaria · inicios de playlist</div>
           <div id="yt-daily-chart"></div>
         </div>
         <!-- Position model -->
