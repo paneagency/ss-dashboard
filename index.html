@@ -10806,20 +10806,28 @@ function renderYtCountries(countryData) {
 let _ytDailyAllData = [];
 let _ytDailyPeriod = 28;
 
+function _ytUpdatePeriodBtns(p) {
+  const b7 = document.getElementById('yt-period-7'), b28 = document.getElementById('yt-period-28');
+  if (!b7 || !b28) return;
+  b7.style.background   = p===7  ? 'rgba(255,68,68,0.2)' : 'rgba(255,255,255,0.06)';
+  b7.style.borderColor  = p===7  ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.12)';
+  b7.style.color        = p===7  ? '#ff4444' : 'var(--muted)';
+  b28.style.background  = p===28 ? 'rgba(255,68,68,0.2)' : 'rgba(255,255,255,0.06)';
+  b28.style.borderColor = p===28 ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.12)';
+  b28.style.color       = p===28 ? '#ff4444' : 'var(--muted)';
+}
+
 function setYtDailyPeriod(p) {
   _ytDailyPeriod = p;
-  document.getElementById('yt-period-7').style.background  = p===7  ? 'rgba(255,68,68,0.2)' : 'rgba(255,255,255,0.06)';
-  document.getElementById('yt-period-7').style.borderColor = p===7  ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.12)';
-  document.getElementById('yt-period-7').style.color       = p===7  ? '#ff4444' : 'var(--muted)';
-  document.getElementById('yt-period-28').style.background = p===28 ? 'rgba(255,68,68,0.2)' : 'rgba(255,255,255,0.06)';
-  document.getElementById('yt-period-28').style.borderColor= p===28 ? 'rgba(255,68,68,0.6)' : 'rgba(255,255,255,0.12)';
-  document.getElementById('yt-period-28').style.color      = p===28 ? '#ff4444' : 'var(--muted)';
+  _ytUpdatePeriodBtns(p);
   renderYtDaily(_ytDailyAllData, p);
 }
 
 function renderYtDaily(dailyData, period) {
-  _ytDailyAllData = dailyData || [];
+  if (dailyData !== undefined) _ytDailyAllData = dailyData;
   period = period || _ytDailyPeriod || 28;
+  _ytDailyPeriod = period;
+  _ytUpdatePeriodBtns(period);
   const section = document.getElementById('yt-daily-section');
   const chart = document.getElementById('yt-daily-chart');
   if (!section || !chart) return;
@@ -10827,7 +10835,6 @@ function renderYtDaily(dailyData, period) {
   const data = period === 7 ? allData.slice(-7) : allData;
   if (!data.length) { section.style.display = 'none'; return; }
   section.style.display = '';
-  setYtDailyPeriod(period);
 
   const DAYS_ABR  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const DAYS_FULL = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
