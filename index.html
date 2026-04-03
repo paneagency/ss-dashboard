@@ -10454,21 +10454,20 @@ async function parseZipBuffer(buffer) {
 function parseYtCsv(text) {
   const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').split('\n').filter(l => l.trim());
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',');
+  // Parse header row properly (may have quoted cells)
+  const parseRow = row => { const cols = []; let q = false, c = ''; for (const ch of row) { if (ch === '"') { q = !q; continue; } if (ch === ',' && !q) { cols.push(c.trim()); c = ''; continue; } c += ch; } cols.push(c.trim()); return cols; };
+  const headers = parseRow(lines[0]);
+  // Look for views column: prefer "playlist" views, fallback to any "views/reproducciones" column
   let vi = headers.findIndex(h => /lista de reproducci/i.test(h));
-  if (vi < 0) vi = 4;
+  if (vi < 0) vi = headers.findIndex(h => /reproducci/i.test(h) || /\bviews\b/i.test(h));
+  if (vi < 0) vi = 4; // last resort fallback
   const songs = [];
   for (let i = 1; i < lines.length; i++) {
-    const cols = []; let q = false, c = '';
-    for (const ch of lines[i]) {
-      if (ch === '"') { q = !q; continue; }
-      if (ch === ',' && !q) { cols.push(c); c = ''; continue; }
-      c += ch;
-    }
-    cols.push(c);
+    const cols = parseRow(lines[i]);
     const id = cols[0]?.trim();
     if (!id || /^total$/i.test(id)) continue;
-    const v = parseInt(cols[vi]) || 0;
+    // Remove thousands separators (dot or comma) before parsing
+    const v = parseInt((cols[vi] || '').replace(/[.,\s]/g, '')) || 0;
     if (!v) continue;
     songs.push({ videoId: id, title: cols[1]?.trim() || id, views: v });
   }
@@ -10484,16 +10483,19 @@ async function handleZipUpload(event) {
   try {
     const buffer = await file.arrayBuffer();
     const files = await parseZipBuffer(buffer);
-    const key = Object.keys(files).find(k => /tabla|table/i.test(k)) || Object.keys(files)[0];
-    if (!key) throw new Error('No se encontró "Datos de la tabla" en el ZIP');
+    const csvKeys = Object.keys(files).filter(k => /\.csv$/i.test(k));
+    // Prefer "tabla/table" file; fallback to any CSV
+    const key = csvKeys.find(k => /tabla|table/i.test(k)) || csvKeys[0] || Object.keys(files)[0];
+    if (!key) throw new Error('No se encontró CSV en el ZIP');
     const songs = parseYtCsv(new TextDecoder().decode(files[key]));
-    if (!songs.length) throw new Error('No se encontraron canciones en el CSV');
+    if (!songs.length) throw new Error(`Sin datos en ${key.split('/').pop()}`);
     const playlistId = _currentYtPlaylistId;
     const res = await fetch('/api/sheets?mode=yt-studioSave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlistId, songs }) });
     const d = await res.json();
     if (!d.ok) throw new Error(d.error || 'Error al guardar');
-    btn.textContent = `✅ ${songs.length} canciones guardadas`;
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; openYtPlSongsModal(playlistId); }, 1500);
+    const topViews = songs[0]?.views?.toLocaleString('es-AR') || '?';
+    btn.textContent = `✅ ${songs.length} canciones · top: ${topViews} vistas`;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; openYtPlSongsModal(playlistId); }, 2500);
   } catch(e) {
     btn.textContent = '❌ ' + e.message.substring(0, 35);
     setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
