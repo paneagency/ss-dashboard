@@ -528,20 +528,22 @@ module.exports = async (req, res) => {
           return r.json();
         })() : Promise.resolve({ rows: [] });
 
+        // Countries: use traffic source filter (works with dimensions=country + views)
         const countriesPromise = accessToken ? (async () => {
           const url = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
           url.searchParams.set('ids', 'channel==MINE');
           url.searchParams.set('startDate', startDate);
           url.searchParams.set('endDate', endDate);
           url.searchParams.set('dimensions', 'country');
-          url.searchParams.set('filters', `playlist==${playlistId}`);
-          url.searchParams.set('metrics', 'views,estimatedMinutesWatched');
+          url.searchParams.set('filters', `insightTrafficSourceType==PLAYLIST;insightTrafficSourceDetail==${playlistId}`);
+          url.searchParams.set('metrics', 'views');
           url.searchParams.set('sort', '-views');
           url.searchParams.set('maxResults', '10');
           const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
           return r.json();
         })() : Promise.resolve({ rows: [] });
 
+        // Daily: use playlist filter with playlistStarts (works with dimensions=day)
         const dailyPromise = accessToken ? (async () => {
           const url = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
           url.searchParams.set('ids', 'channel==MINE');
@@ -549,7 +551,7 @@ module.exports = async (req, res) => {
           url.searchParams.set('endDate', endDate);
           url.searchParams.set('dimensions', 'day');
           url.searchParams.set('filters', `playlist==${playlistId}`);
-          url.searchParams.set('metrics', 'views,estimatedMinutesWatched');
+          url.searchParams.set('metrics', 'playlistStarts,viewsPerPlaylistStart');
           url.searchParams.set('sort', 'day');
           const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
           return r.json();
@@ -611,7 +613,7 @@ module.exports = async (req, res) => {
           }));
           const totalViews = songs.reduce((s, v) => s + v.views, 0);
           const countryData = (countriesData.rows || []).map(r => ({ country: r[0], views: r[1] }));
-          const dailyData2 = (dailyData.rows || []).map(r => ({ day: r[0], views: r[1] }));
+          const dailyData2 = (dailyData.error ? [] : (dailyData.rows || [])).map(r => ({ day: r[0], starts: r[1] }));
           return res.json({ ok: true, hasRealViews: true, songs, plThumb, plTotalItems, totalViews, startDate, endDate, countryData, dailyData: dailyData2 });
         }
 
