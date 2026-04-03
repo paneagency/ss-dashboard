@@ -10409,25 +10409,44 @@ function ytImportClear() {
 
 async function parseZipBuffer(buffer) {
   const view = new DataView(buffer);
+  const len = buffer.byteLength;
+  // Find End of Central Directory (EOCD) from end of file
+  let eocd = -1;
+  for (let i = len - 22; i >= Math.max(0, len - 65558); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('ZIP inválido');
+  const cdOff = view.getUint32(eocd + 16, true);
+  const cdCount = view.getUint16(eocd + 8, true);
+  // Parse central directory for accurate compressed sizes
+  const entries = [];
+  let pos = cdOff;
+  for (let i = 0; i < cdCount; i++) {
+    if (view.getUint32(pos, true) !== 0x02014b50) break;
+    const comp = view.getUint16(pos + 10, true);
+    const csz = view.getUint32(pos + 20, true);
+    const fnLen = view.getUint16(pos + 28, true);
+    const exLen = view.getUint16(pos + 30, true);
+    const cmtLen = view.getUint16(pos + 32, true);
+    const localOff = view.getUint32(pos + 42, true);
+    const fn = new TextDecoder().decode(new Uint8Array(buffer, pos + 46, fnLen));
+    entries.push({ fn, comp, csz, localOff });
+    pos += 46 + fnLen + exLen + cmtLen;
+  }
+  // Extract each file using local header + central directory sizes
   const files = {};
-  let off = 0;
-  while (off < buffer.byteLength - 4) {
-    if (view.getUint32(off, true) !== 0x04034b50) break;
-    const comp = view.getUint16(off + 8, true);
-    const fnLen = view.getUint16(off + 26, true);
-    const exLen = view.getUint16(off + 28, true);
-    const csz = view.getUint32(off + 18, true);
-    const fn = new TextDecoder().decode(new Uint8Array(buffer, off + 30, fnLen));
-    const doff = off + 30 + fnLen + exLen;
-    const cdata = new Uint8Array(buffer, doff, csz);
-    if (comp === 0) { files[fn] = cdata; }
-    else if (comp === 8) {
+  for (const e of entries) {
+    const lhFnLen = view.getUint16(e.localOff + 26, true);
+    const lhExLen = view.getUint16(e.localOff + 28, true);
+    const dataOff = e.localOff + 30 + lhFnLen + lhExLen;
+    const cdata = new Uint8Array(buffer, dataOff, e.csz);
+    if (e.comp === 0) { files[e.fn] = cdata; }
+    else if (e.comp === 8) {
       const ds = new DecompressionStream('deflate-raw');
       const wr = ds.writable.getWriter();
       wr.write(cdata); wr.close();
-      files[fn] = new Uint8Array(await new Response(ds.readable).arrayBuffer());
+      files[e.fn] = new Uint8Array(await new Response(ds.readable).arrayBuffer());
     }
-    off = doff + csz;
   }
   return files;
 }
