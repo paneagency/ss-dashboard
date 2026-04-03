@@ -611,7 +611,7 @@ module.exports = async (req, res) => {
         }).filter(s => s.videoId && s.title !== 'Private video' && s.title !== 'Deleted video');
 
         const countryData = (countriesData.rows || []).map(r => ({ country: r[0], views: r[1] }));
-        const dailyData2 = (dailyData.rows || []).map(r => ({ day: r[0], views: r[1] }));
+        const dailyData2 = (dailyData.error ? [] : (dailyData.rows || [])).map(r => ({ day: r[0], starts: r[1] }));
         return res.json({ ok: true, hasRealViews: false, songs, plThumb, plTotalItems, analyticsError: analyticsData.error?.message, countryData, dailyData: dailyData2 });
       }
 
