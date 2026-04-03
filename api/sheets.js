@@ -562,8 +562,8 @@ module.exports = async (req, res) => {
           countriesPromise.catch(e => { console.error('[YT countries]', e.message); return { rows: [] }; }),
           dailyPromise.catch(e => { console.error('[YT daily]', e.message); return { rows: [] }; }),
         ]);
-        if (countriesData.error) console.error('[YT countries API]', JSON.stringify(countriesData.error));
-        if (dailyData.error) console.error('[YT daily API]', JSON.stringify(dailyData.error));
+        console.log('[YT countries]', JSON.stringify(countriesData).slice(0, 300));
+        console.log('[YT daily]', JSON.stringify(dailyData).slice(0, 300));
 
         // Paginate playlist items up to 200
         const allPlItems = [...(plPage1.items || [])];
