@@ -669,9 +669,9 @@ module.exports = async (req, res) => {
         res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         if (req.method === 'OPTIONS') return res.status(200).end();
-        const { playlistId, songs } = req.body || {};
+        const { playlistId, songs, totals } = req.body || {};
         if (!playlistId || !songs?.length) return res.json({ ok: false, error: 'missing data' });
-        await kvSet(`ytStudio_${playlistId}`, { songs, updatedAt: new Date().toISOString() }, 30 * 24 * 3600);
+        await kvSet(`ytStudio_${playlistId}`, { songs, totals: totals || null, updatedAt: new Date().toISOString() }, 30 * 24 * 3600);
         return res.json({ ok: true, saved: songs.length });
       }
 

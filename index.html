@@ -10453,25 +10453,39 @@ async function parseZipBuffer(buffer) {
 
 function parseYtCsv(text) {
   const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').split('\n').filter(l => l.trim());
-  if (lines.length < 2) return [];
-  // Parse header row properly (may have quoted cells)
+  if (lines.length < 2) return { songs: [], totals: null };
   const parseRow = row => { const cols = []; let q = false, c = ''; for (const ch of row) { if (ch === '"') { q = !q; continue; } if (ch === ',' && !q) { cols.push(c.trim()); c = ''; continue; } c += ch; } cols.push(c.trim()); return cols; };
   const headers = parseRow(lines[0]);
-  // Look for views column: prefer "playlist" views, fallback to any "views/reproducciones" column
+  // Views column: prefer playlist views, fallback to any views/reproducciones column
   let vi = headers.findIndex(h => /lista de reproducci/i.test(h));
   if (vi < 0) vi = headers.findIndex(h => /reproducci/i.test(h) || /\bviews\b/i.test(h));
-  if (vi < 0) vi = 4; // last resort fallback
+  if (vi < 0) vi = 4;
+  // Locate totals columns: views/start and watch time
+  const vpsIdx = headers.findIndex(h => /por inicio/i.test(h) || /per start/i.test(h));
+  const wtIdx  = headers.findIndex(h => /tiempo de visual.*lista/i.test(h) || /playlist.*watch.*time/i.test(h));
+  let totals = null;
   const songs = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = parseRow(lines[i]);
     const id = cols[0]?.trim();
-    if (!id || /^total$/i.test(id)) continue;
-    // Remove thousands separators (dot or comma) before parsing
+    if (!id) continue;
+    if (/^total$/i.test(id)) {
+      // Extract playlist-level totals from the Total row
+      const plViews  = parseInt((cols[vi] || '').replace(/[.,\s]/g, '')) || 0;
+      const vps      = parseFloat((cols[vpsIdx >= 0 ? vpsIdx : 6] || '').replace(/,/g, '.')) || 0;
+      const watchHrs = parseFloat((cols[wtIdx  >= 0 ? wtIdx  : 7] || '').replace(/,/g, '.')) || 0;
+      if (plViews && vps) {
+        const starts = Math.round(plViews / vps);
+        const avgMin = starts ? Math.round((watchHrs * 60) / starts) : 0;
+        totals = { playlistViews: plViews, viewsPerStart: Math.round(vps * 10) / 10, starts, avgMin, watchHrs: Math.round(watchHrs) };
+      }
+      continue;
+    }
     const v = parseInt((cols[vi] || '').replace(/[.,\s]/g, '')) || 0;
     if (!v) continue;
     songs.push({ videoId: id, title: cols[1]?.trim() || id, views: v });
   }
-  return songs;
+  return { songs, totals };
 }
 
 async function handleZipUpload(event) {
@@ -10487,10 +10501,10 @@ async function handleZipUpload(event) {
     // Prefer "tabla/table" file; fallback to any CSV
     const key = csvKeys.find(k => /tabla|table/i.test(k)) || csvKeys[0] || Object.keys(files)[0];
     if (!key) throw new Error('No se encontró CSV en el ZIP');
-    const songs = parseYtCsv(new TextDecoder().decode(files[key]));
+    const { songs, totals } = parseYtCsv(new TextDecoder().decode(files[key]));
     if (!songs.length) throw new Error(`Sin datos en ${key.split('/').pop()}`);
     const playlistId = _currentYtPlaylistId;
-    const res = await fetch('/api/sheets?mode=yt-studioSave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlistId, songs }) });
+    const res = await fetch('/api/sheets?mode=yt-studioSave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlistId, songs, totals }) });
     const d = await res.json();
     if (!d.ok) throw new Error(d.error || 'Error al guardar');
     const topViews = songs[0]?.views?.toLocaleString('es-AR') || '?';
@@ -10636,21 +10650,28 @@ function renderYtPlSongs(data, plAnalytics, cached) {
   document.getElementById('yt-plsongs-content').style.display = '';
   if (data.plThumb) { const img = document.getElementById('yt-plsongs-thumb-img'); img.src = data.plThumb; img.style.display = ''; }
 
-  const avgSec = plAnalytics?.avgMinutes || 0;
-  const avgMin = avgSec > 120 ? Math.round(avgSec / 60) : Math.round(avgSec);
   const songs = data.songs || [];
   const numSongs = data.plTotalItems || songs.length;
   const totalEstViews = plAnalytics?.estimatedViews || 0;
 
+  // Use real totals from ZIP if available, fallback to API analytics
+  const kvTotals = cached?.totals;
+  const starts     = kvTotals?.starts      || plAnalytics?.starts      || 0;
+  const vps        = kvTotals?.viewsPerStart || plAnalytics?.viewsPerStart || 0;
+  const avgMinRaw  = kvTotals ? kvTotals.avgMin : (plAnalytics?.avgMinutes || 0);
+  const avgMin     = kvTotals ? kvTotals.avgMin : (avgMinRaw > 120 ? Math.round(avgMinRaw / 60) : Math.round(avgMinRaw));
+  const realPlViews = kvTotals?.playlistViews || 0;
+
   const kpiData = [
-    totalEstViews ? { label: 'Vistas estimadas playlist', val: `~${totalEstViews.toLocaleString('es-AR')}` } : null,
-    plAnalytics?.starts ? { label: 'Inicios', val: plAnalytics.starts.toLocaleString('es-AR') } : null,
-    plAnalytics?.viewsPerStart ? { label: 'Vistas / inicio', val: plAnalytics.viewsPerStart } : null,
-    avgMin ? { label: 'T. promedio', val: `${avgMin} min` } : null,
-    numSongs ? { label: 'Canciones', val: numSongs } : null,
+    realPlViews  ? { label: 'Vistas playlist', val: realPlViews.toLocaleString('es-AR'), real: true }
+                 : totalEstViews ? { label: 'Vistas estimadas playlist', val: `~${totalEstViews.toLocaleString('es-AR')}` } : null,
+    starts       ? { label: 'Inicios', val: starts.toLocaleString('es-AR') } : null,
+    vps          ? { label: 'Vistas / inicio', val: vps } : null,
+    avgMin       ? { label: 'T. promedio', val: `${avgMin} min` } : null,
+    numSongs     ? { label: 'Canciones', val: numSongs } : null,
   ].filter(Boolean);
   document.getElementById('yt-plsongs-kpis').innerHTML = kpiData.map(k =>
-    `<div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;white-space:nowrap">${k.label}</div><div style="font-size:17px;font-weight:800;color:var(--text);line-height:1.3">${k.val}</div></div>`
+    `<div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;white-space:nowrap">${k.label}</div><div style="font-size:17px;font-weight:800;color:${k.real ? '#4CAF50' : 'var(--text)'};line-height:1.3">${k.val}</div></div>`
   ).join('');
 
   const tableLabel = document.getElementById('yt-plsongs-table-label');
