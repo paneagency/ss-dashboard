@@ -531,8 +531,8 @@ module.exports = async (req, res) => {
           url.searchParams.set('startDate', startDate);
           url.searchParams.set('endDate', endDate);
           url.searchParams.set('dimensions', 'country');
-          url.searchParams.set('filters', `insightTrafficSourceType==PLAYLIST;insightTrafficSourceDetail==${playlistId}`);
-          url.searchParams.set('metrics', 'views');
+          url.searchParams.set('filters', `playlist==${playlistId}`);
+          url.searchParams.set('metrics', 'views,playlistStarts');
           url.searchParams.set('sort', '-views');
           url.searchParams.set('maxResults', '10');
           const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -545,8 +545,8 @@ module.exports = async (req, res) => {
           url.searchParams.set('startDate', startDate);
           url.searchParams.set('endDate', endDate);
           url.searchParams.set('dimensions', 'day');
-          url.searchParams.set('filters', `insightTrafficSourceType==PLAYLIST;insightTrafficSourceDetail==${playlistId}`);
-          url.searchParams.set('metrics', 'views');
+          url.searchParams.set('filters', `playlist==${playlistId}`);
+          url.searchParams.set('metrics', 'views,playlistStarts');
           url.searchParams.set('sort', 'day');
           const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
           return r.json();
