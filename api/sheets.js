@@ -556,9 +556,11 @@ module.exports = async (req, res) => {
           analyticsPromise.catch(() => ({ rows: [] })),
           ytGet('playlists', { part: 'snippet,contentDetails', id: playlistId }).catch(() => ({ items: [] })),
           ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50 }).catch(() => ({ items: [] })),
-          countriesPromise.catch(() => ({ rows: [] })),
-          dailyPromise.catch(() => ({ rows: [] })),
+          countriesPromise.catch(e => { console.error('[YT countries]', e.message); return { rows: [] }; }),
+          dailyPromise.catch(e => { console.error('[YT daily]', e.message); return { rows: [] }; }),
         ]);
+        if (countriesData.error) console.error('[YT countries API]', JSON.stringify(countriesData.error));
+        if (dailyData.error) console.error('[YT daily API]', JSON.stringify(dailyData.error));
 
         // Paginate playlist items up to 200
         const allPlItems = [...(plPage1.items || [])];
