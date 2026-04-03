@@ -10654,21 +10654,19 @@ function renderYtPlSongs(data, plAnalytics, cached) {
   const numSongs = data.plTotalItems || songs.length;
   const totalEstViews = plAnalytics?.estimatedViews || 0;
 
-  // Use real totals from ZIP if available, fallback to API analytics
-  const kvTotals = cached?.totals;
-  const starts     = kvTotals?.starts      || plAnalytics?.starts      || 0;
-  const vps        = kvTotals?.viewsPerStart || plAnalytics?.viewsPerStart || 0;
-  const avgMinRaw  = kvTotals ? kvTotals.avgMin : (plAnalytics?.avgMinutes || 0);
-  const avgMin     = kvTotals ? kvTotals.avgMin : (avgMinRaw > 120 ? Math.round(avgMinRaw / 60) : Math.round(avgMinRaw));
-  const realPlViews = kvTotals?.playlistViews || 0;
+  // API values are always real — use them directly
+  const avgSec = plAnalytics?.avgMinutes || 0;
+  const avgMin = avgSec > 120 ? Math.round(avgSec / 60) : Math.round(avgSec);
+  // Playlist total views: real from ZIP if uploaded, otherwise estimated from API
+  const realPlViews = cached?.totals?.playlistViews || 0;
 
   const kpiData = [
-    realPlViews  ? { label: 'Vistas playlist', val: realPlViews.toLocaleString('es-AR'), real: true }
-                 : totalEstViews ? { label: 'Vistas estimadas playlist', val: `~${totalEstViews.toLocaleString('es-AR')}` } : null,
-    starts       ? { label: 'Inicios', val: starts.toLocaleString('es-AR') } : null,
-    vps          ? { label: 'Vistas / inicio', val: vps } : null,
-    avgMin       ? { label: 'T. promedio', val: `${avgMin} min` } : null,
-    numSongs     ? { label: 'Canciones', val: numSongs } : null,
+    realPlViews ? { label: 'Vistas playlist', val: realPlViews.toLocaleString('es-AR'), real: true }
+                : totalEstViews ? { label: 'Vistas estimadas playlist', val: `~${totalEstViews.toLocaleString('es-AR')}` } : null,
+    plAnalytics?.starts        ? { label: 'Inicios', val: plAnalytics.starts.toLocaleString('es-AR') } : null,
+    plAnalytics?.viewsPerStart ? { label: 'Vistas / inicio', val: plAnalytics.viewsPerStart } : null,
+    avgMin                     ? { label: 'T. promedio', val: `${avgMin} min` } : null,
+    numSongs                   ? { label: 'Canciones', val: numSongs } : null,
   ].filter(Boolean);
   document.getElementById('yt-plsongs-kpis').innerHTML = kpiData.map(k =>
     `<div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;white-space:nowrap">${k.label}</div><div style="font-size:17px;font-weight:800;color:${k.real ? '#4CAF50' : 'var(--text)'};line-height:1.3">${k.val}</div></div>`
