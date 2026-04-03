@@ -525,10 +525,39 @@ module.exports = async (req, res) => {
           return r.json();
         })() : Promise.resolve({ rows: [] });
 
-        const [analyticsData, plInfoData, plPage1] = await Promise.all([
+        const countriesPromise = accessToken ? (async () => {
+          const url = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
+          url.searchParams.set('ids', 'channel==MINE');
+          url.searchParams.set('startDate', startDate);
+          url.searchParams.set('endDate', endDate);
+          url.searchParams.set('dimensions', 'country');
+          url.searchParams.set('filters', `insightTrafficSourceType==PLAYLIST;insightTrafficSourceDetail==${playlistId}`);
+          url.searchParams.set('metrics', 'views');
+          url.searchParams.set('sort', '-views');
+          url.searchParams.set('maxResults', '10');
+          const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+          return r.json();
+        })() : Promise.resolve({ rows: [] });
+
+        const dailyPromise = accessToken ? (async () => {
+          const url = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
+          url.searchParams.set('ids', 'channel==MINE');
+          url.searchParams.set('startDate', startDate);
+          url.searchParams.set('endDate', endDate);
+          url.searchParams.set('dimensions', 'day');
+          url.searchParams.set('filters', `insightTrafficSourceType==PLAYLIST;insightTrafficSourceDetail==${playlistId}`);
+          url.searchParams.set('metrics', 'views');
+          url.searchParams.set('sort', 'day');
+          const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+          return r.json();
+        })() : Promise.resolve({ rows: [] });
+
+        const [analyticsData, plInfoData, plPage1, countriesData, dailyData] = await Promise.all([
           analyticsPromise.catch(() => ({ rows: [] })),
           ytGet('playlists', { part: 'snippet,contentDetails', id: playlistId }).catch(() => ({ items: [] })),
           ytGet('playlistItems', { part: 'snippet', playlistId, maxResults: 50 }).catch(() => ({ items: [] })),
+          countriesPromise.catch(() => ({ rows: [] })),
+          dailyPromise.catch(() => ({ rows: [] })),
         ]);
 
         // Paginate playlist items up to 200
@@ -576,7 +605,9 @@ module.exports = async (req, res) => {
             position: positionMap[r[0]] || null,
           }));
           const totalViews = songs.reduce((s, v) => s + v.views, 0);
-          return res.json({ ok: true, hasRealViews: true, songs, plThumb, plTotalItems, totalViews, startDate, endDate });
+          const countryData = (countriesData.rows || []).map(r => ({ country: r[0], views: r[1] }));
+          const dailyData2 = (dailyData.rows || []).map(r => ({ day: r[0], views: r[1] }));
+          return res.json({ ok: true, hasRealViews: true, songs, plThumb, plTotalItems, totalViews, startDate, endDate, countryData, dailyData: dailyData2 });
         }
 
         // Fallback: playlist items order + theoretical model in frontend
@@ -589,7 +620,9 @@ module.exports = async (req, res) => {
           };
         }).filter(s => s.videoId && s.title !== 'Private video' && s.title !== 'Deleted video');
 
-        return res.json({ ok: true, hasRealViews: false, songs, plThumb, plTotalItems, analyticsError: analyticsData.error?.message });
+        const countryData = (countriesData.rows || []).map(r => ({ country: r[0], views: r[1] }));
+        const dailyData2 = (dailyData.rows || []).map(r => ({ day: r[0], views: r[1] }));
+        return res.json({ ok: true, hasRealViews: false, songs, plThumb, plTotalItems, analyticsError: analyticsData.error?.message, countryData, dailyData: dailyData2 });
       }
 
       // ── GET cached YouTube Studio real data ──────────────────────────────
