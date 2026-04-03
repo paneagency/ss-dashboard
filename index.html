@@ -10654,7 +10654,10 @@ function renderYtPlSongs(data, plAnalytics, cached) {
   ).join('');
 
   const tableLabel = document.getElementById('yt-plsongs-table-label');
-  const importBtn = document.getElementById('yt-import-btn');
+  const importBtn = document.getElementById('yt-studio-link');
+  const plId = data.playlistId || _currentYtPlaylistId || '';
+  const studioUrl = `https://studio.youtube.com/playlist/${plId}/analytics/tab-overview/period-default/explore?entity_type=PLAYLIST&entity_id=${plId}&time_period=4_weeks&explore_type=TABLE_AND_CHART&metric=PLAYLIST_VIEWS&granularity=DAY&t_metrics=PLAYLIST_VIEWS&t_metrics=EXTERNAL_VIEWS&t_metrics=PLAYLIST_AVERAGE_VIEWS_PER_START&t_metrics=PLAYLIST_WATCH_TIME_HOURS&t_metrics=EXTERNAL_WATCH_TIME&t_metrics=AVERAGE_WATCH_TIME&t_metrics=SUBSCRIBERS_NET_CHANGE&t_metrics=TOTAL_ESTIMATED_EARNINGS&dimension=VIDEO&o_column=PLAYLIST_VIEWS&o_direction=ANALYTICS_ORDER_DIRECTION_DESC`;
+  if (importBtn) importBtn.href = studioUrl;
 
   if (cached?.rows?.length) {
     // ── REAL DATA from YouTube Studio (KV auto-sync or manual import) ──
@@ -10663,7 +10666,6 @@ function renderYtPlSongs(data, plAnalytics, cached) {
     if (tableLabel) tableLabel.innerHTML = `Vistas reales · YouTube Studio <span style="background:rgba(76,175,80,0.15);color:#4CAF50;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">${sourceLabel} · ${cached.date || ''}</span>${isAutoSync ? '' : ` <button onclick="ytImportClear()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 4px" title="Borrar importación">✕</button>`}`;
     const syncBtn = document.getElementById('yt-sync-btn');
     if (syncBtn) syncBtn.textContent = '🔄 Re-sincronizar';
-    if (importBtn) importBtn.textContent = '📋 Manual';
     const rows = cached.rows;
     const total = rows.reduce((s, r) => s + r.views, 0);
     const maxV = rows[0]?.views || 1;
@@ -10692,7 +10694,6 @@ function renderYtPlSongs(data, plAnalytics, cached) {
   } else {
     // ── THEORETICAL MODEL ──
     if (tableLabel) tableLabel.innerHTML = `Canciones · vistas estimadas por posición <span style="background:rgba(255,165,0,0.12);color:#FFA726;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">ESTIMADO</span>`;
-    if (importBtn) importBtn.textContent = '📋 Importar YouTube Studio';
     const songsSorted = [...songs].sort((a, b) => a.position - b.position);
     _ytPlSongsModel = totalEstViews > 0 ? buildEmpiricalModel(totalEstViews, numSongs, plAnalytics?.viewsPerStart) : null;
     document.getElementById('yt-plsongs-table').innerHTML = songsSorted.map(s => {
@@ -10779,7 +10780,7 @@ function calcYtPosition() {
             <div style="display:flex;gap:6px;align-items:center">
               <input type="file" id="yt-zip-file-input" accept=".zip" style="display:none" onchange="handleZipUpload(event)">
               <button id="yt-zip-upload-btn" onclick="triggerZipUpload()" style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);color:#ff6b6b;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#ff4444';this.style.background='rgba(255,68,68,0.15)'" onmouseout="this.style.borderColor='rgba(255,68,68,0.3)';this.style.background='rgba(255,68,68,0.08)'">📁 Subir ZIP</button>
-              <button id="yt-import-btn" onclick="showYtImportPanel()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#4CAF50';this.style.color='#4CAF50'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">📋 Manual</button>
+              <a id="yt-studio-link" href="#" target="_blank" rel="noopener" style="background:rgba(255,255,255,0.06);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all 0.15s;text-decoration:none;display:inline-block" onmouseover="this.style.borderColor='#FF0000';this.style.color='#ff4444'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">▶ Studio</a>
             </div>
           </div>
           <!-- Import panel -->
