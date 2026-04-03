@@ -34,6 +34,12 @@ async function kvSet(key, value, exSeconds) {
   });
 }
 
+async function kvGetJson(key) {
+  const v = await kvGet(key);
+  if (!v) return null;
+  try { return JSON.parse(v); } catch { return null; }
+}
+
 // ── YouTube Studio helpers ─────────────────────────────────────────────────
 
 function computeSapisidHash(sapisid) {
@@ -385,6 +391,12 @@ module.exports = async (req, res) => {
       }
 
       if (req.method === 'GET' && ytMode === 'analytics') {
+        // Serve from KV cache (refreshed daily by cron) if fresh enough
+        const cachedAnalytics = await kvGetJson('ytAnalytics:all');
+        if (cachedAnalytics?.updatedAt && Date.now() - new Date(cachedAnalytics.updatedAt).getTime() < 25 * 3600 * 1000) {
+          return res.json({ ...cachedAnalytics, fromCache: true });
+        }
+
         const refreshToken = await kvGet('youtube:refresh_token');
         if (!refreshToken) return res.json({ ok: false, error: 'not_connected' });
         const gClientId = process.env.GOOGLE_CLIENT_ID;
@@ -480,7 +492,9 @@ module.exports = async (req, res) => {
 
         const totalViews = playlists.reduce((s, p) => s + p.estimatedViews, 0);
 
-        return res.json({ ok: true, totalViews, playlists, startDate, endDate, channelId });
+        const analyticsPayload = { ok: true, totalViews, playlists, startDate, endDate, channelId, updatedAt: new Date().toISOString() };
+        kvSet('ytAnalytics:all', analyticsPayload, 26 * 3600).catch(() => {});
+        return res.json(analyticsPayload);
       }
 
       if (req.method === 'GET' && ytMode === 'playlistSongs') {

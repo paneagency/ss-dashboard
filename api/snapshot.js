@@ -177,6 +177,65 @@ async function fetchPlaylistDetail(playlistId, accessToken) {
   };
 }
 
+// ── Refresh YouTube Analytics KPIs (called from cron) ────────
+async function refreshYtAnalytics(sheets) {
+  const rt = await kvGet('youtube:refresh_token');
+  if (!rt) { console.log('[YT cron] No YouTube refresh token, skipping'); return { count: 0 }; }
+
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token', refresh_token: rt,
+      client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    }),
+  });
+  const td = await tokenRes.json();
+  if (!tokenRes.ok) throw new Error(`YT token: ${td.error}`);
+  const accessToken = td.access_token;
+
+  const endDate = new Date().toISOString().slice(0, 10);
+  const startDate = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
+  analyticsUrl.searchParams.set('ids', 'channel==MINE');
+  analyticsUrl.searchParams.set('startDate', startDate);
+  analyticsUrl.searchParams.set('endDate', endDate);
+  analyticsUrl.searchParams.set('dimensions', 'playlist');
+  analyticsUrl.searchParams.set('metrics', 'playlistStarts,viewsPerPlaylistStart,averageTimeInPlaylist');
+  analyticsUrl.searchParams.set('sort', '-playlistStarts');
+  analyticsUrl.searchParams.set('maxResults', '50');
+
+  const analyticsRes = await fetch(analyticsUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+  const analyticsData = await analyticsRes.json();
+  if (!analyticsRes.ok) throw new Error(`YT Analytics: ${analyticsData.error?.message || analyticsRes.status}`);
+
+  // Get playlist names from sheet
+  const plSheetResp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID, range: 'YouTubePlaylists!A:B',
+  }).catch(() => ({ data: { values: [] } }));
+  const plNameMap = {};
+  (plSheetResp.data.values || []).slice(1).forEach(r => {
+    if (r[0]) plNameMap[r[0].trim()] = r[1]?.trim() || r[0].trim();
+  });
+
+  const rows = analyticsData.rows || [];
+  const playlists = rows.map(r => ({
+    playlistId: r[0],
+    nombre: plNameMap[r[0]] || r[0],
+    starts: r[1],
+    viewsPerStart: Math.round(r[2] * 10) / 10,
+    avgMinutes: Math.round(r[3] * 10) / 10,
+    estimatedViews: Math.round(r[1] * r[2]),
+  })).sort((a, b) => b.estimatedViews - a.estimatedViews);
+
+  const totalViews = playlists.reduce((s, p) => s + p.estimatedViews, 0);
+  const payload = { ok: true, totalViews, playlists, startDate, endDate, updatedAt: new Date().toISOString() };
+  await kvSet('ytAnalytics:all', payload, 26 * 3600);
+  console.log(`[YT cron] Analytics refreshed: ${playlists.length} playlists, ${totalViews.toLocaleString()} est. views`);
+  return { count: playlists.length };
+}
+
 // ── Main handler ─────────────────────────────────────────────
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -335,7 +394,17 @@ module.exports = async (req, res) => {
       console.log(`Cron snapshot ${today}: ${rows.length} playlists (${Object.keys(playlistGrupoMap).length} de proveedores)`);
       // Invalidate history cache so next request reads fresh data
       kvDel('snapshot:history:v1').catch(() => {});
-      return res.json({ ok: true, date: today, playlists: rows.length, byProvider: Object.keys(playlistGrupoMap).length });
+
+      // Refresh YouTube Analytics KPIs
+      let ytPlaylists = 0;
+      try {
+        const ytResult = await refreshYtAnalytics(sheets);
+        ytPlaylists = ytResult.count;
+      } catch(e) {
+        console.error('[YT cron]', e.message);
+      }
+
+      return res.json({ ok: true, date: today, playlists: rows.length, byProvider: Object.keys(playlistGrupoMap).length, ytPlaylists });
     } catch(e) {
       console.error('cron snapshot error:', e.message);
       return res.status(500).json({ error: e.message });
