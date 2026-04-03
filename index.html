@@ -10578,6 +10578,20 @@ const YT_REFERENCE_PLAYLISTS = [
     views:[57878,40131,36036,33237,30991,28898,27208,25410,23776,21859,20278,15188,12024,11077,10376,10037,9581,9038,8516,8146,7322,6418,5963,5568,5285,5074,4927,4680,4428,4187,4090,3903,3766,3647,3608,3471,3323,3257,3064,2906,2629,2536,2432,2343,2288,2199,2127,2089,2086,2077,2061,2046,2035] }
 ];
 
+// Fit power-law model views = a * pos^b using log-linear least squares
+function fitPositionModel(posData) {
+  if (!posData || posData.length < 3) return null;
+  let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, n = posData.length;
+  for (const d of posData) {
+    const lx = Math.log(d.position), ly = Math.log(d.views);
+    sumX += lx; sumY += ly; sumXX += lx * lx; sumXY += lx * ly;
+  }
+  const b = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const a = Math.exp((sumY - b * sumX) / n);
+  if (!isFinite(a) || !isFinite(b)) return null;
+  return pos => Math.max(1, Math.round(a * Math.pow(pos, b)));
+}
+
 function buildEmpiricalModel(totalViews, numSongs, viewsPerStart) {
   const vps = viewsPerStart || 5;
   const refs = YT_REFERENCE_PLAYLISTS; // sorted by vps ascending
