@@ -367,38 +367,49 @@ module.exports = async (req, res) => {
       const rawPlaylists = await fetchAllPlaylists(oauthToken);
 
       // 4. Unir IDs únicos (playlists de proveedores + cuenta propia)
-      const allIds = new Set([...rawPlaylists.map(p => p.id), ...Object.keys(playlistGrupoMap)]);
+      const allIds = [...new Set([...rawPlaylists.map(p => p.id), ...Object.keys(playlistGrupoMap)])];
 
-      // 5. Fetch metadata completa para cada playlist via CC token (funciona para playlists públicas)
+      const today = new Date().toISOString().slice(0, 10);
+
+      // 5. Skip playlists already processed today (resumable across multiple cron runs)
+      const doneKey = `snapshot:done:${today}`;
+      const doneRaw = await kvGetJson(doneKey);
+      const doneSet = new Set(Array.isArray(doneRaw) ? doneRaw : []);
+      const pendingIds = allIds.filter(id => !doneSet.has(id));
+      console.log(`[cron] ${pendingIds.length} pendientes de ${allIds.length} totales (${doneSet.size} ya procesadas hoy)`);
+
+      // 6. Fetch en batches paralelos de 5 con 1s entre batches → ~1500 playlists en 300s
       const delay = ms => new Promise(r => setTimeout(r, ms));
-      const playlists = [];
-      for (const plId of allIds) {
+      const fetchOne = async (plId) => {
         try {
           const r = await fetch(
             `https://api.spotify.com/v1/playlists/${plId}?fields=id,name,description,followers,tracks(total),images`,
             { headers: { Authorization: `Bearer ${ccToken}` } }
           );
-          if (r.status === 429) {
-            console.warn(`[cron] Rate limit en ${plId}, skipping`);
-            await delay(2000); // espera breve y sigue; no bloquear el cron horas
-            continue;
-          }
-          if (!r.ok) continue;
+          if (r.status === 429) { console.warn(`[cron] Rate limit en ${plId}, skipping`); return null; }
+          if (!r.ok) return null;
           const full = await r.json();
-          await delay(500); // 500ms entre llamadas → ~2 req/s, seguro bajo el límite de Spotify
-          playlists.push({
-            id: full.id,
-            name: full.name,
-            description: full.description || '',
-            image: full.images?.[0]?.url || '',
-            followers: full.followers?.total || 0,
-            totalTracks: full.tracks?.total || 0,
-            grupo: playlistGrupoMap[plId] || '',
-          });
-        } catch(_) {}
+          return { id: full.id, name: full.name, description: full.description || '', image: full.images?.[0]?.url || '', followers: full.followers?.total || 0, totalTracks: full.tracks?.total || 0, grupo: playlistGrupoMap[plId] || '' };
+        } catch(_) { return null; }
+      };
+
+      const BATCH_SIZE = 5;
+      const BATCH_DELAY = 1000; // ms entre batches → ~5 req/s en burst, promedio seguro
+      const playlists = [];
+      const processedThisRun = [];
+      for (let i = 0; i < pendingIds.length; i += BATCH_SIZE) {
+        const batch = pendingIds.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(batch.map(fetchOne));
+        results.forEach((pl, j) => {
+          if (pl) { playlists.push(pl); processedThisRun.push(batch[j]); }
+        });
+        if (i + BATCH_SIZE < pendingIds.length) await delay(BATCH_DELAY);
       }
 
-      const today = new Date().toISOString().slice(0, 10);
+      // Persistir IDs procesados en KV para que la segunda corrida los saltee
+      const allDone = [...doneSet, ...processedThisRun];
+      kvSet(doneKey, allDone, 26 * 3600).catch(() => {});
+
       const rows = playlists.map(pl => [
         today, pl.id, pl.name, pl.followers, pl.totalTracks,
         '', '', '', '', '', '', '', '', '', '', '', pl.image, pl.description, pl.grupo,
