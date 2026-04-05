@@ -10033,6 +10033,13 @@ function renderYtDetailFooter(tracks) {
   `;
 }
 
+function ytExtractVideoId(input) {
+  const val = input.value.trim();
+  // Try to extract from YouTube URL patterns: youtu.be/ID, ?v=ID, /embed/ID, /shorts/ID
+  const m = val.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+  if (m) input.value = m[1];
+}
+
 function ytCalcTrackGanancia() {
   const c = parseFloat(document.getElementById('yt-form-track-cobrado')?.value) || 0;
   const g = parseFloat(document.getElementById('yt-form-track-gasto')?.value) || 0;
@@ -10167,7 +10174,7 @@ async function saveYtTrack() {
         cancion: document.getElementById('yt-form-track-cancion').value.trim(),
         posicion: parseInt(document.getElementById('yt-form-track-pos').value) || 0,
         cobrado, gasto,
-        videoId: document.getElementById('yt-form-track-videoid').value.trim(),
+        videoId: (() => { const v = document.getElementById('yt-form-track-videoid').value.trim(); const m = v.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/); return m ? m[1] : v; })(),
       }) });
     const data = await r.json();
     if (data.ok) {
@@ -11407,7 +11414,7 @@ function renderYtDaily(dailyData, period) {
         </div>
         <div>
           <label class="yt-field-label">Video ID</label>
-          <input id="yt-form-track-videoid" class="yt-input" placeholder="dQw4w...">
+          <input id="yt-form-track-videoid" class="yt-input" placeholder="dQw4w... o link de YouTube" oninput="ytExtractVideoId(this)">
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
