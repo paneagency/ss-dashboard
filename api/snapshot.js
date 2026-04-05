@@ -238,7 +238,23 @@ async function refreshYtAnalytics(sheets) {
     if (r[0]) plNameMap[r[0].trim()] = r[1]?.trim() || r[0].trim();
   });
 
+  // Fetch names for playlists not in the sheet via YouTube Data API
   const rows = analyticsData.rows || [];
+  const unknownIds = rows.map(r => r[0]).filter(id => !plNameMap[id]);
+  if (unknownIds.length && process.env.YOUTUBE_API_KEY) {
+    try {
+      for (let i = 0; i < unknownIds.length; i += 50) {
+        const batch = unknownIds.slice(i, i + 50).join(',');
+        const url = new URL('https://www.googleapis.com/youtube/v3/playlists');
+        url.searchParams.set('part', 'snippet');
+        url.searchParams.set('id', batch);
+        url.searchParams.set('key', process.env.YOUTUBE_API_KEY);
+        const r = await fetch(url.toString());
+        const d = await r.json();
+        (d.items || []).forEach(item => { plNameMap[item.id] = item.snippet?.title || item.id; });
+      }
+    } catch(_) {}
+  }
   const playlists = rows.map(r => ({
     playlistId: r[0],
     nombre: plNameMap[r[0]] || r[0],
