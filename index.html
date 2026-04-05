@@ -10697,7 +10697,12 @@ function renderYtPlSongs(data, plAnalytics, cached) {
     const rel = relativeDate(cached.date);
     const syncLabel = rel ? `${rel} · ${cached.date}` : (cached.date || '');
     const sourceLabel = isAutoSync ? syncLabel : `IMPORTADO · ${cached.date || ''}`;
-    if (tableLabel) tableLabel.innerHTML = `Vistas reales · YouTube Studio <span style="background:rgba(76,175,80,0.15);color:#4CAF50;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">${sourceLabel}</span>${isAutoSync ? '' : ` <button onclick="ytImportClear()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 4px" title="Borrar importación">✕</button>`}`;
+    const syncDays = cached.date ? Math.round((new Date().setHours(0,0,0,0) - new Date(cached.date + 'T00:00:00').setHours(0,0,0,0)) / 86400000) : 0;
+    const badgeColor = syncDays >= 30 ? ['rgba(244,67,54,0.15)','#F44336']
+                     : syncDays >= 15 ? ['rgba(255,152,0,0.15)','#FF9800']
+                     : syncDays >= 7  ? ['rgba(255,235,59,0.15)','#FFD600']
+                     :                  ['rgba(76,175,80,0.15)','#4CAF50'];
+    if (tableLabel) tableLabel.innerHTML = `Vistas reales · YouTube Studio <span style="background:${badgeColor[0]};color:${badgeColor[1]};font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">${sourceLabel}</span>${isAutoSync ? '' : ` <button onclick="ytImportClear()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 4px" title="Borrar importación">✕</button>`}`;
     const syncBtn = document.getElementById('yt-sync-btn');
     if (syncBtn) syncBtn.textContent = '🔄 Re-sincronizar';
     const rows = cached.rows;
