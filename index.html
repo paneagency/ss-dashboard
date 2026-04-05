@@ -10367,11 +10367,17 @@ function openYtPlSongsModal(playlistId) {
     fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false, songs: [] })),
     fetch(`/api/sheets?mode=yt-studioGet&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false })),
     _ytModelTraining !== null ? Promise.resolve({ ok: true, training: _ytModelTraining })
-      : fetch('/api/sheets?mode=yt-modelData').then(r => r.json()).catch(() => ({ ok: false, training: [] }))
-  ]).then(([data, kvData, modelData]) => {
+      : fetch('/api/sheets?mode=yt-modelData').then(r => r.json()).catch(() => ({ ok: false, training: [] })),
+    fetch(`/api/sheets?mode=yt-tracks&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false, tracks: [] }))
+  ]).then(([data, kvData, modelData, tracksData]) => {
     if (!data.ok) { document.getElementById('yt-plsongs-loading').textContent = `Error: ${data.error}`; return; }
     if (modelData.ok && modelData.training) _ytModelTraining = modelData.training;
     _currentYtSongs = data.songs || [];
+    // Build videoId → track map for pauta tracking
+    const tracksMap = {};
+    if (tracksData.ok && tracksData.tracks?.length) {
+      tracksData.tracks.forEach(t => { if (t.videoId) tracksMap[t.videoId] = t; });
+    }
     // Priority: KV real data > localStorage import
     const localCached = ytImportLoad(playlistId);
     let cached = localCached;
@@ -10385,7 +10391,7 @@ function openYtPlSongsModal(playlistId) {
         source: 'kv'
       };
     }
-    renderYtPlSongs(data, pl, cached);
+    renderYtPlSongs(data, pl, cached, tracksMap);
   }).catch(e => { document.getElementById('yt-plsongs-loading').textContent = `Error: ${e.message}`; });
 }
 
@@ -10685,7 +10691,35 @@ function buildSmartModel(totalViews, numSongs, viewsPerStart, starts, training) 
   return pos => Math.max(0, Math.round(totalViews * blended[Math.min(pos - 1, safeN - 1)] / sumB));
 }
 
-function renderYtPlSongs(data, plAnalytics, cached) {
+function buildPautaInfo(track, currentViews) {
+  if (!track?.estimadoK || !track?.fechaInicio) return '';
+  const goalViews = track.estimadoK * 1000;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = new Date(track.fechaInicio + 'T00:00:00'); start.setHours(0,0,0,0);
+  const daysActive = Math.max(1, Math.round((today - start) / 86400000));
+  const pct = currentViews ? Math.min(100, Math.round((currentViews / goalViews) * 100)) : 0;
+  const completed = currentViews >= goalViews;
+  const rate = currentViews && daysActive > 0 ? currentViews / daysActive : 0;
+  let etaText = '';
+  if (completed) { etaText = '✅ Meta alcanzada'; }
+  else if (rate > 0) { const d = Math.ceil((goalViews - currentViews) / rate); etaText = `~${d}d para la meta`; }
+  const rateText = rate > 0 ? `${Math.round(rate).toLocaleString('es-AR')}/día · ${daysActive}d activo` : `${daysActive}d activo`;
+  const goalLabel = goalViews >= 1000000 ? `${(goalViews/1000000).toFixed(1)}M` : `${(goalViews/1000).toFixed(0)}K`;
+  const currLabel = currentViews ? (currentViews >= 1000000 ? `${(currentViews/1000000).toFixed(1)}M` : currentViews.toLocaleString('es-AR')) : '…';
+  return `<div style="margin-top:4px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap">
+      <span style="background:rgba(255,68,68,0.15);color:#ff6b6b;font-size:9px;padding:1px 5px;border-radius:8px;font-weight:700;letter-spacing:0.04em">PAUTA</span>
+      <span style="font-size:9px;color:var(--muted)">${rateText}</span>
+      ${etaText ? `<span style="font-size:9px;color:${completed ? '#4CAF50' : '#FFA726'};margin-left:auto">${etaText}</span>` : ''}
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <div style="flex:1;height:3px;background:rgba(255,255,255,0.08);border-radius:2px"><div style="height:100%;width:${pct}%;background:${completed ? '#4CAF50' : 'linear-gradient(90deg,#ff4444,#ff6b6b)'};border-radius:2px"></div></div>
+      <span style="font-size:9px;color:var(--muted);white-space:nowrap">${currLabel} / ${goalLabel}</span>
+    </div>
+  </div>`;
+}
+
+function renderYtPlSongs(data, plAnalytics, cached, tracksMap) {
   document.getElementById('yt-plsongs-loading').style.display = 'none';
   document.getElementById('yt-plsongs-content').style.display = '';
   if (data.plThumb) { const img = document.getElementById('yt-plsongs-thumb-img'); img.src = data.plThumb; img.style.display = ''; }
@@ -10768,12 +10802,15 @@ function renderYtPlSongs(data, plAnalytics, cached) {
       const pct = total ? ((row.views / total) * 100).toFixed(1) : 0;
       const barW = Math.round((row.views / maxV) * 100);
       const posBadge = row.position ? `<span style="font-size:9px;color:rgba(255,255,255,0.35);margin-left:4px">#${row.position}</span>` : '';
+      const track = tracksMap && row.videoId ? tracksMap[row.videoId] : null;
+      const pautaHtml = buildPautaInfo(track, row.views);
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
         <div style="width:20px;text-align:right;font-size:11px;color:var(--muted);flex-shrink:0">${i+1}</div>
         ${row.thumb ? `<img src="${row.thumb}" style="width:44px;height:25px;object-fit:cover;border-radius:3px;flex-shrink:0">` : '<div style="width:44px;height:25px;background:rgba(255,255,255,0.06);border-radius:3px;flex-shrink:0"></div>'}
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${row.title}${posBadge}</div>
           <div style="height:3px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:3px"><div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#4CAF50,#81C784);border-radius:2px"></div></div>
+          ${pautaHtml}
         </div>
         <div style="text-align:right;flex-shrink:0;min-width:64px">
           <div style="font-size:13px;font-weight:700;color:#4CAF50">${row.views.toLocaleString('es-AR')}</div>
@@ -10791,12 +10828,15 @@ function renderYtPlSongs(data, plAnalytics, cached) {
       const estViews = _ytPlSongsModel ? _ytPlSongsModel(s.position) : null;
       const pct = totalEstViews && estViews ? ((estViews / totalEstViews) * 100).toFixed(1) : null;
       const barW = estViews ? Math.round((estViews / (_ytPlSongsModel(1) || 1)) * 100) : 0;
+      const track = tracksMap && s.videoId ? tracksMap[s.videoId] : null;
+      const pautaHtml = buildPautaInfo(track, estViews);
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
         <div style="width:22px;text-align:right;font-size:11px;color:rgba(255,165,0,0.7);font-weight:700;flex-shrink:0">${s.position}</div>
         ${s.thumb ? `<img src="${s.thumb}" style="width:44px;height:25px;object-fit:cover;border-radius:3px;flex-shrink:0">` : '<div style="width:44px;height:25px;background:rgba(255,255,255,0.06);border-radius:3px;flex-shrink:0"></div>'}
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${s.title}</div>
           ${estViews ? `<div style="height:3px;background:rgba(255,255,255,0.08);border-radius:2px"><div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#FFA726,#FFB74D);border-radius:2px"></div></div>` : ''}
+          ${pautaHtml}
         </div>
         ${estViews ? `<div style="text-align:right;flex-shrink:0;min-width:72px">
           <div style="font-size:12px;font-weight:700;color:#FFA726">~${estViews.toLocaleString('es-AR')}</div>
