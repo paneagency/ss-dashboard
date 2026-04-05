@@ -4,6 +4,7 @@
 // Optional security: set SNAPSHOT_SECRET env var; pass as ?secret=xxx or body.secret
 
 const { google } = require('googleapis');
+const nodemailer = require('nodemailer');
 
 const SPREADSHEET_ID = '15N3dznVTgTx2C1CPlSas-NKWeYK4WcaikmEoh_frO0k';
 const CAMPANAS_SHEET = 'CampañasCalendario';
@@ -175,6 +176,24 @@ async function fetchPlaylistDetail(playlistId, accessToken) {
     totalTracks,
     tracks,
   };
+}
+
+// ── Email alert helper ────────────────────────────────────────
+async function sendCronAlert(subject, body) {
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_PASS;
+  if (!user || !pass) return;
+  try {
+    const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+    await transporter.sendMail({
+      from: `SS Dashboard <${user}>`,
+      to: 'paneagency@gmail.com',
+      subject,
+      text: body,
+    });
+  } catch(e) {
+    console.error('[alert email]', e.message);
+  }
 }
 
 // ── Refresh YouTube Analytics KPIs (called from cron) ────────
@@ -402,11 +421,19 @@ module.exports = async (req, res) => {
         ytPlaylists = ytResult.count;
       } catch(e) {
         console.error('[YT cron]', e.message);
+        sendCronAlert(
+          `⚠️ SS Dashboard — Error en cron YouTube (${today})`,
+          `El cron diario falló al actualizar YouTube Analytics.\n\nError: ${e.message}\n\nLos KPIs de YouTube pueden estar desactualizados.`
+        ).catch(() => {});
       }
 
       return res.json({ ok: true, date: today, playlists: rows.length, byProvider: Object.keys(playlistGrupoMap).length, ytPlaylists });
     } catch(e) {
       console.error('cron snapshot error:', e.message);
+      sendCronAlert(
+        `🚨 SS Dashboard — Error en cron Spotify (${new Date().toISOString().slice(0,10)})`,
+        `El cron diario de snapshots falló y NO se guardaron los datos del día.\n\nError: ${e.message}\n\nRevisá los logs en Vercel: https://vercel.com/paneagency/ss-dashboard/logs`
+      ).catch(() => {});
       return res.status(500).json({ error: e.message });
     }
   }
