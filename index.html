@@ -10592,6 +10592,19 @@ const YT_REFERENCE_PLAYLISTS = [
     views:[57878,40131,36036,33237,30991,28898,27208,25410,23776,21859,20278,15188,12024,11077,10376,10037,9581,9038,8516,8146,7322,6418,5963,5568,5285,5074,4927,4680,4428,4187,4090,3903,3766,3647,3608,3471,3323,3257,3064,2906,2629,2536,2432,2343,2288,2199,2127,2089,2086,2077,2061,2046,2035] }
 ];
 
+function relativeDate(dateStr) {
+  if (!dateStr) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr + 'T00:00:00'); d.setHours(0,0,0,0);
+  const days = Math.round((today - d) / 86400000);
+  if (days === 0) return 'Hoy';
+  if (days === 1) return 'Hace 1 día';
+  if (days < 7) return `Hace ${days} días`;
+  if (days < 14) return 'Hace 1 semana';
+  if (days < 30) return `Hace ${Math.floor(days/7)} semanas`;
+  return `Hace ${Math.floor(days/30)} ${Math.floor(days/30) === 1 ? 'mes' : 'meses'}`;
+}
+
 // Fit power-law model views = a * pos^b using log-linear least squares
 function fitPositionModel(posData) {
   if (!posData || posData.length < 3) return null;
@@ -10681,8 +10694,10 @@ function renderYtPlSongs(data, plAnalytics, cached) {
   if (cached?.rows?.length) {
     // ── REAL DATA from YouTube Studio (KV auto-sync or manual import) ──
     const isAutoSync = cached.source === 'kv';
-    const sourceLabel = isAutoSync ? 'AUTO-SYNC' : 'IMPORTADO';
-    if (tableLabel) tableLabel.innerHTML = `Vistas reales · YouTube Studio <span style="background:rgba(76,175,80,0.15);color:#4CAF50;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">${sourceLabel} · ${cached.date || ''}</span>${isAutoSync ? '' : ` <button onclick="ytImportClear()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 4px" title="Borrar importación">✕</button>`}`;
+    const rel = relativeDate(cached.date);
+    const syncLabel = rel ? `${rel} · ${cached.date}` : (cached.date || '');
+    const sourceLabel = isAutoSync ? syncLabel : `IMPORTADO · ${cached.date || ''}`;
+    if (tableLabel) tableLabel.innerHTML = `Vistas reales · YouTube Studio <span style="background:rgba(76,175,80,0.15);color:#4CAF50;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">${sourceLabel}</span>${isAutoSync ? '' : ` <button onclick="ytImportClear()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 4px" title="Borrar importación">✕</button>`}`;
     const syncBtn = document.getElementById('yt-sync-btn');
     if (syncBtn) syncBtn.textContent = '🔄 Re-sincronizar';
     const rows = cached.rows;
