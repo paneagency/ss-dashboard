@@ -379,13 +379,13 @@ module.exports = async (req, res) => {
             { headers: { Authorization: `Bearer ${ccToken}` } }
           );
           if (r.status === 429) {
-            const retryAfter = parseInt(r.headers.get('Retry-After') || '10') + 1;
-            await delay(retryAfter * 1000);
-            continue; // skip this one rather than block the whole cron
+            console.warn(`[cron] Rate limit en ${plId}, skipping`);
+            await delay(2000); // espera breve y sigue; no bloquear el cron horas
+            continue;
           }
           if (!r.ok) continue;
           const full = await r.json();
-          await delay(200); // 200ms entre llamadas → ~5 req/s, bien bajo el límite
+          await delay(500); // 500ms entre llamadas → ~2 req/s, seguro bajo el límite de Spotify
           playlists.push({
             id: full.id,
             name: full.name,
@@ -443,6 +443,11 @@ module.exports = async (req, res) => {
     const { playlistId } = req.query;
     if (!playlistId) return res.status(400).json({ error: 'playlistId requerido' });
     try {
+      // Serve from KV cache (24h TTL) to avoid hitting Spotify rate limits
+      const cacheKey = `spPreview:${playlistId}`;
+      const cached = await kvGetJson(cacheKey);
+      if (cached) return res.json({ ok: true, playlist: cached, fromCache: true });
+
       const ccToken = await getCCToken();
       const r = await fetch(
         `https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,followers,tracks(total),images,owner`,
@@ -459,18 +464,17 @@ module.exports = async (req, res) => {
         return res.json({ ok: false, playlistId, status: r.status, error: errorMsg });
       }
       const body = JSON.parse(text);
-      return res.json({
-        ok: true,
-        playlist: {
-          id: body.id,
-          name: body.name,
-          image: body.images?.[0]?.url || '',
-          followers: body.followers?.total || 0,
-          totalTracks: body.tracks?.total || 0,
-          owner: body.owner?.display_name || body.owner?.id || '',
-          description: body.description || '',
-        },
-      });
+      const playlist = {
+        id: body.id,
+        name: body.name,
+        image: body.images?.[0]?.url || '',
+        followers: body.followers?.total || 0,
+        totalTracks: body.tracks?.total || 0,
+        owner: body.owner?.display_name || body.owner?.id || '',
+        description: body.description || '',
+      };
+      kvSet(cacheKey, playlist, 24 * 3600).catch(() => {});
+      return res.json({ ok: true, playlist });
     } catch(e) {
       return res.status(500).json({ ok: false, playlistId: req.query.playlistId || null, error: e.message });
     }
