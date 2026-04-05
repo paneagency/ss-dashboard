@@ -10035,9 +10035,28 @@ function renderYtDetailFooter(tracks) {
 
 function ytExtractVideoId(input) {
   const val = input.value.trim();
-  // Try to extract from YouTube URL patterns: youtu.be/ID, ?v=ID, /embed/ID, /shorts/ID
   const m = val.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
-  if (m) input.value = m[1];
+  if (m) { input.value = m[1]; ytAutofillFromVideoId(m[1]); }
+}
+
+async function ytAutofillFromVideoId(videoId) {
+  try {
+    const r = await fetch(`/api/sheets?mode=yt-videoInfo&videoId=${encodeURIComponent(videoId)}`);
+    const d = await r.json();
+    if (!d.ok || !d.video?.title) return;
+    const title = d.video.title;
+    const sep = title.match(/\s[-–—]\s/);
+    const artistEl = document.getElementById('yt-form-track-artista');
+    const cancionEl = document.getElementById('yt-form-track-cancion');
+    if (sep) {
+      const idx = title.indexOf(sep[0]);
+      if (artistEl && !artistEl.value) artistEl.value = title.slice(0, idx).trim();
+      if (cancionEl && !cancionEl.value) cancionEl.value = title.slice(idx + sep[0].length).trim();
+    } else {
+      if (artistEl && !artistEl.value) artistEl.value = d.video.channelTitle || '';
+      if (cancionEl && !cancionEl.value) cancionEl.value = title;
+    }
+  } catch(_) {}
 }
 
 function ytCalcTrackGanancia() {
