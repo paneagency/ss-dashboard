@@ -10365,9 +10365,12 @@ function openYtPlSongsModal(playlistId) {
   _ytPlSongsModel = null; _currentYtSongs = null;
   Promise.all([
     fetch(`/api/sheets?mode=yt-playlistSongs&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false, songs: [] })),
-    fetch(`/api/sheets?mode=yt-studioGet&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false }))
-  ]).then(([data, kvData]) => {
+    fetch(`/api/sheets?mode=yt-studioGet&playlistId=${encodeURIComponent(playlistId)}`).then(r => r.json()).catch(() => ({ ok: false })),
+    _ytModelTraining !== null ? Promise.resolve({ ok: true, training: _ytModelTraining })
+      : fetch('/api/sheets?mode=yt-modelData').then(r => r.json()).catch(() => ({ ok: false, training: [] }))
+  ]).then(([data, kvData, modelData]) => {
     if (!data.ok) { document.getElementById('yt-plsongs-loading').textContent = `Error: ${data.error}`; return; }
+    if (modelData.ok && modelData.training) _ytModelTraining = modelData.training;
     _currentYtSongs = data.songs || [];
     // Priority: KV real data > localStorage import
     const localCached = ytImportLoad(playlistId);
@@ -10606,56 +10609,80 @@ function relativeDate(dateStr) {
 }
 
 // Fit power-law model views = a * pos^b using log-linear least squares
+// Returns function with .b, .r2, .n exposed for training system
 function fitPositionModel(posData) {
   if (!posData || posData.length < 3) return null;
-  let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, n = posData.length;
+  let sumX=0, sumY=0, sumXX=0, sumXY=0, n=posData.length;
   for (const d of posData) {
-    const lx = Math.log(d.position), ly = Math.log(d.views);
-    sumX += lx; sumY += ly; sumXX += lx * lx; sumXY += lx * ly;
+    const lx=Math.log(d.position), ly=Math.log(d.views);
+    sumX+=lx; sumY+=ly; sumXX+=lx*lx; sumXY+=lx*ly;
   }
-  const b = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-  const a = Math.exp((sumY - b * sumX) / n);
-  if (!isFinite(a) || !isFinite(b)) return null;
-  return pos => Math.max(1, Math.round(a * Math.pow(pos, b)));
+  const b=(n*sumXY-sumX*sumY)/(n*sumXX-sumX*sumX);
+  const a=Math.exp((sumY-b*sumX)/n);
+  if (!isFinite(a)||!isFinite(b)) return null;
+  // R² in log space — measures how well power-law fits the real data
+  const meanY=sumY/n;
+  let ssTot=0, ssRes=0;
+  for (const d of posData) {
+    const ly=Math.log(d.views), lyHat=Math.log(a)+b*Math.log(d.position);
+    ssTot+=(ly-meanY)**2; ssRes+=(ly-lyHat)**2;
+  }
+  const r2=Math.max(0, 1-ssRes/Math.max(ssTot, 1e-10));
+  const fn=pos=>Math.max(1, Math.round(a*Math.pow(pos,b)));
+  fn.b=b; fn.a=a; fn.r2=r2; fn.n=n;
+  return fn;
 }
 
-function buildEmpiricalModel(totalViews, numSongs, viewsPerStart) {
-  const vps = viewsPerStart || 5;
-  const refs = YT_REFERENCE_PLAYLISTS; // sorted by vps ascending
-  // Find bracketing reference playlists
-  let lower = refs[0], upper = refs[refs.length - 1], t = 0;
-  if (vps <= refs[0].vps) {
-    lower = upper = refs[0]; t = 0;
-  } else if (vps >= refs[refs.length - 1].vps) {
-    lower = upper = refs[refs.length - 1]; t = 0;
-  } else {
-    for (let i = 0; i < refs.length - 1; i++) {
-      if (vps >= refs[i].vps && vps <= refs[i + 1].vps) {
-        lower = refs[i]; upper = refs[i + 1];
-        t = (vps - lower.vps) / (upper.vps - lower.vps);
-        break;
-      }
-    }
-  }
-  // Interpolate normalized view fraction at percentile position p ∈ [0,1]
-  function getRefFraction(ref, p) {
-    const exactIdx = Math.max(0, Math.min(0.9999, p)) * (ref.n - 1);
-    const lo = Math.floor(exactIdx), hi = Math.min(lo + 1, ref.n - 1);
-    const f = exactIdx - lo;
-    return (ref.views[lo] + (ref.views[hi] - ref.views[lo]) * f) / ref.total;
-  }
-  const n = Math.max(numSongs, 1);
-  const rawWeights = Array.from({ length: n }, (_, i) => {
-    const p = i / Math.max(n - 1, 1);
-    const fL = getRefFraction(lower, p);
-    const fU = lower === upper ? fL : getRefFraction(upper, p);
-    return fL + (fU - fL) * t;
+// Training data cache — populated from KV, grows with each ZIP upload
+let _ytModelTraining = null;
+
+// Smart kNN model: blends hardcoded references + learned distributions from ZIP uploads
+// Features used: viewsPerStart (most predictive), numSongs, starts
+function buildSmartModel(totalViews, numSongs, viewsPerStart, starts, training) {
+  if (!totalViews || !numSongs) return null;
+  const safeVps = Math.max(viewsPerStart || 5, 1);
+  const safeN   = Math.max(numSongs, 1);
+  const safeS   = Math.max(starts || totalViews / safeVps, 1);
+
+  // All references: hardcoded (r2=1) + learned from ZIP uploads (r2 >= 0.7)
+  const allRefs = [
+    ...YT_REFERENCE_PLAYLISTS.map(r => ({
+      vps: r.vps, numSongs: r.n, starts: r.total / r.vps,
+      normalizedViews: r.views.map(v => v / r.total), r2: 1.0
+    })),
+    ...(training || []).filter(t => t.r2 >= 0.7 && Array.isArray(t.normalizedViews) && t.normalizedViews.length >= 3)
+  ];
+
+  const logVps = Math.log(safeVps);
+  const logN   = Math.log(safeN);
+  const logS   = Math.log(safeS);
+
+  // Weighted kNN — vps is most predictive of distribution shape
+  const neighbors = allRefs.map(ref => {
+    const dVps = logVps - Math.log(Math.max(ref.vps, 1));
+    const dN   = logN   - Math.log(Math.max(ref.numSongs, 1));
+    const dS   = logS   - Math.log(Math.max(ref.starts || safeS, 1));
+    const dist = Math.sqrt(2*dVps*dVps + 1*dN*dN + 0.3*dS*dS);
+    return { ref, weight: Math.exp(-dist * 1.5) * (ref.r2 || 0.8) };
+  }).sort((a, b) => b.weight - a.weight).slice(0, 7);
+
+  const totalW = neighbors.reduce((s, nb) => s + nb.weight, 0);
+  if (!totalW) return null;
+
+  // Blend distribution curves at target resolution using fractional position
+  const blended = Array.from({ length: safeN }, (_, i) => {
+    const p = safeN > 1 ? i / (safeN - 1) : 0;
+    return neighbors.reduce((s, nb) => {
+      const nv = nb.ref.normalizedViews;
+      const exactIdx = p * (nv.length - 1);
+      const lo = Math.floor(exactIdx), hi = Math.min(lo + 1, nv.length - 1);
+      return s + (nv[lo] + (nv[hi] - nv[lo]) * (exactIdx - lo)) * nb.weight;
+    }, 0) / totalW;
   });
-  const sumW = rawWeights.reduce((s, w) => s + w, 0);
-  return (pos) => {
-    const idx = Math.min(pos - 1, n - 1);
-    return Math.max(0, Math.round(totalViews * (rawWeights[idx] || rawWeights[n - 1]) / sumW));
-  };
+
+  const sumB = blended.reduce((s, w) => s + w, 0);
+  if (!sumB) return null;
+  return pos => Math.max(0, Math.round(totalViews * blended[Math.min(pos - 1, safeN - 1)] / sumB));
 }
 
 function renderYtPlSongs(data, plAnalytics, cached) {
@@ -10711,7 +10738,32 @@ function renderYtPlSongs(data, plAnalytics, cached) {
     // Build model from real data
     const posData = rows.filter(r => r.position && r.views > 0).sort((a,b) => a.position - b.position).map(r => ({ position: r.position, views: r.views }));
     _ytPlSongsModel = fitPositionModel(posData);
-    if (!_ytPlSongsModel) _ytPlSongsModel = buildEmpiricalModel(totalEstViews, numSongs, plAnalytics?.viewsPerStart);
+    if (!_ytPlSongsModel) _ytPlSongsModel = buildSmartModel(totalEstViews, numSongs, plAnalytics?.viewsPerStart, plAnalytics?.starts, _ytModelTraining);
+
+    // ── Auto-train: save this playlist's real distribution to the learning set ──
+    if (_ytPlSongsModel?.r2 >= 0.7 && _currentYtPlaylistId) {
+      const realTotal = rows.reduce((s, r) => s + (r.views || 0), 0);
+      const maxPos = Math.max(...rows.filter(r => r.position).map(r => r.position));
+      const normalizedViews = Array.from({ length: maxPos }, (_, i) => {
+        const row = rows.find(r => r.position === i + 1);
+        return realTotal > 0 ? (row?.views || 0) / realTotal : 0;
+      });
+      const entry = {
+        playlistId: _currentYtPlaylistId,
+        vps: plAnalytics?.viewsPerStart || 0,
+        numSongs: maxPos,
+        starts: plAnalytics?.starts || 0,
+        avgMinutes: plAnalytics?.avgMinutes || 0,
+        totalViews: realTotal,
+        r2: _ytPlSongsModel.r2,
+        normalizedViews,
+        updatedAt: new Date().toISOString().slice(0, 10)
+      };
+      if (!_ytModelTraining) _ytModelTraining = [];
+      const idx = _ytModelTraining.findIndex(t => t.playlistId === entry.playlistId);
+      if (idx >= 0) _ytModelTraining[idx] = entry; else _ytModelTraining.push(entry);
+      fetch('/api/sheets?mode=yt-modelSave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }).catch(() => {});
+    }
     document.getElementById('yt-plsongs-table').innerHTML = rows.map((row, i) => {
       const pct = total ? ((row.views / total) * 100).toFixed(1) : 0;
       const barW = Math.round((row.views / maxV) * 100);
@@ -10734,7 +10786,7 @@ function renderYtPlSongs(data, plAnalytics, cached) {
     // ── THEORETICAL MODEL ──
     if (tableLabel) tableLabel.innerHTML = `Canciones · vistas estimadas por posición <span style="background:rgba(255,165,0,0.12);color:#FFA726;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">ESTIMADO</span>`;
     const songsSorted = [...songs].sort((a, b) => a.position - b.position);
-    _ytPlSongsModel = totalEstViews > 0 ? buildEmpiricalModel(totalEstViews, numSongs, plAnalytics?.viewsPerStart) : null;
+    _ytPlSongsModel = totalEstViews > 0 ? buildSmartModel(totalEstViews, numSongs, plAnalytics?.viewsPerStart, plAnalytics?.starts, _ytModelTraining) : null;
     document.getElementById('yt-plsongs-table').innerHTML = songsSorted.map(s => {
       const estViews = _ytPlSongsModel ? _ytPlSongsModel(s.position) : null;
       const pct = totalEstViews && estViews ? ((estViews / totalEstViews) * 100).toFixed(1) : null;

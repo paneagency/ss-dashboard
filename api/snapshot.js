@@ -266,6 +266,23 @@ async function refreshYtAnalytics(sheets) {
 
   const totalViews = playlists.reduce((s, p) => s + p.estimatedViews, 0);
   const payload = { ok: true, totalViews, playlists, startDate, endDate, updatedAt: new Date().toISOString() };
+
+  // Update features (vps, starts, avgMinutes) in existing training entries — keeps kNN inputs fresh
+  try {
+    const trainingRaw = await kvGet('ytModel:training');
+    if (trainingRaw) {
+      let training = JSON.parse(trainingRaw);
+      let updated = false;
+      training = training.map(entry => {
+        const pl = playlists.find(p => p.playlistId === entry.playlistId);
+        if (!pl) return entry;
+        updated = true;
+        return { ...entry, vps: pl.viewsPerStart, starts: pl.starts, avgMinutes: pl.avgMinutes, featureUpdatedAt: new Date().toISOString().slice(0, 10) };
+      });
+      if (updated) await kvSet('ytModel:training', training, 365 * 24 * 3600);
+      console.log(`[YT cron] Training features updated for ${training.filter(t => t.featureUpdatedAt).length} playlists`);
+    }
+  } catch(e) { console.error('[YT cron training]', e.message); }
   await kvSet('ytAnalytics:all', payload, 26 * 3600);
   console.log(`[YT cron] Analytics refreshed: ${playlists.length} playlists, ${totalViews.toLocaleString()} est. views`);
   return { count: playlists.length };

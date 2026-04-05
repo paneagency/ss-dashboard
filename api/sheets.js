@@ -629,6 +629,31 @@ module.exports = async (req, res) => {
         return res.json({ ok: true, hasRealViews: false, songs, plThumb, plTotalItems, analyticsError: analyticsData.error?.message, countryData, dailyData: dailyData2 });
       }
 
+      // ── GET model training data ───────────────────────────────────────────
+      if (req.method === 'GET' && ytMode === 'modelData') {
+        const raw = await kvGet('ytModel:training');
+        if (!raw) return res.json({ ok: true, training: [] });
+        try {
+          const data = JSON.parse(raw);
+          return res.json({ ok: true, training: Array.isArray(data) ? data : [] });
+        } catch(_) { return res.json({ ok: true, training: [] }); }
+      }
+
+      // ── POST upsert model training entry ─────────────────────────────────
+      if (req.method === 'POST' && ytMode === 'modelSave') {
+        const entry = req.body;
+        if (!entry?.playlistId || !entry?.r2 || !Array.isArray(entry?.normalizedViews)) {
+          return res.json({ ok: false, error: 'missing fields' });
+        }
+        const raw = await kvGet('ytModel:training');
+        let training = [];
+        if (raw) { try { const d = JSON.parse(raw); if (Array.isArray(d)) training = d; } catch(_) {} }
+        const idx = training.findIndex(t => t.playlistId === entry.playlistId);
+        if (idx >= 0) training[idx] = entry; else training.push(entry);
+        await kvSet('ytModel:training', training, 365 * 24 * 3600); // 1 año
+        return res.json({ ok: true, total: training.length });
+      }
+
       // ── GET cached YouTube Studio real data ──────────────────────────────
       if (req.method === 'GET' && ytMode === 'studioGet') {
         const { playlistId } = req.query;
