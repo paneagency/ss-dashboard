@@ -9957,7 +9957,7 @@ async function openYtPlaylistDetail(playlistId) {
   document.getElementById('yt-detail-footer').innerHTML = '';
   document.getElementById('yt-detail-modal').style.display = 'flex';
   // Clear add form
-  ['yt-form-track-artista','yt-form-track-cancion','yt-form-track-pos','yt-form-track-cobrado','yt-form-track-gasto','yt-form-track-videoid'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['yt-form-track-artista','yt-form-track-cancion','yt-form-track-pos','yt-form-track-estimadok','yt-form-track-cobrado','yt-form-track-gasto','yt-form-track-videoid'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('yt-track-ganancia-preview').textContent = '';
 
   try {
@@ -10204,6 +10204,7 @@ async function saveYtTrack() {
         artista,
         cancion: document.getElementById('yt-form-track-cancion').value.trim(),
         posicion: parseInt(document.getElementById('yt-form-track-pos').value) || 0,
+        estimadoK: parseFloat(document.getElementById('yt-form-track-estimadok').value) || 0,
         cobrado, gasto,
         videoId: (() => { const v = document.getElementById('yt-form-track-videoid').value.trim(); const m = v.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/); return m ? m[1] : v; })(),
       }) });
@@ -11441,7 +11442,7 @@ function renderYtDaily(dailyData, period) {
     <!-- Add track form -->
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface)">
       <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Agregar track</div>
-      <div style="display:grid;grid-template-columns:2fr 2fr 1fr 1fr 1fr 1fr;gap:10px;align-items:end">
+      <div style="display:grid;grid-template-columns:2fr 2fr 1fr 1fr 1fr 1fr 1fr;gap:10px;align-items:end">
         <div>
           <label class="yt-field-label">Artista *</label>
           <input id="yt-form-track-artista" class="yt-input" placeholder="Artista" list="list-artistas" autocomplete="off">
@@ -11453,6 +11454,10 @@ function renderYtDaily(dailyData, period) {
         <div>
           <label class="yt-field-label">Posición</label>
           <input id="yt-form-track-pos" class="yt-input" type="number" placeholder="1">
+        </div>
+        <div>
+          <label class="yt-field-label">Est. K</label>
+          <input id="yt-form-track-estimadok" class="yt-input" type="number" step="1" placeholder="50">
         </div>
         <div>
           <label class="yt-field-label">Cobrado USD</label>
