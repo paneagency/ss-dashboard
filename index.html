@@ -10007,7 +10007,7 @@ function renderYtTracksTable(tracks) {
             <td style="padding:8px 12px;text-align:right;color:#10b981;font-weight:600">${t.cobrado ? `$${Number(t.cobrado).toFixed(0)}` : '—'}</td>
             <td style="padding:8px 12px;text-align:right;color:#f59e0b">${t.gasto ? `$${Number(t.gasto).toFixed(0)}` : '—'}</td>
             <td style="padding:8px 12px;text-align:right;font-weight:700;color:${(t.ganancia || 0) >= 0 ? '#10b981' : '#ef4444'}">${t.ganancia ? `$${Number(t.ganancia).toFixed(0)}` : '—'}</td>
-            <td style="padding:8px 12px;text-align:center;color:var(--muted);font-size:11px">${t.fechaInicio || '—'}</td>
+            <td style="padding:8px 12px;text-align:center;color:var(--muted);font-size:11px;white-space:nowrap">${t.fechaInicio || '—'}</td>
             <td style="padding:8px;text-align:center">
               <button onclick="deleteYtTrack(${t.row}, event)" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:3px 6px;font-size:12px;border-radius:4px;transition:color 0.15s" title="Eliminar" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--muted)'">✕</button>
             </td>
@@ -10399,10 +10399,14 @@ function openYtPlSongsModal(playlistId) {
     if (!data.ok) { document.getElementById('yt-plsongs-loading').textContent = `Error: ${data.error}`; return; }
     if (modelData.ok && modelData.training) _ytModelTraining = modelData.training;
     _currentYtSongs = data.songs || [];
-    // Build videoId → track map for pauta tracking
+    // Build videoId → track and position → track maps for pauta tracking
     const tracksMap = {};
+    const tracksByPos = {};
     if (tracksData.ok && tracksData.tracks?.length) {
-      tracksData.tracks.forEach(t => { if (t.videoId) tracksMap[t.videoId] = t; });
+      tracksData.tracks.forEach(t => {
+        if (t.videoId) tracksMap[t.videoId] = t;
+        if (t.posicion) tracksByPos[t.posicion] = t;
+      });
     }
     // Priority: KV real data > localStorage import
     const localCached = ytImportLoad(playlistId);
@@ -10417,7 +10421,7 @@ function openYtPlSongsModal(playlistId) {
         source: 'kv'
       };
     }
-    renderYtPlSongs(data, pl, cached, tracksMap);
+    renderYtPlSongs(data, pl, cached, tracksMap, tracksByPos);
   }).catch(e => { document.getElementById('yt-plsongs-loading').textContent = `Error: ${e.message}`; });
 }
 
@@ -10756,7 +10760,7 @@ function buildPautaInfo(track, currentViews) {
   </div>`;
 }
 
-function renderYtPlSongs(data, plAnalytics, cached, tracksMap) {
+function renderYtPlSongs(data, plAnalytics, cached, tracksMap, tracksByPos) {
   document.getElementById('yt-plsongs-loading').style.display = 'none';
   document.getElementById('yt-plsongs-content').style.display = '';
   if (data.plThumb) { const img = document.getElementById('yt-plsongs-thumb-img'); img.src = data.plThumb; img.style.display = ''; }
@@ -10839,7 +10843,7 @@ function renderYtPlSongs(data, plAnalytics, cached, tracksMap) {
       const pct = total ? ((row.views / total) * 100).toFixed(1) : 0;
       const barW = Math.round((row.views / maxV) * 100);
       const posBadge = row.position ? `<span style="font-size:9px;color:rgba(255,255,255,0.35);margin-left:4px">#${row.position}</span>` : '';
-      const track = tracksMap && row.videoId ? tracksMap[row.videoId] : null;
+      const track = (tracksMap && row.videoId ? tracksMap[row.videoId] : null) || (tracksByPos && row.position ? tracksByPos[row.position] : null);
       const pautaHtml = buildPautaInfo(track, row.views);
       const rowStyle = track ? 'background:rgba(255,68,68,0.05);border-left:2px solid rgba(255,68,68,0.5);padding-left:6px;margin-left:-8px;padding-right:0;border-radius:0 4px 4px 0' : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);${rowStyle}">
@@ -10866,7 +10870,7 @@ function renderYtPlSongs(data, plAnalytics, cached, tracksMap) {
       const estViews = _ytPlSongsModel ? _ytPlSongsModel(s.position) : null;
       const pct = totalEstViews && estViews ? ((estViews / totalEstViews) * 100).toFixed(1) : null;
       const barW = estViews ? Math.round((estViews / (_ytPlSongsModel(1) || 1)) * 100) : 0;
-      const track = tracksMap && s.videoId ? tracksMap[s.videoId] : null;
+      const track = (tracksMap && s.videoId ? tracksMap[s.videoId] : null) || (tracksByPos && s.position ? tracksByPos[s.position] : null);
       const pautaHtml = buildPautaInfo(track, estViews);
       const rowStyle = track ? 'background:rgba(255,68,68,0.05);border-left:2px solid rgba(255,68,68,0.5);padding-left:6px;margin-left:-8px;padding-right:0;border-radius:0 4px 4px 0' : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);${rowStyle}">
