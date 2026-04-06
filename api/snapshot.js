@@ -295,16 +295,18 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Auth: accept Vercel internal cron header OR CRON_SECRET query/header param
-  const cronSecret = process.env.CRON_SECRET || process.env.SNAPSHOT_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers['authorization'] || '';
-    const querySecret = req.query.secret || req.body?.secret || '';
-    const vercelCron = req.headers['x-vercel-cron']; // Vercel sets this automatically
-    const isVercelInternal = !!vercelCron;
-    const hasValidSecret = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret;
-    if (!isVercelInternal && !hasValidSecret) {
-      return res.status(401).json({ error: 'Unauthorized' });
+  // Auth: only protect action=cron — other actions are called from the frontend
+  if (req.query.action === 'cron') {
+    const cronSecret = process.env.CRON_SECRET || process.env.SNAPSHOT_SECRET;
+    if (cronSecret) {
+      const authHeader = req.headers['authorization'] || '';
+      const querySecret = req.query.secret || req.body?.secret || '';
+      const vercelCron = req.headers['x-vercel-cron']; // Vercel sets this automatically
+      const isVercelInternal = !!vercelCron;
+      const hasValidSecret = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret;
+      if (!isVercelInternal && !hasValidSecret) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
     }
   }
 
