@@ -10718,18 +10718,29 @@ function buildSmartModel(totalViews, numSongs, viewsPerStart, starts, training) 
 }
 
 function buildPautaInfo(track, currentViews) {
-  if (!track?.estimadoK || !track?.fechaInicio) return '';
-  const goalViews = track.estimadoK * 1000;
+  if (!track) return '';
   const today = new Date(); today.setHours(0,0,0,0);
-  const start = new Date(track.fechaInicio + 'T00:00:00'); start.setHours(0,0,0,0);
-  const daysActive = Math.max(1, Math.round((today - start) / 86400000));
+  const daysActive = track.fechaInicio
+    ? Math.max(1, Math.round((today - new Date(track.fechaInicio + 'T00:00:00').setHours(0,0,0,0)) / 86400000))
+    : null;
+  const dayLabel = daysActive ? `${daysActive}d activo` : '';
+
+  if (!track.estimadoK) {
+    // No goal set — just show PAUTA badge + days active
+    return `<div style="margin-top:3px;display:flex;align-items:center;gap:6px">
+      <span style="background:rgba(255,68,68,0.15);color:#ff6b6b;font-size:9px;padding:1px 5px;border-radius:8px;font-weight:700;letter-spacing:0.04em">PAUTA</span>
+      ${dayLabel ? `<span style="font-size:9px;color:var(--muted)">${dayLabel}</span>` : ''}
+    </div>`;
+  }
+
+  const goalViews = track.estimadoK * 1000;
   const pct = currentViews ? Math.min(100, Math.round((currentViews / goalViews) * 100)) : 0;
   const completed = currentViews >= goalViews;
   const rate = currentViews && daysActive > 0 ? currentViews / daysActive : 0;
   let etaText = '';
   if (completed) { etaText = '✅ Meta alcanzada'; }
   else if (rate > 0) { const d = Math.ceil((goalViews - currentViews) / rate); etaText = `~${d}d para la meta`; }
-  const rateText = rate > 0 ? `${Math.round(rate).toLocaleString('es-AR')}/día · ${daysActive}d activo` : `${daysActive}d activo`;
+  const rateText = rate > 0 ? `${Math.round(rate).toLocaleString('es-AR')}/día · ${daysActive}d activo` : dayLabel;
   const goalLabel = goalViews >= 1000000 ? `${(goalViews/1000000).toFixed(1)}M` : `${(goalViews/1000).toFixed(0)}K`;
   const currLabel = currentViews ? (currentViews >= 1000000 ? `${(currentViews/1000000).toFixed(1)}M` : currentViews.toLocaleString('es-AR')) : '…';
   return `<div style="margin-top:4px">
@@ -10830,7 +10841,8 @@ function renderYtPlSongs(data, plAnalytics, cached, tracksMap) {
       const posBadge = row.position ? `<span style="font-size:9px;color:rgba(255,255,255,0.35);margin-left:4px">#${row.position}</span>` : '';
       const track = tracksMap && row.videoId ? tracksMap[row.videoId] : null;
       const pautaHtml = buildPautaInfo(track, row.views);
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+      const rowStyle = track ? 'background:rgba(255,68,68,0.05);border-left:2px solid rgba(255,68,68,0.5);padding-left:6px;margin-left:-8px;padding-right:0;border-radius:0 4px 4px 0' : '';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);${rowStyle}">
         <div style="width:20px;text-align:right;font-size:11px;color:var(--muted);flex-shrink:0">${i+1}</div>
         ${row.thumb ? `<img src="${row.thumb}" style="width:44px;height:25px;object-fit:cover;border-radius:3px;flex-shrink:0">` : '<div style="width:44px;height:25px;background:rgba(255,255,255,0.06);border-radius:3px;flex-shrink:0"></div>'}
         <div style="flex:1;min-width:0">
@@ -10856,7 +10868,8 @@ function renderYtPlSongs(data, plAnalytics, cached, tracksMap) {
       const barW = estViews ? Math.round((estViews / (_ytPlSongsModel(1) || 1)) * 100) : 0;
       const track = tracksMap && s.videoId ? tracksMap[s.videoId] : null;
       const pautaHtml = buildPautaInfo(track, estViews);
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+      const rowStyle = track ? 'background:rgba(255,68,68,0.05);border-left:2px solid rgba(255,68,68,0.5);padding-left:6px;margin-left:-8px;padding-right:0;border-radius:0 4px 4px 0' : '';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);${rowStyle}">
         <div style="width:22px;text-align:right;font-size:11px;color:rgba(255,165,0,0.7);font-weight:700;flex-shrink:0">${s.position}</div>
         ${s.thumb ? `<img src="${s.thumb}" style="width:44px;height:25px;object-fit:cover;border-radius:3px;flex-shrink:0">` : '<div style="width:44px;height:25px;background:rgba(255,255,255,0.06);border-radius:3px;flex-shrink:0"></div>'}
         <div style="flex:1;min-width:0">
