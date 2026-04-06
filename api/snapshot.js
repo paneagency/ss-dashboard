@@ -525,10 +525,12 @@ module.exports = async (req, res) => {
       const cached = await kvGetJson(cacheKey);
       if (cached) return res.json({ ok: true, playlist: cached, fromCache: true });
 
-      const ccToken = await getCCToken();
+      // Prefer OAuth token (separate rate limit from cron). Fall back to CC token.
+      let token;
+      try { token = await getOAuthToken(); } catch(_) { token = await getCCToken(); }
       const r = await fetch(
         `https://api.spotify.com/v1/playlists/${playlistId}?fields=id,name,description,followers,tracks(total),images,owner`,
-        { headers: { Authorization: `Bearer ${ccToken}` } }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       const text = await r.text();
       if (!r.ok) {
