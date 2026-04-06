@@ -10039,6 +10039,18 @@ function ytExtractVideoId(input) {
   if (m) { input.value = m[1]; ytAutofillFromVideoId(m[1]); }
 }
 
+async function ytSetGoalInline(row) {
+  const input = prompt('Meta de vistas en K (ej: 50 = 50.000 vistas):');
+  if (!input) return;
+  const k = parseFloat(input.replace(',', '.'));
+  if (!k || k <= 0) return;
+  try {
+    const r = await fetch('/api/sheets?mode=yt-track', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row, estimadoK: k }) });
+    const d = await r.json();
+    if (d.ok) openYtPlSongsModal(_currentYtPlaylistId);
+  } catch(e) { alert('Error al guardar: ' + e.message); }
+}
+
 async function ytAutofillFromVideoId(videoId) {
   try {
     const r = await fetch(`/api/sheets?mode=yt-videoInfo&videoId=${encodeURIComponent(videoId)}`);
@@ -10725,15 +10737,16 @@ function buildPautaInfo(track, currentViews) {
   if (!track) return '';
   const today = new Date(); today.setHours(0,0,0,0);
   const daysActive = track.fechaInicio
-    ? Math.max(1, Math.round((today - new Date(track.fechaInicio + 'T00:00:00').setHours(0,0,0,0)) / 86400000))
+    ? Math.max(0, Math.round((today - new Date(track.fechaInicio + 'T00:00:00').setHours(0,0,0,0)) / 86400000))
     : null;
-  const dayLabel = daysActive ? `${daysActive}d activo` : '';
+  const dayLabel = daysActive === 0 ? 'Hoy' : daysActive ? `${daysActive}d activo` : '';
+  const editGoalBtn = track.row ? `<button onclick="ytSetGoalInline(${track.row})" style="background:none;border:1px dashed rgba(255,255,255,0.2);color:var(--muted);cursor:pointer;font-size:9px;padding:1px 6px;border-radius:6px;margin-left:2px" title="Establecer meta de vistas">+ meta</button>` : '';
 
   if (!track.estimadoK) {
-    // No goal set — just show PAUTA badge + days active
-    return `<div style="margin-top:3px;display:flex;align-items:center;gap:6px">
+    return `<div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
       <span style="background:rgba(255,68,68,0.15);color:#ff6b6b;font-size:9px;padding:1px 5px;border-radius:8px;font-weight:700;letter-spacing:0.04em">PAUTA</span>
       ${dayLabel ? `<span style="font-size:9px;color:var(--muted)">${dayLabel}</span>` : ''}
+      ${editGoalBtn}
     </div>`;
   }
 
@@ -10744,7 +10757,7 @@ function buildPautaInfo(track, currentViews) {
   let etaText = '';
   if (completed) { etaText = '✅ Meta alcanzada'; }
   else if (rate > 0) { const d = Math.ceil((goalViews - currentViews) / rate); etaText = `~${d}d para la meta`; }
-  const rateText = rate > 0 ? `${Math.round(rate).toLocaleString('es-AR')}/día · ${daysActive}d activo` : dayLabel;
+  const rateText = rate > 0 ? `${Math.round(rate).toLocaleString('es-AR')}/día · ${dayLabel}` : dayLabel;
   const goalLabel = goalViews >= 1000000 ? `${(goalViews/1000000).toFixed(1)}M` : `${(goalViews/1000).toFixed(0)}K`;
   const currLabel = currentViews ? (currentViews >= 1000000 ? `${(currentViews/1000000).toFixed(1)}M` : currentViews.toLocaleString('es-AR')) : '…';
   return `<div style="margin-top:4px">
@@ -10752,6 +10765,7 @@ function buildPautaInfo(track, currentViews) {
       <span style="background:rgba(255,68,68,0.15);color:#ff6b6b;font-size:9px;padding:1px 5px;border-radius:8px;font-weight:700;letter-spacing:0.04em">PAUTA</span>
       <span style="font-size:9px;color:var(--muted)">${rateText}</span>
       ${etaText ? `<span style="font-size:9px;color:${completed ? '#4CAF50' : '#FFA726'};margin-left:auto">${etaText}</span>` : ''}
+      ${editGoalBtn}
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <div style="flex:1;height:3px;background:rgba(255,255,255,0.08);border-radius:2px"><div style="height:100%;width:${pct}%;background:${completed ? '#4CAF50' : 'linear-gradient(90deg,#ff4444,#ff6b6b)'};border-radius:2px"></div></div>
