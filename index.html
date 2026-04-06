@@ -8117,6 +8117,7 @@ function renderSpotifyPlaylists(playlists) {
         <div class="sp-cover-overlay" onclick="openPlaylistStatsModal(${realIdx})">
           <button class="sp-cover-btn" onclick="event.stopPropagation();analyzeSpotifyPlaylist(${realIdx})" title="Analizar playlist">🎯</button>
           <button class="sp-cover-btn" onclick="event.stopPropagation();spCopyLink(${realIdx})" title="Copiar link">🔗</button>
+          <a href="https://app.artist.tools/playlist/${p.userId}" target="_blank" class="sp-cover-btn" title="Ver en Artist Tools" onclick="event.stopPropagation()">🔍</a>
           <a href="${p.url}" target="_blank" class="sp-cover-btn" title="Abrir en Spotify" onclick="event.stopPropagation()">↗</a>
         </div>
       </div>
