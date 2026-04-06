@@ -295,10 +295,17 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Optional secret check
-  const secret = req.query.secret || req.body?.secret;
-  if (process.env.SNAPSHOT_SECRET && secret !== process.env.SNAPSHOT_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  // Auth: accept Vercel internal cron header OR CRON_SECRET query/header param
+  const cronSecret = process.env.CRON_SECRET || process.env.SNAPSHOT_SECRET;
+  if (cronSecret) {
+    const authHeader = req.headers['authorization'] || '';
+    const querySecret = req.query.secret || req.body?.secret || '';
+    const vercelCron = req.headers['x-vercel-cron']; // Vercel sets this automatically
+    const isVercelInternal = !!vercelCron;
+    const hasValidSecret = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret;
+    if (!isVercelInternal && !hasValidSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
   }
 
   // ── GET action=history: leer HistorialPlaylists para gráficos ──
@@ -405,9 +412,33 @@ module.exports = async (req, res) => {
       const today = new Date().toISOString().slice(0, 10);
 
       // 5. Skip playlists already processed today (resumable across multiple cron runs)
+      // Primary: KV cache. Fallback: read today's IDs directly from HistorialPlaylists sheet.
       const doneKey = `snapshot:done:${today}`;
-      const doneRaw = await kvGetJson(doneKey);
-      const doneSet = new Set(Array.isArray(doneRaw) ? doneRaw : []);
+      let doneSet = new Set();
+      try {
+        const doneRaw = await kvGetJson(doneKey);
+        if (Array.isArray(doneRaw) && doneRaw.length > 0) {
+          doneSet = new Set(doneRaw);
+          console.log(`[cron] KV cursor: ${doneSet.size} ya procesadas hoy`);
+        }
+      } catch(kvErr) {
+        console.warn('[cron] KV no disponible:', kvErr.message);
+      }
+      // Fallback: if KV returned nothing, check the sheet directly
+      if (doneSet.size === 0) {
+        try {
+          const histResp = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: 'HistorialPlaylists!A:B',
+          }).catch(() => ({ data: { values: [] } }));
+          (histResp.data.values || []).slice(1).forEach(r => {
+            if (r[0] === today && r[1]) doneSet.add(r[1].trim());
+          });
+          if (doneSet.size > 0) console.log(`[cron] Sheet fallback: ${doneSet.size} ya procesadas hoy`);
+        } catch(sheetErr) {
+          console.warn('[cron] Sheet fallback también falló:', sheetErr.message);
+        }
+      }
       const pendingIds = allIds.filter(id => !doneSet.has(id));
       console.log(`[cron] ${pendingIds.length} pendientes de ${allIds.length} totales (${doneSet.size} ya procesadas hoy)`);
 
@@ -439,9 +470,9 @@ module.exports = async (req, res) => {
         if (i + BATCH_SIZE < pendingIds.length) await delay(BATCH_DELAY);
       }
 
-      // Persistir IDs procesados en KV para que la segunda corrida los saltee
+      // Persistir IDs procesados en KV para que la segunda corrida los saltee (best-effort)
       const allDone = [...doneSet, ...processedThisRun];
-      kvSet(doneKey, allDone, 26 * 3600).catch(() => {});
+      try { await kvSet(doneKey, allDone, 26 * 3600); } catch(_) {}
 
       const rows = playlists.map(pl => [
         today, pl.id, pl.name, pl.followers, pl.totalTracks,
