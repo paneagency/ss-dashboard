@@ -6655,11 +6655,9 @@ function copiarPendientes() {
     return `• ${fecha} - ${c.artista} ${precio}`;
   };
 
-  const parts = [];
-  if (sinPago.length)  parts.push(`*SIN PAGO*\n\n${sinPago.map(fmt).join('\n')}`);
-  if (vencidas.length) parts.push(`*VENCIDAS*\n\n${vencidas.map(fmt).join('\n')}`);
+  const text = `*PENDIENTES*\n\n${[...sinPago, ...vencidas].map(fmt).join('\n')}`;
 
-  navigator.clipboard.writeText(parts.join('\n\n'))
+  navigator.clipboard.writeText(text)
     .then(() => showToast('Pendientes copiados al portapapeles', 'success'))
     .catch(() => showToast('No se pudo copiar', 'error'));
 }
