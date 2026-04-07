@@ -1617,6 +1617,7 @@
         <option value="all">Todos los representantes</option>
       </select>
       <button id="btn-copiar-vencidas" onclick="copiarPendientes()" style="display:none;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);color:var(--red);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(248,81,73,0.18)'" onmouseout="this.style.background='rgba(248,81,73,0.1)'">📋 Copiar Pendientes</button>
+      <button onclick="abrirModalProveedor(this)" style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:var(--indigo);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(99,102,241,0.18)'" onmouseout="this.style.background='rgba(99,102,241,0.1)'">📤 Proveedor</button>
       <button class="btn btn-ghost btn-sm" onclick="loadCampanias()" style="font-size:12px;padding:5px 12px;border-radius:20px">↻ Actualizar</button>
     </div>
     <div style="position:relative;margin-bottom:16px">
@@ -6667,6 +6668,61 @@ function copiarPendientes() {
     .catch(() => showToast('No se pudo copiar', 'error'));
 }
 
+function abrirModalProveedor(btn) {
+  const pop = document.getElementById('popover-proveedor');
+  const bd  = document.getElementById('popover-proveedor-backdrop');
+  // Poblar proveedores
+  const sel = document.getElementById('select-proveedor');
+  sel.innerHTML = '<option value="">Todos los proveedores</option>';
+  (window._providers || []).sort().forEach(p => {
+    const o = document.createElement('option'); o.value = p; o.textContent = p; sel.appendChild(o);
+  });
+  // Posicionar cerca del botón
+  const rect = btn.getBoundingClientRect();
+  pop.style.display = 'block';
+  bd.style.display  = 'block';
+  const popW = 270, popH = 150;
+  let left = rect.right - popW;
+  if (left < 8) left = 8;
+  let top = rect.bottom + 8;
+  if (top + popH > window.innerHeight - 8) top = rect.top - popH - 8;
+  pop.style.left = left + 'px';
+  pop.style.top  = top  + 'px';
+}
+
+function cerrarModalProveedor() {
+  document.getElementById('popover-proveedor').style.display = 'none';
+  document.getElementById('popover-proveedor-backdrop').style.display = 'none';
+}
+
+function copiarParaProveedor() {
+  const ACTIVE_STATES = ['activa','extendida','renovada','regalo','pendiente_inicio','pendiente_pago','cobrada','prueba'];
+  const proveedor = document.getElementById('select-proveedor').value;
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  let data = (_campanias || []).filter(c => ACTIVE_STATES.includes(c.estado));
+  if (proveedor) data = data.filter(c => (c.detalleGastos || '').includes(proveedor));
+
+  // Deduplicar grupales
+  const seen = new Set();
+  data = data.filter(c => { const k = c.masterEventId || c.row; if (seen.has(k)) return false; seen.add(k); return true; });
+  data.sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
+
+  if (!data.length) { showToast('No hay campañas para este proveedor', 'error'); return; }
+
+  const fmt = c => {
+    const d = new Date(c.fechaVencimiento + 'T12:00:00');
+    const fecha = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    return `• ${fecha} - ${c.artista}`;
+  };
+  const header = proveedor ? `*CAMPAÑAS - ${proveedor}*` : '*CAMPAÑAS*';
+  const text = `${header}\n\n${data.map(fmt).join('\n')}`;
+
+  navigator.clipboard.writeText(text)
+    .then(() => { showToast('Lista copiada al portapapeles', 'success'); cerrarModalProveedor(); })
+    .catch(() => showToast('No se pudo copiar', 'error'));
+}
+
 function copiarPauta(idx) {
   const c = _campanias.find(c => c.row === idx);
   const text = c?.pauta || document.getElementById(`camp-expand-pauta-${idx}`)?.textContent || '';
@@ -11508,6 +11564,19 @@ function renderYtDaily(dailyData, period) {
     <div id="yt-detail-footer" style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:20px;font-size:13px"></div>
   </div>
 </div>
+
+<!-- MINI MODAL PROVEEDOR -->
+<div id="popover-proveedor" style="display:none;position:fixed;z-index:2000;background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:18px 20px;width:270px;box-shadow:0 12px 40px rgba(0,0,0,0.5)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <span style="font-weight:700;font-size:13px;color:var(--text)">📤 Copiar para Proveedor</span>
+    <button onclick="cerrarModalProveedor()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:17px;line-height:1;padding:0">×</button>
+  </div>
+  <select id="select-proveedor" style="width:100%;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;margin-bottom:12px">
+    <option value="">Todos los proveedores</option>
+  </select>
+  <button onclick="copiarParaProveedor()" style="width:100%;padding:8px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:var(--indigo);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(99,102,241,0.22)'" onmouseout="this.style.background='rgba(99,102,241,0.15)'">📋 Copiar lista</button>
+</div>
+<div id="popover-proveedor-backdrop" onclick="cerrarModalProveedor()" style="display:none;position:fixed;inset:0;z-index:1999"></div>
 
 </body>
 </html>
