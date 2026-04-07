@@ -6643,8 +6643,13 @@ function copiarPendientes() {
   if (filterRep    !== 'all') all = all.filter(c => c.representante === filterRep);
   if (searchQ) all = all.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
 
-  const sinPago  = all.filter(c => c.estado === 'pendiente_pago').sort((a, b) => new Date(b.fechaVencimiento) - new Date(a.fechaVencimiento));
-  const vencidas = all.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0 && c.estado !== 'pendiente_pago').sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
+  // Deduplicar campañas grupales (mismo masterEventId → una sola entrada)
+  const dedup = arr => {
+    const seen = new Set();
+    return arr.filter(c => { const k = c.masterEventId || c.row; if (seen.has(k)) return false; seen.add(k); return true; });
+  };
+  const sinPago  = dedup(all.filter(c => c.estado === 'pendiente_pago').sort((a, b) => new Date(b.fechaVencimiento) - new Date(a.fechaVencimiento)));
+  const vencidas = dedup(all.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0 && c.estado !== 'pendiente_pago').sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento)));
 
   if (!sinPago.length && !vencidas.length) { showToast('No hay pendientes para copiar', 'error'); return; }
 
