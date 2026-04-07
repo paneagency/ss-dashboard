@@ -6421,6 +6421,7 @@ function renderCampList(data, today) {
         <button class="btn btn-sm" style="background:rgba(100,100,100,0.12);color:var(--muted);border:1px solid var(--border)" onclick="openEditModal(${idx})" title="Editar campaña">⚙️</button>
         ${!sinPago && !esRegalo && !pendienteInicio ? `<button class="btn btn-sm btn-renovar" id="renovar-btn-${idx}" onclick="renovarRapido(${idx})" touch-action="manipulation">↻ Renovar</button>` : ''}
         ${!pendienteInicio ? `<button class="btn btn-sm btn-no-renueva" onclick="confirmarNoRenueva(${idx})" touch-action="manipulation">✕</button>` : ''}
+        ${_campView === 'pendientes' ? `<button class="btn btn-sm" style="${c.proveedorPagado ? 'background:rgba(16,185,129,0.15);color:var(--green);border:1px solid rgba(16,185,129,0.4)' : 'background:rgba(100,100,100,0.08);color:var(--muted);border:1px solid var(--border)'}" onclick="toggleProveedorPagado(${idx})" title="${c.proveedorPagado ? 'Proveedor pagado — click para desmarcar' : 'Marcar proveedor como pagado'}">🏦 ${c.proveedorPagado ? 'Prov. pagado' : 'Prov. pendiente'}</button>` : ''}
       </div>
       ${hasPauta  ? `<div class="campania-expand" id="camp-expand-pauta-${idx}">${pautaEsc}</div>` : ''}
       ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}
@@ -6695,12 +6696,31 @@ function cerrarModalProveedor() {
   document.getElementById('popover-proveedor-backdrop').style.display = 'none';
 }
 
+async function toggleProveedorPagado(idx) {
+  const c = _campanias.find(c => c.row === idx);
+  if (!c) return;
+  const nuevo = !c.proveedorPagado;
+  try {
+    const r = await fetch('/api/campaign', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'toggle-proveedor-pagado', row: idx, value: nuevo }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      c.proveedorPagado = nuevo;
+      renderCampaniasTab();
+      showToast(nuevo ? 'Proveedor marcado como pagado' : 'Marcado como pendiente al proveedor', 'success');
+    }
+  } catch(e) { showToast('Error al guardar', 'error'); }
+}
+
 function copiarParaProveedor() {
   const ACTIVE_STATES = ['activa','extendida','renovada','regalo','pendiente_inicio','pendiente_pago','cobrada','prueba'];
   const proveedor = document.getElementById('select-proveedor').value;
   const today = new Date(); today.setHours(0,0,0,0);
 
-  let data = (_campanias || []).filter(c => ACTIVE_STATES.includes(c.estado));
+  let data = (_campanias || []).filter(c => ACTIVE_STATES.includes(c.estado) && !c.proveedorPagado);
   if (proveedor) data = data.filter(c => (c.detalleGastos || '').includes(proveedor));
 
   // Deduplicar grupales

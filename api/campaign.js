@@ -569,7 +569,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:V`,
+        range: `${CAMPANAS_SHEET}!A:W`,
       });
       const allRows = (resp.data.values || []).slice(1).map((r, i) => ({
         row: i + 2,
@@ -587,6 +587,7 @@ module.exports = async (req, res) => {
         campaignId: r[19] || '',
         timestamp: r[20] || '',
         editadoPor: r[21] || '',
+        proveedorPagado: r[22] === '1',
       }));
 
       // Índice de extendidas por masterEventId y por artista+vendedor (fallback)
@@ -1015,6 +1016,18 @@ module.exports = async (req, res) => {
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
+      });
+      return res.json({ ok: true });
+    }
+
+    // ── PUT: toggle proveedor pagado ──────────────────────────
+    if (req.method === 'PUT' && req.body.mode === 'toggle-proveedor-pagado') {
+      const { row, value } = req.body;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${CAMPANAS_SHEET}!W${row}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [[value ? '1' : '']] },
       });
       return res.json({ ok: true });
     }
