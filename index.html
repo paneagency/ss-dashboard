@@ -1606,8 +1606,7 @@
         <button class="btn btn-sm camp-view-btn active" data-view="calendario" onclick="setCampView('calendario')">📅 Calendario</button>
         <button class="btn btn-sm camp-view-btn" data-view="hoy" onclick="setCampView('hoy')">⚡ Hoy</button>
         <button class="btn btn-sm camp-view-btn" data-view="lista" onclick="setCampView('lista')">≡ Lista</button>
-        <button class="btn btn-sm camp-view-btn" data-view="vencidas" onclick="setCampView('vencidas')">⚠️ Vencidas</button>
-        <button class="btn btn-sm camp-view-btn" data-view="sinpago" onclick="setCampView('sinpago')">💳 Sin Pago</button>
+        <button class="btn btn-sm camp-view-btn" data-view="pendientes" onclick="setCampView('pendientes')">⚠️ Pendientes</button>
         <button class="btn btn-sm camp-view-btn" data-view="historial" onclick="setCampView('historial')">📋 Historial</button>
       </div>
       <div style="flex:1"></div>
@@ -1617,7 +1616,7 @@
       <select id="camp-filter-rep" class="filter-control" onchange="renderCampaniasTab()" style="min-width:140px;font-size:12px">
         <option value="all">Todos los representantes</option>
       </select>
-      <button id="btn-copiar-vencidas" onclick="copiarVencidas()" style="display:none;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);color:var(--red);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(248,81,73,0.18)'" onmouseout="this.style.background='rgba(248,81,73,0.1)'">📋 Copiar Deuda</button>
+      <button id="btn-copiar-vencidas" onclick="copiarPendientes()" style="display:none;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);color:var(--red);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(248,81,73,0.18)'" onmouseout="this.style.background='rgba(248,81,73,0.1)'">📋 Copiar Pendientes</button>
       <button class="btn btn-ghost btn-sm" onclick="loadCampanias()" style="font-size:12px;padding:5px 12px;border-radius:20px">↻ Actualizar</button>
     </div>
     <div style="position:relative;margin-bottom:16px">
@@ -5806,7 +5805,7 @@ function renderCampaniasTab() {
     return;
   }
 
-  document.getElementById('btn-copiar-vencidas').style.display = _campView === 'vencidas' ? 'inline-flex' : 'none';
+  document.getElementById('btn-copiar-vencidas').style.display = _campView === 'pendientes' ? 'inline-flex' : 'none';
 
   const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
   const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
@@ -5831,11 +5830,10 @@ function renderCampaniasTab() {
   }
   if (_campView === 'hoy') {
     data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) === 0);
-  } else if (_campView === 'vencidas') {
-    data = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0);
-  } else if (_campView === 'sinpago') {
-    data = data.filter(c => c.estado === 'pendiente_pago');
-    data = [...data].sort((a, b) => new Date(b.fechaVencimiento) - new Date(a.fechaVencimiento));
+  } else if (_campView === 'pendientes') {
+    const sinPago  = data.filter(c => c.estado === 'pendiente_pago').sort((a, b) => new Date(b.fechaVencimiento) - new Date(a.fechaVencimiento));
+    const vencidas = data.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0 && c.estado !== 'pendiente_pago').sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
+    data = [...sinPago, ...vencidas];
   } else {
     data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
   }
@@ -6341,13 +6339,27 @@ function renderCampList(data, today) {
   if (!data.length) {
     let emptyMsg = '📅 No hay campañas activas';
     if (_campView === 'hoy')      emptyMsg = '⚡ No hay campañas venciendo hoy';
-    if (_campView === 'vencidas') emptyMsg = '🎉 No hay campañas vencidas';
-    if (_campView === 'sinpago')  emptyMsg = '✅ No hay campañas pendientes de pago';
+    if (_campView === 'pendientes') emptyMsg = '✅ Sin campañas pendientes';
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">${emptyMsg.split(' ')[0]}</div><p>${emptyMsg.split(' ').slice(1).join(' ')}</p></div>`;
     return;
   }
 
-  list.innerHTML = data.map(c => {
+  // Pre-compute section boundaries for 'pendientes' view
+  const _hasSinPago  = _campView === 'pendientes' && data.some(c => c.estado === 'pendiente_pago');
+  const _hasVencidas = _campView === 'pendientes' && data.some(c => c.estado !== 'pendiente_pago');
+  const _firstVencidaIdx = _campView === 'pendientes' ? data.findIndex(c => c.estado !== 'pendiente_pago') : -1;
+
+  list.innerHTML = data.map((c, _cardIdx) => {
+    let sectionHeader = '';
+    if (_campView === 'pendientes') {
+      if (_cardIdx === 0 && _hasSinPago) {
+        sectionHeader = `<div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:0.08em;padding:4px 2px 8px;opacity:0.8">💳 Sin Pago</div>`;
+      } else if (_cardIdx === _firstVencidaIdx && _hasVencidas && _hasSinPago) {
+        sectionHeader = `<div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.08em;padding:12px 2px 8px;opacity:0.8">⚠️ Vencidas</div>`;
+      } else if (_cardIdx === 0 && _hasVencidas) {
+        sectionHeader = `<div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.08em;padding:4px 2px 8px;opacity:0.8">⚠️ Vencidas</div>`;
+      }
+    }
     const venc    = new Date(c.fechaVencimiento + 'T12:00:00');
     const diffMs  = venc - today;
     const days    = Math.floor(diffMs / 86400000);
@@ -6387,7 +6399,7 @@ function renderCampList(data, today) {
       : `border-color:${borderColor}`;
     const cardBg = `background:linear-gradient(90deg,${badgeBg.replace(')',',0.6)').replace('rgba','rgba')} 0%,var(--surface) 35%)`;
 
-    return `
+    const cardHtml = `
     <div class="campania-card" id="camp-card-${idx}" style="${borderStyle};${cardBg};${hasPauta ? 'cursor:pointer' : ''}" ${hasPauta ? `onclick="toggleCampExpand(${idx},'pauta')"` : ''}>
       <div class="campania-badge" style="background:${badgeBg};color:${badgeColor}">
         ${esRegalo ? '🎁' : sinPago ? '💳' : pendienteInicio ? '🎵' : daysLbl}
@@ -6413,6 +6425,7 @@ function renderCampList(data, today) {
       ${hasGastos ? `<div class="campania-expand" id="camp-expand-gastos-${idx}">${gastosEsc}</div>` : ''}
       ${hasNotas  ? `<div class="campania-expand" id="camp-expand-notas-${idx}">${notasEsc}</div>` : ''}
     </div>`;
+    return sectionHeader + cardHtml;
   }).join('');
 }
 
@@ -6620,26 +6633,34 @@ function toggleCampExpand(idx, tipo) {
   el.classList.toggle('open');
 }
 
-function copiarVencidas() {
+function copiarPendientes() {
   const today = new Date(); today.setHours(0,0,0,0);
   const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
   const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
   const searchQ      = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
-  let data = (_campanias || []).filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0);
-  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor);
-  if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
-  if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
-  data = [...data].sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
-  if (!data.length) { showToast('No hay vencidas para copiar', 'error'); return; }
-  const lines = data.map(c => {
+  let all = _campanias || [];
+  if (filterVendor !== 'all') all = all.filter(c => c.vendedor === filterVendor);
+  if (filterRep    !== 'all') all = all.filter(c => c.representante === filterRep);
+  if (searchQ) all = all.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
+
+  const sinPago  = all.filter(c => c.estado === 'pendiente_pago').sort((a, b) => new Date(b.fechaVencimiento) - new Date(a.fechaVencimiento));
+  const vencidas = all.filter(c => Math.floor((new Date(c.fechaVencimiento+'T12:00:00') - today) / 86400000) < 0 && c.estado !== 'pendiente_pago').sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
+
+  if (!sinPago.length && !vencidas.length) { showToast('No hay pendientes para copiar', 'error'); return; }
+
+  const fmt = c => {
     const d = new Date(c.fechaVencimiento + 'T12:00:00');
     const fecha = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
     const precio = c.precio ? `${parseFloat(c.precio).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0})} usd` : '—';
-    return `• ${fecha}- ${c.artista} ${precio}`;
-  }).join('\n');
-  const text = `*VENCIMIENTOS*\n\n${lines}`;
-  navigator.clipboard.writeText(text)
-    .then(() => showToast('Deuda copiada al portapapeles', 'success'))
+    return `• ${fecha} - ${c.artista} ${precio}`;
+  };
+
+  const parts = [];
+  if (sinPago.length)  parts.push(`*SIN PAGO*\n\n${sinPago.map(fmt).join('\n')}`);
+  if (vencidas.length) parts.push(`*VENCIDAS*\n\n${vencidas.map(fmt).join('\n')}`);
+
+  navigator.clipboard.writeText(parts.join('\n\n'))
+    .then(() => showToast('Pendientes copiados al portapapeles', 'success'))
     .catch(() => showToast('No se pudo copiar', 'error'));
 }
 
