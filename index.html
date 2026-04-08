@@ -2348,7 +2348,8 @@ async function init() {
           fillDatalist('list-ventas', window._vendors);
         }
         if (d.providers) {
-          window._providers = d.providers;
+          window._providersData = d.providers; // [{nombre, playlists:[id,...]}]
+          window._providers = d.providers.map(p => p.nombre);
           fillDatalist('list-providers', window._providers);
         }
       }).catch(() => {});
@@ -6715,29 +6716,79 @@ async function toggleProveedorPagado(idx) {
   } catch(e) { showToast('Error al guardar', 'error'); }
 }
 
+// Parsea la pauta bloque a bloque: para cada playlist que pertenezca al proveedor,
+// extrae el artista (arriba) y la fecha "Venc. DD/MM" (abajo). Si no hay fecha, usa defaultFecha.
+function parsePautaForProveedor(pauta, playlistIds, defaultFecha) {
+  const lines = (pauta || '').split('\n');
+  const results = [];
+  for (let i = 0; i < lines.length; i++) {
+    const plMatch = lines[i].match(/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/);
+    if (!plMatch || !playlistIds.has(plMatch[1])) continue;
+    // Buscar artista hacia arriba (máx 8 líneas, parar si hay otra playlist)
+    let artista = null;
+    for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
+      if (lines[j].match(/open\.spotify\.com\/playlist\//)) break;
+      const m = lines[j].replace(/\*/g, '').trim().match(/^\(([^)]+)\)/);
+      if (m) { artista = m[1]; break; }
+    }
+    // Buscar "Venc. DD/MM" hacia abajo (máx 5 líneas, parar si hay otra playlist)
+    let fecha = defaultFecha;
+    for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
+      if (lines[j].match(/open\.spotify\.com\/playlist\//)) break;
+      const vm = lines[j].match(/[Vv]enc\.\s*(\d{1,2})\/(\d{1,2})/);
+      if (vm) { fecha = `${String(vm[1]).padStart(2,'0')}/${String(vm[2]).padStart(2,'0')}`; break; }
+    }
+    if (artista) results.push({ artista, fecha });
+  }
+  return results;
+}
+
 function copiarParaProveedor() {
   const ACTIVE_STATES = ['activa','extendida','renovada','regalo','pendiente_inicio','pendiente_pago','cobrada','prueba'];
   const proveedor = document.getElementById('select-proveedor').value;
-  const today = new Date(); today.setHours(0,0,0,0);
 
   let data = (_campanias || []).filter(c => ACTIVE_STATES.includes(c.estado) && !c.proveedorPagado);
+
   if (proveedor) {
-    // Primero detectar qué masterEventIds tienen el proveedor (en cualquier fila del grupo)
-    const matchedMasters = new Set(
-      data.filter(c => (c.detalleGastos || '').includes(proveedor) && c.masterEventId).map(c => c.masterEventId)
-    );
-    // Incluir filas que directamente tienen el proveedor O pertenecen a un grupo que lo tiene
-    data = data.filter(c => (c.detalleGastos || '').includes(proveedor) || (c.masterEventId && matchedMasters.has(c.masterEventId)));
+    const provData = (window._providersData || []).find(p => p.nombre === proveedor);
+    const playlistIds = new Set(provData?.playlists || []);
+
+    if (playlistIds.size > 0) {
+      // Modo preciso: parsear pauta por playlist
+      const entries = [];
+      for (const c of data) {
+        if (!c.pauta) continue;
+        const d = new Date(c.fechaVencimiento + 'T12:00:00');
+        const defaultFecha = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+        parsePautaForProveedor(c.pauta, playlistIds, defaultFecha).forEach(e => entries.push(e));
+      }
+      if (!entries.length) { showToast('No hay campañas para este proveedor', 'error'); return; }
+      // Dedup artista+fecha y ordenar por fecha
+      const seen = new Set();
+      const deduped = entries.filter(e => { const k = `${e.artista}|${e.fecha}`; if (seen.has(k)) return false; seen.add(k); return true; });
+      deduped.sort((a, b) => {
+        const [da, ma] = a.fecha.split('/').map(Number);
+        const [db, mb] = b.fecha.split('/').map(Number);
+        return (ma * 100 + da) - (mb * 100 + db);
+      });
+      const text = `*CAMPAÑAS - ${proveedor}*\n\n${deduped.map(e => `• ${e.fecha} - ${e.artista}`).join('\n')}`;
+      navigator.clipboard.writeText(text)
+        .then(() => { showToast('Lista copiada al portapapeles', 'success'); cerrarModalProveedor(); })
+        .catch(() => showToast('No se pudo copiar', 'error'));
+      return;
+    }
+
+    // Fallback sin playlists configuradas: filtrar por detalleGastos
+    const matchedMasters = new Set(data.filter(c => (c.detalleGastos||'').includes(proveedor) && c.masterEventId).map(c => c.masterEventId));
+    data = data.filter(c => (c.detalleGastos||'').includes(proveedor) || (c.masterEventId && matchedMasters.has(c.masterEventId)));
   }
-  // Para campañas grupales: expandir artistas individuales (no colapsar en "Varios")
-  data.sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
 
   if (!data.length) { showToast('No hay campañas para este proveedor', 'error'); return; }
+  data.sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
 
   const fmt = c => {
     const d = new Date(c.fechaVencimiento + 'T12:00:00');
     const fecha = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-    // Campaña grupal: expandir artistas individuales desde la pauta
     if (c.artista === 'Varios' && c.pauta) {
       const artistas = parseArtistasFromPauta(c.pauta).map(a => a.nombre);
       if (artistas.length > 0) return artistas.map(a => `• ${fecha} - ${a}`).join('\n');
@@ -6746,7 +6797,6 @@ function copiarParaProveedor() {
   };
   const header = proveedor ? `*CAMPAÑAS - ${proveedor}*` : '*CAMPAÑAS*';
   const text = `${header}\n\n${data.map(fmt).join('\n')}`;
-
   navigator.clipboard.writeText(text)
     .then(() => { showToast('Lista copiada al portapapeles', 'success'); cerrarModalProveedor(); })
     .catch(() => showToast('No se pudo copiar', 'error'));
@@ -9817,6 +9867,8 @@ async function addSpProvider() {
     // Sincronizar datalist de proveedores si el grupo es nuevo
     if (!window._providers.includes(grupo)) {
       window._providers.push(grupo);
+      window._providersData = window._providersData || [];
+      window._providersData.push({ nombre: grupo, playlists: [] });
       fillDatalist('list-providers', window._providers);
     }
     document.getElementById('sp-prov-grupo').value = '';

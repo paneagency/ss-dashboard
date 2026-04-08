@@ -797,15 +797,17 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const [vendResp, provResp] = await Promise.all([
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Vendedores!A:I' }),
-        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Proveedores!A:A' }).catch(() => ({ data: { values: [] } })),
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Proveedores!A:K' }).catch(() => ({ data: { values: [] } })),
       ]);
       const vendRows = vendResp.data.values || [];
       const vendStart = /^(nombre|vendedor|name|vendor)/i.test(vendRows[0]?.[0] || '') ? 1 : 0;
       const vendors = vendRows.slice(vendStart)
         .filter(r => r[0]?.trim())
         .map(r => ({ name: r[0].trim(), commission: parseFloat(r[1]) || 0, email: r[2]?.trim() || '', direccion: r[3]?.trim() || '', taxId: r[4]?.trim() || '', notas: r[5]?.trim() || '', nombreFiscal: r[6]?.trim() || '', autoFactura: r[7]?.trim() === '1', facturarA: r[8]?.trim() === '1' }));
+      const extractPlaylistId = v => { const m = (v||'').match(/playlist\/([A-Za-z0-9]+)/); return m ? m[1] : null; };
       const providers = (provResp.data.values || []).slice(1)
-        .map(r => r[0]?.trim()).filter(Boolean);
+        .filter(r => r[0]?.trim())
+        .map(r => ({ nombre: r[0].trim(), playlists: r.slice(1).map(v => extractPlaylistId(v?.trim())).filter(Boolean) }));
       return res.json({ vendors, providers });
     }
 
