@@ -5039,6 +5039,37 @@ async function submitSale(e) {
   }
 }
 
+// Helper reutilizable: genera factura para Wise/PayPal si corresponde
+async function maybeGenerateInvoice(artista, vendedor, representante, precio, metodo) {
+  if (!['Wise', 'PayPal'].includes(metodo)) return;
+  const clienteData = window._clientesMap?.[artista.toLowerCase().trim()] || {};
+  const facData = resolverDatosFacturacion(artista, representante, vendedor);
+  try {
+    const ir = await fetch('/api/invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ artista, vendedor, representante, precio, metodo, ...facData }),
+    });
+    const id = await ir.json();
+    if (id.ok) {
+      window._lastInvoice = { ...id, artista, vendedor, representante, monto: precio };
+      const repData = representante ? (window._representantesMap?.[representante] || {}) : {};
+      const vendData = (window._vendorsMap || {})[vendedor] || {};
+      let autoEmails = [];
+      if (clienteData.autoFactura && clienteData.email) autoEmails = clienteData.email.split(',').map(e => e.trim()).filter(Boolean);
+      else if (repData.autoFactura && repData.email) autoEmails = repData.email.split(',').map(e => e.trim()).filter(Boolean);
+      else if (vendData.autoFactura && vendData.email) autoEmails = vendData.email.split(',').map(e => e.trim()).filter(Boolean);
+      if (autoEmails.length) {
+        fetch('/api/invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'send', ...id, precio: id.precio, issueDate: id.issueDate, to: autoEmails }) }).catch(() => {});
+        showToast(`📄 ${id.invoiceNum} generada y enviada a ${autoEmails.join(', ')}`, 'success', 6000);
+      } else {
+        const pdfLink = id.gcsUrl ? ` · <a href="${id.gcsUrl}" target="_blank" style="color:#a5b4fc;text-decoration:underline">Ver PDF</a>` : '';
+        showToast(`📄 ${id.invoiceNum} generada — <a href="#" onclick="event.preventDefault();openSendInvoiceModal(window._lastInvoice)" style="color:#a5b4fc;text-decoration:underline">Enviar</a>${pdfLink}`, 'success', 8000);
+      }
+    }
+  } catch(e) { console.warn('Invoice generation failed (non-fatal):', e); }
+}
+
 async function submitSinPago(e) {
   if (e) e.preventDefault();
   const btn = document.getElementById('sinpago-btn');
@@ -6872,6 +6903,7 @@ async function renovarRapido(idx) {
     if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
 
     showToast(`✅ ${artistaRenov} renovada hasta ${data.nuevaFechaVenc}`, 'success');
+    await maybeGenerateInvoice(artistaRenov, camp.vendedor, camp.representante || '', camp.precio, camp.metodo);
     await loadCampanias();
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
@@ -7190,6 +7222,7 @@ async function submitRenovar() {
 
     closeRenovarModal();
     showToast(`✅ ${camp.artista} renovada hasta ${campData.nuevaFechaVenc}`, 'success');
+    await maybeGenerateInvoice(camp.artista, camp.vendedor, representante, precio, metodo);
     await loadCampanias();
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
