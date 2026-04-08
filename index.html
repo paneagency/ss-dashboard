@@ -6737,6 +6737,11 @@ function copiarParaProveedor() {
   const fmt = c => {
     const d = new Date(c.fechaVencimiento + 'T12:00:00');
     const fecha = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    // Campaña grupal: expandir artistas individuales desde la pauta
+    if (c.artista === 'Varios' && c.pauta) {
+      const artistas = parseArtistasFromPauta(c.pauta).map(a => a.nombre);
+      if (artistas.length > 0) return artistas.map(a => `• ${fecha} - ${a}`).join('\n');
+    }
     return `• ${fecha} - ${c.artista}`;
   };
   const header = proveedor ? `*CAMPAÑAS - ${proveedor}*` : '*CAMPAÑAS*';
