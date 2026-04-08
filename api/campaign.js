@@ -569,7 +569,7 @@ module.exports = async (req, res) => {
       // Default: campañas activas
       const resp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:W`,
+        range: `${CAMPANAS_SHEET}!A:X`,
       });
       const allRows = (resp.data.values || []).slice(1).map((r, i) => ({
         row: i + 2,
@@ -588,6 +588,7 @@ module.exports = async (req, res) => {
         timestamp: r[20] || '',
         editadoPor: r[21] || '',
         proveedorPagado: r[22] === '1',
+        coVendedor: r[23] || '',
       }));
 
       // Índice de extendidas por masterEventId y por artista+vendedor (fallback)
@@ -694,7 +695,7 @@ module.exports = async (req, res) => {
 
     // ── POST: nueva campaña ───────────────────────────────────
     if (req.method === 'POST') {
-      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar, grupal, notas, regalo } = req.body;
+      const { artista, genero, vendedor, fechaInicio, duracion, fechaVencimiento: fechaVencBody, precio, metodo, gasto, pauta, link, gastosRows, representante, spotifyArtistId, spotifyImageUrl, sinPago, skipCalendar, grupal, notas, regalo, coVendedor } = req.body;
       const { neto, final, margen } = calcFinancials(precio, gasto, metodo, vendedor);
       if (!artista || !vendedor || !fechaInicio || !duracion)
         return res.status(400).json({ error: 'artista, vendedor, fechaInicio y duracion son requeridos' });
@@ -737,9 +738,9 @@ module.exports = async (req, res) => {
       const campaignId = 'CP_' + Date.now();
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:U`,
+        range: `${CAMPANAS_SHEET}!A:X`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '', campaignId, new Date().toISOString()]] },
+        requestBody: { values: [[artista, vendedor, fechaInicio, fechaVencimiento, duracion, masterEventId, vendorEventId, estadoCampana, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero || '', detalleGastos, pauta || '', representante || '', notas || '', campaignId, new Date().toISOString(), '', '', coVendedor || '']] },
       });
 
       // Fire & forget: snapshot Songstats para el artista al crear campaña
@@ -818,7 +819,7 @@ module.exports = async (req, res) => {
       // Leer fila actual completa
       const campResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A${row}:V${row}`,
+        range: `${CAMPANAS_SHEET}!A${row}:X${row}`,
       });
       const oldRow = campResp.data.values?.[0] || [];
       const artista       = oldRow[0] || '';
@@ -828,6 +829,7 @@ module.exports = async (req, res) => {
       const genero        = oldRow[14] || '';
       const representante = oldRow[17] || '';
       const notas         = notasBody !== undefined ? notasBody : (oldRow[18] || '');
+      const coVendedor    = oldRow[23] || '';
       const duracion      = duracionBody || parseInt(oldRow[4]) || 30;
 
       // Fecha vencimiento del período actual (base para el nuevo)
@@ -851,7 +853,7 @@ module.exports = async (req, res) => {
       if (masterEventId) {
         const allRowsResp = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:V`,
+          range: `${CAMPANAS_SHEET}!A:X`,
         });
         const allRows = allRowsResp.data.values || [];
         const SIBLING_STATES = new Set(['activa', 'pendiente_pago', 'pendiente_inicio', 'regalo', 'prueba']);
@@ -902,12 +904,12 @@ module.exports = async (req, res) => {
         const sibNotas = notasBody !== undefined ? notasBody : (r[18] || '');
         const sibMetodo = metodo || r[8] || '';
         const { neto: sibNeto, final: sibFinal, margen: sibMargen } = calcFinancials(precio, gasto, sibMetodo, sibVendedor);
-        return [sibArtista, sibVendedor, nuevaFechaInicio, nuevaFechaVenc, duracion, masterEventId, sibVendorEventId, 'pendiente_pago', sibMetodo, precio || '', gasto || '', sibNeto || '', sibMargen || '', sibFinal || '', sibGenero, detalleGastos, pauta || '', sibRep, sibNotas, campaignId, ts, editadoPor || ''];
+        return [sibArtista, sibVendedor, nuevaFechaInicio, nuevaFechaVenc, duracion, masterEventId, sibVendorEventId, 'pendiente_pago', sibMetodo, precio || '', gasto || '', sibNeto || '', sibMargen || '', sibFinal || '', sibGenero, detalleGastos, pauta || '', sibRep, sibNotas, campaignId, ts, editadoPor || '', '', sib.rowData[23] || ''];
       });
 
       const appendResp = await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A:V`,
+        range: `${CAMPANAS_SHEET}!A:X`,
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: newRowValues },
       });
@@ -1034,7 +1036,7 @@ module.exports = async (req, res) => {
 
     // ── PUT: editar/renovar campaña ───────────────────────────
     if (req.method === 'PUT') {
-      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody, editadoPor, esActivar } = req.body;
+      const { row, artista, vendedor, duracion, fechaVencimiento: fechaVencBody, masterEventId, vendorEventId, precio, gasto, metodo, pauta, gastosRows, genero: generoBody, representante: representanteBody, esEdicion, notas: notasBody, editadoPor, esActivar, coVendedor: coVendedorBody } = req.body;
       if (!row) return res.status(400).json({ error: 'row requerido' });
 
       // ── Activar campaña pendiente_inicio → activa ──────────
@@ -1058,16 +1060,18 @@ module.exports = async (req, res) => {
       // Leer fila completa actual para obtener fechaInicio, vencimiento base y campaignId
       const campResp = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${CAMPANAS_SHEET}!A${row}:T${row}`,
+        range: `${CAMPANAS_SHEET}!A${row}:X${row}`,
       });
-      const oldRow        = campResp.data.values?.[0] || [];
-      const fechaInicio   = oldRow[2] || new Date().toISOString().split('T')[0];
-      const baseDate      = oldRow[3] || new Date().toISOString().split('T')[0];
-      const oldEstado     = oldRow[7] || 'activa'; // preservar estado original (pendiente_pago, regalo, etc.)
-      const genero        = generoBody || oldRow[14] || '';
-      const representante = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
-      const notas         = notasBody !== undefined ? notasBody : (oldRow[18] || '');
-      const oldCampaignId = oldRow[19] || '';
+      const oldRow           = campResp.data.values?.[0] || [];
+      const fechaInicio      = oldRow[2] || new Date().toISOString().split('T')[0];
+      const baseDate         = oldRow[3] || new Date().toISOString().split('T')[0];
+      const oldEstado        = oldRow[7] || 'activa'; // preservar estado original (pendiente_pago, regalo, etc.)
+      const genero           = generoBody || oldRow[14] || '';
+      const representante    = representanteBody !== undefined ? representanteBody : (oldRow[17] || '');
+      const notas            = notasBody !== undefined ? notasBody : (oldRow[18] || '');
+      const oldCampaignId    = oldRow[19] || '';
+      const oldProveedorPag  = oldRow[22] || '';
+      const coVendedor       = coVendedorBody !== undefined ? coVendedorBody : (oldRow[23] || '');
 
       // Sincronizar campos en hoja Clientes
       await updateClientFields(sheets, artista, {
@@ -1122,9 +1126,9 @@ module.exports = async (req, res) => {
         // Sobreescribir fila existente sin dejar historial
         await sheets.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A${row}:V${row}`,
+          range: `${CAMPANAS_SHEET}!A${row}:X${row}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, oldEstado, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '']] },
+          requestBody: { values: [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, oldEstado, metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, new Date().toISOString(), editadoPor || '', oldProveedorPag, coVendedor]] },
         });
         // Actualizar masterEventId/vendorEventId y artista en todos los siblings del grupo
         if (siblingRows.length && newMasterId) {
@@ -1181,15 +1185,15 @@ module.exports = async (req, res) => {
           requestBody: { valueInputOption: 'USER_ENTERED', data: markData },
         });
         // Armar nuevas filas: la del artista clickeado + una por cada sibling (mismo campaignId/masterEventId)
-        const newRows = [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts2, editadoPor || '']];
+        const newRows = [[artista, vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts2, editadoPor || '', '', coVendedor]];
         if (esGrupal) {
           siblingRows.forEach(sib => {
-            newRows.push([sib.artista, sib.vendedor || vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts2, editadoPor || '']);
+            newRows.push([sib.artista, sib.vendedor || vendedor, fechaInicio, nuevaFechaVenc, duracion, newMasterId, newVendorId, 'activa', metodo || '', precio || '', gasto || '', neto || '', margen || '', final || '', genero, detalleGastos, pauta || '', representante, notas, campaignId, ts2, editadoPor || '', '', '']);
           });
         }
         const appendResp = await sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${CAMPANAS_SHEET}!A:V`,
+          range: `${CAMPANAS_SHEET}!A:X`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: newRows },
         });

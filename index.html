@@ -986,6 +986,10 @@
             <input class="form-input" id="f-representante" list="list-representantes" placeholder="Manager, intermediario...">
             <datalist id="list-representantes"></datalist>
           </div>
+          <div class="form-group">
+            <label class="form-label">Co-vendedor <span style="font-weight:400;color:var(--muted)">(opcional)</span></label>
+            <input class="form-input" id="f-covendedor" list="list-ventas" placeholder="Vendedor con comisión compartida">
+          </div>
 
           <!-- Método + Precio -->
           <div class="form-group">
@@ -1791,10 +1795,14 @@
             </div>
           </div>
 
-          <!-- Representante + Método -->
+          <!-- Representante + Co-vendedor + Método -->
           <div class="form-group">
             <label class="form-label">Representante</label>
             <input class="form-input" id="renovar-representante" list="list-representantes" placeholder="Manager, intermediario...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Co-vendedor <span style="font-weight:400;color:var(--muted)">(opcional)</span></label>
+            <input class="form-input" id="renovar-covendedor" list="list-ventas" placeholder="Vendedor con comisión compartida">
           </div>
           <div class="form-group">
             <label class="form-label">Método de cobro</label>
@@ -4914,6 +4922,7 @@ async function submitSale(e) {
     // Capturar estos ANTES de closeModal()
     const vencimientoVal   = document.getElementById('f-vencimiento').value;
     const representanteVal = document.getElementById('f-representante').value.trim();
+    const coVendedorVal    = document.getElementById('f-covendedor').value.trim();
     const notasVal         = document.getElementById('f-notas').value.trim();
     const spotifyArtistId  = window._spotifyArtistId || null;
     const spotifyImageUrl  = window._spotifyImageUrl  || null;
@@ -4975,7 +4984,7 @@ async function submitSale(e) {
           const campBody = {
             artista: a.nombre, genero, vendedor: venta, fechaInicio: fechaRaw, duracion,
             fechaVencimiento: vencimientoVal || null, precio, metodo, gasto, pauta,
-            link: a.link || '', gastosRows, representante: representanteVal, notas: notasVal,
+            link: a.link || '', gastosRows, representante: representanteVal, coVendedor: coVendedorVal, notas: notasVal,
             spotifyArtistId: a.spotifyArtistId, spotifyImageUrl: a.spotifyImageUrl,
             ...(esRegalo ? { regalo: true } : {}),
             ...(i === 0 && esGrupal ? { grupal: true } : {}),
@@ -5780,7 +5789,7 @@ async function loadCampanias() {
     }
     // Poblar filtro de vendedor (solo admin)
     if (isAdmin) {
-      const vendores = [...new Set(_campanias.map(c => c.vendedor).filter(Boolean))].sort();
+      const vendores = [...new Set(_campanias.flatMap(c => [c.vendedor, c.coVendedor]).filter(Boolean))].sort();
       const sel = document.getElementById('camp-filter-vendor');
       if (sel) {
         sel.innerHTML = '<option value="all">Todos los vendedores</option>' +
@@ -5814,7 +5823,7 @@ function renderCampaniasTab() {
   const searchQ      = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
   const today = new Date(); today.setHours(0,0,0,0);
   let data = _campanias;
-  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor);
+  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor || c.coVendedor === filterVendor);
   if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
 
@@ -5895,7 +5904,7 @@ function renderCampHistorial() {
 
   // Filtros
   let data = enriched;
-  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor);
+  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor || c.coVendedor === filterVendor);
   if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
   if (_historialFilter !== 'todas') data = data.filter(c =>
@@ -6409,7 +6418,7 @@ function renderCampList(data, today) {
       </div>
       <div class="campania-info">
         <div class="campania-artista">${c.artista}</div>
-        <div class="campania-meta">${c.vendedor} · ${pendienteInicio ? `Inicia ${inicioFmt} · Vence ${vencFmt}` : `Vence ${vencFmt}`} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}${sinPago && c._acumulado ? ` · <span style="color:var(--amber);font-weight:600">💰 $${(c._acumulado.totalPrecio||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:2})} (${c._acumulado.periodos} períodos)</span>` : ''}</div>
+        <div class="campania-meta">${c.vendedor} · ${pendienteInicio ? `Inicia ${inicioFmt} · Vence ${vencFmt}` : `Vence ${vencFmt}`} · ${c.duracion} días${c.representante ? ` · 👤 ${c.representante}` : ''}${c.coVendedor ? ` · <span style="color:var(--indigo);font-weight:600">🤝 ${c.coVendedor}</span>` : ''}${sinPago && c._acumulado ? ` · <span style="color:var(--amber);font-weight:600">💰 $${(c._acumulado.totalPrecio||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:2})} (${c._acumulado.periodos} períodos)</span>` : ''}</div>
       </div>
       <div class="campania-actions" onclick="event.stopPropagation()">
         ${pendienteInicio ? `<button class="btn btn-sm" style="background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.4);font-weight:600" onclick="activarCampania(${idx})" title="Activar campaña">✓ Activar</button>` : ''}
@@ -6989,6 +6998,7 @@ function openRenovarModal(row) {
   document.getElementById('renovar-fechavenc').value = camp.fechaVencimiento || '';
   document.getElementById('renovar-fecha').value = localDateStr(new Date());
   document.getElementById('renovar-representante').value = camp.representante || '';
+  document.getElementById('renovar-covendedor').value = camp.coVendedor || '';
   document.getElementById('renovar-metodo').value = camp.metodo || '';
   renovarAutoComision();
   document.getElementById('renovar-precio').value = camp.precio || '';
@@ -7205,6 +7215,7 @@ async function submitEditarActual() {
     const pauta           = document.getElementById('renovar-pauta').value.trim();
     const notas           = document.getElementById('renovar-notas').value.trim();
     const representante   = document.getElementById('renovar-representante').value.trim();
+    const coVendedor      = document.getElementById('renovar-covendedor').value.trim();
     const gastosRows      = [...document.querySelectorAll('#renovar-gasto-rows .gasto-row')].map(r => ({
       amount:   parseFloat(r.querySelector('.gasto-amount').value) || 0,
       provider: r.querySelector('.gasto-provider').value.trim(),
@@ -7219,7 +7230,7 @@ async function submitEditarActual() {
         row: camp.row, artista: artistaEdit, vendedor: camp.vendedor,
         duracion, fechaVencimiento,
         masterEventId: camp.masterEventId, vendorEventId: camp.vendorEventId,
-        precio, gasto, metodo, pauta, notas, gastosRows, genero: camp.genero, representante,
+        precio, gasto, metodo, pauta, notas, gastosRows, genero: camp.genero, representante, coVendedor,
         editadoPor: window._currentUser?.username || '',
       }),
     });
