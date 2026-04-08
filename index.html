@@ -6993,7 +6993,7 @@ function openRenovarModal(row) {
   if (!camp) return;
 
   document.getElementById('renovar-artista').value = camp.artista || 'Varios';
-  document.getElementById('renovar-vendedor-label').textContent = camp.vendedor;
+  document.getElementById('renovar-vendedor-label').textContent = camp.vendedor + (camp.coVendedor ? ` · 🤝 ${camp.coVendedor}` : '');
   document.getElementById('renovar-duracion').value = camp.duracion || 30;
   document.getElementById('renovar-fechavenc').value = camp.fechaVencimiento || '';
   document.getElementById('renovar-fecha').value = localDateStr(new Date());
