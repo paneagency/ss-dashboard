@@ -5823,7 +5823,7 @@ function renderCampaniasTab() {
   const searchQ      = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
   const today = new Date(); today.setHours(0,0,0,0);
   let data = _campanias;
-  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor || c.coVendedor === filterVendor);
+  if (filterVendor !== 'all') data = data.filter(c => c.coVendedor ? c.coVendedor === filterVendor : c.vendedor === filterVendor);
   if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
 
@@ -5904,7 +5904,7 @@ function renderCampHistorial() {
 
   // Filtros
   let data = enriched;
-  if (filterVendor !== 'all') data = data.filter(c => c.vendedor === filterVendor || c.coVendedor === filterVendor);
+  if (filterVendor !== 'all') data = data.filter(c => c.coVendedor ? c.coVendedor === filterVendor : c.vendedor === filterVendor);
   if (filterRep    !== 'all') data = data.filter(c => c.representante === filterRep);
   if (searchQ) data = data.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
   if (_historialFilter !== 'todas') data = data.filter(c =>
@@ -6651,7 +6651,7 @@ function copiarPendientes() {
   const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
   const searchQ      = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
   let all = _campanias || [];
-  if (filterVendor !== 'all') all = all.filter(c => c.vendedor === filterVendor);
+  if (filterVendor !== 'all') all = all.filter(c => c.coVendedor ? c.coVendedor === filterVendor : c.vendedor === filterVendor);
   if (filterRep    !== 'all') all = all.filter(c => c.representante === filterRep);
   if (searchQ) all = all.filter(c => (c.artista || '').toLowerCase().includes(searchQ));
 
