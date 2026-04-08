@@ -6721,11 +6721,15 @@ function copiarParaProveedor() {
   const today = new Date(); today.setHours(0,0,0,0);
 
   let data = (_campanias || []).filter(c => ACTIVE_STATES.includes(c.estado) && !c.proveedorPagado);
-  if (proveedor) data = data.filter(c => (c.detalleGastos || '').includes(proveedor));
-
-  // Deduplicar grupales
-  const seen = new Set();
-  data = data.filter(c => { const k = c.masterEventId || c.row; if (seen.has(k)) return false; seen.add(k); return true; });
+  if (proveedor) {
+    // Primero detectar qué masterEventIds tienen el proveedor (en cualquier fila del grupo)
+    const matchedMasters = new Set(
+      data.filter(c => (c.detalleGastos || '').includes(proveedor) && c.masterEventId).map(c => c.masterEventId)
+    );
+    // Incluir filas que directamente tienen el proveedor O pertenecen a un grupo que lo tiene
+    data = data.filter(c => (c.detalleGastos || '').includes(proveedor) || (c.masterEventId && matchedMasters.has(c.masterEventId)));
+  }
+  // Para campañas grupales: expandir artistas individuales (no colapsar en "Varios")
   data.sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento));
 
   if (!data.length) { showToast('No hay campañas para este proveedor', 'error'); return; }
