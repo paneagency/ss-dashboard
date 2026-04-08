@@ -6718,7 +6718,7 @@ async function toggleProveedorPagado(idx) {
 
 // Parsea la pauta bloque a bloque: para cada playlist que pertenezca al proveedor,
 // extrae el artista (arriba) y la fecha "Venc. DD/MM" (abajo). Si no hay fecha, usa defaultFecha.
-function parsePautaForProveedor(pauta, playlistIds, defaultFecha) {
+function parsePautaForProveedor(pauta, playlistIds, defaultFecha, fallbackArtista) {
   const lines = (pauta || '').split('\n');
   const results = [];
   for (let i = 0; i < lines.length; i++) {
@@ -6731,6 +6731,8 @@ function parsePautaForProveedor(pauta, playlistIds, defaultFecha) {
       const m = lines[j].replace(/\*/g, '').trim().match(/^\(([^)]+)\)/);
       if (m) { artista = m[1]; break; }
     }
+    // Si no se encontró artista en la pauta, usar el artista de la campaña (campañas individuales)
+    if (!artista && fallbackArtista && fallbackArtista !== 'Varios') artista = fallbackArtista;
     // Buscar "Venc. DD/MM" hacia abajo (máx 5 líneas, parar si hay otra playlist)
     let fecha = defaultFecha;
     for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
@@ -6760,7 +6762,7 @@ function copiarParaProveedor() {
         if (!c.pauta) continue;
         const d = new Date(c.fechaVencimiento + 'T12:00:00');
         const defaultFecha = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-        parsePautaForProveedor(c.pauta, playlistIds, defaultFecha).forEach(e => entries.push(e));
+        parsePautaForProveedor(c.pauta, playlistIds, defaultFecha, c.artista).forEach(e => entries.push(e));
       }
       if (!entries.length) { showToast('No hay campañas para este proveedor', 'error'); return; }
       // Dedup artista+fecha y ordenar por fecha
