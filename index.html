@@ -4998,6 +4998,7 @@ async function submitSale(e) {
           _campaniasLoaded = false; _campaniasLoading = false; _historial = null; loadCampanias().catch(() => {});
         }
         if (representanteVal) ensureRepresentante(representanteVal);
+        artistasList.forEach(a => maybeTriggerSongstats(a.nombre));
 
         // Generar factura para Wise/PayPal
         if (!esRegalo && ['Wise', 'PayPal'].includes(metodo)) {
@@ -5040,6 +5041,20 @@ async function submitSale(e) {
 }
 
 // Helper reutilizable: genera factura para Wise/PayPal si corresponde
+// Helper: dispara snapshot Songstats desde el frontend usando _clientesMap (más confiable que el backend leyendo Clientes)
+function maybeTriggerSongstats(artista) {
+  if (!artista || artista === 'Varios') return;
+  const clientData = window._clientesMap?.[artista.toLowerCase().trim()];
+  const spUrl = clientData?.spotify || '';
+  const match = spUrl.match(/artist\/([A-Za-z0-9]+)/);
+  if (!match) return;
+  fetch('/api/songstats', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spotifyArtistId: match[1], artistName: artista, save: true }),
+  }).catch(() => {});
+}
+
 async function maybeGenerateInvoice(artista, vendedor, representante, precio, metodo) {
   if (!['Wise', 'PayPal'].includes(metodo)) return;
   const clienteData = window._clientesMap?.[artista.toLowerCase().trim()] || {};
@@ -6903,6 +6918,7 @@ async function renovarRapido(idx) {
     if (!saleResp.ok) throw new Error('Venta: ' + (saleData.error || saleResp.status));
 
     showToast(`✅ ${artistaRenov} renovada hasta ${data.nuevaFechaVenc}`, 'success');
+    maybeTriggerSongstats(camp.artista);
     await maybeGenerateInvoice(artistaRenov, camp.vendedor, camp.representante || '', camp.precio, camp.metodo);
     await loadCampanias();
   } catch(e) {
@@ -7222,6 +7238,7 @@ async function submitRenovar() {
 
     closeRenovarModal();
     showToast(`✅ ${camp.artista} renovada hasta ${campData.nuevaFechaVenc}`, 'success');
+    maybeTriggerSongstats(camp.artista);
     await maybeGenerateInvoice(camp.artista, camp.vendedor, representante, precio, metodo);
     await loadCampanias();
   } catch(e) {
