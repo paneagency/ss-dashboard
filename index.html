@@ -8951,12 +8951,14 @@ function renderSpAudioFeatures(af) {
       </div>
     </div>`;
   }).join('');
-  const keyName = af.key >= 0 ? KEYS[af.key] : '?';
-  const modeName = af.mode === 1 ? 'Mayor' : 'menor';
+  const keyInt = parseInt(af.key);
+  const keyName = keyInt >= 0 ? KEYS[keyInt] : '?';
+  const modeName = parseInt(af.mode) === 1 ? 'Mayor' : 'menor';
+  const loudness = parseFloat(af.loudness);
   const chips = [
-    af.tempo        ? `<span style="padding:4px 10px;border-radius:100px;background:var(--surface2);font-size:12px;font-weight:600"><span style="color:var(--muted)">BPM </span>${Math.round(af.tempo)}</span>` : '',
-    af.key >= 0     ? `<span style="padding:4px 10px;border-radius:100px;background:var(--surface2);font-size:12px;font-weight:600"><span style="color:var(--muted)">Clave </span>${keyName} ${modeName}</span>` : '',
-    af.loudness != null ? `<span style="padding:4px 10px;border-radius:100px;background:var(--surface2);font-size:12px;font-weight:600"><span style="color:var(--muted)">Volumen </span>${af.loudness.toFixed(1)} dB</span>` : '',
+    af.tempo        ? `<span style="padding:4px 10px;border-radius:100px;background:var(--surface2);font-size:12px;font-weight:600"><span style="color:var(--muted)">BPM </span>${Math.round(parseFloat(af.tempo))}</span>` : '',
+    keyInt >= 0     ? `<span style="padding:4px 10px;border-radius:100px;background:var(--surface2);font-size:12px;font-weight:600"><span style="color:var(--muted)">Clave </span>${keyName} ${modeName}</span>` : '',
+    !isNaN(loudness) ? `<span style="padding:4px 10px;border-radius:100px;background:var(--surface2);font-size:12px;font-weight:600"><span style="color:var(--muted)">Volumen </span>${loudness.toFixed(1)} dB</span>` : '',
     af.time_signature ? `<span style="padding:4px 10px;border-radius:100px;background:var(--surface2);font-size:12px;font-weight:600"><span style="color:var(--muted)">Compás </span>${af.time_signature}/4</span>` : '',
   ].filter(Boolean).join('');
   el.innerHTML = barsHtml + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">${chips}</div>`;
@@ -8965,7 +8967,7 @@ function renderSpAudioFeatures(af) {
 async function spRequestRichRecommendation(track, af, artist, genres) {
   if (!af) return;
   const KEYS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-  const keyStr = af.key >= 0 ? `${KEYS[af.key]} ${af.mode === 1 ? 'Mayor' : 'menor'}` : '?';
+  const keyStr = parseInt(af.key) >= 0 ? `${KEYS[parseInt(af.key)]} ${parseInt(af.mode) === 1 ? 'Mayor' : 'menor'}` : '?';
   const releaseDate = track.releaseDate || track.album?.release_date || '';
   const albumName   = track.albumName  || track.album?.name || '';
   const albumType   = track.albumType  || track.album?.album_type || '';
@@ -8981,7 +8983,7 @@ async function spRequestRichRecommendation(track, af, artist, genres) {
     `Seguidores del artista: ${followers.toLocaleString()} | Popularidad artista: ${artist?.popularity || '?'}/100`,
     `Géneros: ${genres.join(', ') || 'desconocido'}`,
     `Audio features: Energía ${Math.round((af.energy||0)*100)}%, Bailabilidad ${Math.round((af.danceability||0)*100)}%, Valencia ${Math.round((af.valence||0)*100)}%, Acústico ${Math.round((af.acousticness||0)*100)}%, Instrumental ${Math.round((af.instrumentalness||0)*100)}%, Voces ${Math.round((af.speechiness||0)*100)}%`,
-    `Tempo: ${Math.round(af.tempo||0)} BPM · Clave: ${keyStr} · Loudness: ${(af.loudness||0).toFixed(1)} dB`,
+    `Tempo: ${Math.round(parseFloat(af.tempo)||0)} BPM · Clave: ${keyStr} · Loudness: ${parseFloat(af.loudness||0).toFixed(1)} dB`,
   ].join('\n');
   try {
     const r = await fetch('/api/ai-describe', {
