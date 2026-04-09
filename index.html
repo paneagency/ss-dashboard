@@ -9112,13 +9112,20 @@ async function analyzeSpTrack() {
     const tPop = _int(track.popularity);
     const aFol = _int(artist?.followers?.total ?? artist?.followers);
     const aPop = _int(artist?.popularity);
-    const mkts = _int(track.marketsCount) ?? (Array.isArray(track.available_markets) ? track.available_markets.length : null);
+    const marketsArr = _arr(track.markets || track.available_markets);
+    const mkts = _int(track.marketsCount) ?? marketsArr.length ?? null;
+    // Priority markets for Latin campaigns
+    const PRIORITY_MARKETS = ['AR','MX','CO','CL','US','ES','BR','PE','UY','VE','EC','BO','PY','GT','CR'];
+    const _flag = c => c.toUpperCase().replace(/./g, ch => String.fromCodePoint(0x1F1E6 - 65 + ch.charCodeAt(0)));
+    const matchedMarkets = marketsArr.length ? PRIORITY_MARKETS.filter(m => marketsArr.includes(m)) : [];
+    const flagsHtml = matchedMarkets.length
+      ? `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:4px">${matchedMarkets.slice(0,6).map(m => `<span title="${m}" style="font-size:16px">${_flag(m)}</span>`).join('')}${matchedMarkets.length > 6 ? `<span style="font-size:11px;color:var(--muted);align-self:center">+${matchedMarkets.length-6}</span>` : ''}</div>` : '';
     const kpisEl = document.getElementById('sp-az-kpis');
     kpisEl.innerHTML = [
       _spKpiCard('Popularidad Track',   tPop != null ? `${tPop}/100` : '—', tPop != null ? _spPopBar(tPop, '#1db954') : ''),
       _spKpiCard('Seguidores Artista',  aFol != null ? fmtStat(aFol) : '—', ''),
       _spKpiCard('Popularidad Artista', aPop != null ? `${aPop}/100` : '—', aPop != null ? _spPopBar(aPop, '#a78bfa') : ''),
-      _spKpiCard('Mercados',            mkts != null ? mkts : '—', ''),
+      _spKpiCard('Mercados',            mkts != null ? mkts : '—', flagsHtml),
     ].join('');
 
     // Audio features
