@@ -2007,19 +2007,9 @@
           <div id="sp-az-playlists" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px"></div>
         </div>
 
-        <!-- Buscar posición en playlist -->
-        <div class="chart-card">
-          <div class="chart-title" style="margin-bottom:4px">Buscar posición en playlist</div>
-          <div class="chart-subtitle" style="margin-bottom:14px">Pegá el link de cualquier playlist para ver en qué posición está este track</div>
-          <div style="display:flex;gap:10px">
-            <input id="sp-az-playlist-input" type="text" placeholder="https://open.spotify.com/playlist/..."
-              style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:14px;outline:none;transition:border-color 0.2s"
-              onfocus="this.style.borderColor='#1db954'" onblur="this.style.borderColor='var(--border2)'"
-              onkeydown="if(event.key==='Enter')checkTrackPosition()">
-            <button onclick="checkTrackPosition()" style="padding:10px 18px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-size:14px;cursor:pointer;white-space:nowrap;transition:all 0.15s" onmouseover="this.style.borderColor='#1db954';this.style.color='#1db954'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text)'">Buscar</button>
-          </div>
-          <div id="sp-az-position-result" style="margin-top:14px;font-size:14px;display:none"></div>
-        </div>
+        <!-- Buscar posición en playlist — pendiente rediseño -->
+        <div id="sp-az-playlist-input" style="display:none"></div>
+        <div id="sp-az-position-result" style="display:none"></div>
 
       </div>
 
