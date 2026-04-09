@@ -235,6 +235,29 @@ export default async function handler(req, res) {
         return res.json({ ok: true, position, total, playlistName });
       }
 
+      // Analyze track via Make webhook (audio features + artist data)
+      if (action === 'analyze') {
+        const tidMatch = (req.query.trackUrl || '').match(/track\/([A-Za-z0-9]+)/);
+        const trackId = req.query.trackId || (tidMatch ? tidMatch[1] : null);
+        if (!trackId) return res.status(400).json({ error: 'trackId requerido' });
+        const makeUrl = process.env.MAKE_ANALYZE_URL;
+        if (!makeUrl) return res.status(500).json({ error: 'MAKE_ANALYZE_URL no configurada' });
+        const makeRes = await fetch(makeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackId }),
+        });
+        const rawText = await makeRes.text();
+        let data = {};
+        try { data = JSON.parse(rawText); } catch(_) {
+          return res.status(500).json({ error: `Make parse error: ${rawText.slice(0,200)}` });
+        }
+        if (!makeRes.ok || data.error) {
+          return res.status(makeRes.status || 500).json({ error: data.error || `Make HTTP ${makeRes.status}` });
+        }
+        return res.json({ ok: true, track: data.track, audioFeatures: data.audioFeatures, artist: data.artist });
+      }
+
       const { accessToken, userId } = await getAccessToken(qUserId || null);
 
       // List all playlists (handles pagination)

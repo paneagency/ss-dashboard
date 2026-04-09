@@ -18,6 +18,18 @@ Respondé en este formato exacto (sin texto extra):
 GENEROS: [géneros separados por coma, minúsculas, máximo 5]
 RECOMENDACION: [1 oración sobre en qué tipo de playlists o campaña encajaría esta canción]`;
       maxTokens = 150;
+    } else if (mode === 'recommend') {
+      const context = req.body.context || '';
+      if (!context.trim()) return res.status(400).json({ error: 'context requerido' });
+      prompt = `Sos experto en campañas de Spotify y curación de playlists. Con estos datos del track:
+
+${context.trim()}
+
+Escribí una recomendación concisa (2-3 oraciones) sobre:
+1. En qué tipo de playlists encaja (mood, ocasión, género específico)
+2. Qué tipo de campaña le conviene y por qué
+Usá los datos de audio features para justificar. Solo el texto, sin encabezados ni formato.`;
+      maxTokens = 220;
     } else {
       if (!name?.trim()) return res.status(400).json({ error: 'name requerido' });
       prompt = `Sos un experto en SEO musical y posicionamiento en plataformas de streaming. Creá una descripción para una playlist de Spotify llamada "${name.trim()}", orientada a búsquedas en 2026. Usá palabras clave de alto volumen relacionadas con el género, mood y ocasión que sugiere el nombre. Máximo 200 caracteres, sin emojis, en español neutro. Solo dame el resultado final, sin explicaciones ni comillas.`;
@@ -32,7 +44,7 @@ RECOMENDACION: [1 oración sobre en qué tipo de playlists o campaña encajaría
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: mode === 'genre' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001',
+        model: (mode === 'genre' || mode === 'recommend') ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001',
         max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -42,6 +54,10 @@ RECOMENDACION: [1 oración sobre en qué tipo de playlists o campaña encajaría
     if (!r.ok) throw new Error(d.error?.message || `API error ${r.status}`);
 
     const text = d.content?.[0]?.text?.trim() || '';
+
+    if (mode === 'recommend') {
+      return res.json({ ok: true, recommendation: text });
+    }
 
     if (mode === 'genre') {
       let genres = [], recommendation = '';
