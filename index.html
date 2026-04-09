@@ -8966,14 +8966,19 @@ async function spRequestRichRecommendation(track, af, artist, genres) {
   if (!af) return;
   const KEYS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const keyStr = af.key >= 0 ? `${KEYS[af.key]} ${af.mode === 1 ? 'Mayor' : 'menor'}` : '?';
-  const daysSince = track.album?.release_date
-    ? Math.floor((Date.now() - new Date(track.album.release_date)) / 86400000) : null;
+  const releaseDate = track.releaseDate || track.album?.release_date || '';
+  const albumName   = track.albumName  || track.album?.name || '';
+  const albumType   = track.albumType  || track.album?.album_type || '';
+  const artistNames = Array.isArray(track.artists) ? track.artists.map(a => a.name||a).join(', ') : (track.artists || '');
+  const daysSince = releaseDate ? Math.floor((Date.now() - new Date(releaseDate)) / 86400000) : null;
+  const followers = parseInt(artist?.followers?.total ?? artist?.followers ?? 0) || 0;
+  const marketsCount = parseInt(track.marketsCount) || track.available_markets?.length || 0;
   const context = [
-    `Canción: "${track.name}" de ${(track.artists||[]).map(a=>a.name).join(', ')}`,
-    `Álbum: ${track.album?.name} (${track.album?.album_type}) · Lanzado: ${track.album?.release_date}${daysSince != null ? ` (hace ${daysSince} días)` : ''}`,
+    `Canción: "${track.name}" de ${artistNames}`,
+    `Álbum: ${albumName} (${albumType}) · Lanzado: ${releaseDate}${daysSince != null ? ` (hace ${daysSince} días)` : ''}`,
     `Popularidad del track: ${track.popularity}/100`,
-    `Mercados disponibles: ${track.available_markets?.length || 0} países`,
-    `Seguidores del artista: ${artist?.followers?.total?.toLocaleString() || '?'} | Popularidad artista: ${artist?.popularity || '?'}/100`,
+    `Mercados disponibles: ${marketsCount} países`,
+    `Seguidores del artista: ${followers.toLocaleString()} | Popularidad artista: ${artist?.popularity || '?'}/100`,
     `Géneros: ${genres.join(', ') || 'desconocido'}`,
     `Audio features: Energía ${Math.round((af.energy||0)*100)}%, Bailabilidad ${Math.round((af.danceability||0)*100)}%, Valencia ${Math.round((af.valence||0)*100)}%, Acústico ${Math.round((af.acousticness||0)*100)}%, Instrumental ${Math.round((af.instrumentalness||0)*100)}%, Voces ${Math.round((af.speechiness||0)*100)}%`,
     `Tempo: ${Math.round(af.tempo||0)} BPM · Clave: ${keyStr} · Loudness: ${(af.loudness||0).toFixed(1)} dB`,
@@ -9033,16 +9038,25 @@ async function analyzeSpTrack() {
     _spAnalyzeData = { trackId, track, audioFeatures: af, artist };
     loadingEl.style.display = 'none';
 
-    // Cover
+    // Normalize flat Make response fields
+    const _n = (v) => (v === '' || v == null) ? null : v;
+    const _num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+    const _int = (v) => { const n = parseInt(v); return isNaN(n) ? null : n; };
+    const _arr = (v) => Array.isArray(v) ? v : (typeof v === 'string' && v ? v.split(',').map(s=>s.trim()).filter(Boolean) : []);
+    const _artistNames = Array.isArray(track.artists)
+      ? track.artists.map(a => (typeof a === 'object' ? a.name : a)).join(', ')
+      : (_n(track.artists) || '');
+
+    // Cover — supports flat albumImage string or nested album.images
     const coverEl = document.getElementById('sp-az-cover');
-    const coverUrl = track.album?.images?.[0]?.url || '';
+    const coverUrl = _n(track.albumImage) || track.album?.images?.[0]?.url || '';
     coverEl.src = coverUrl;
     coverEl.style.display = coverUrl ? 'block' : 'none';
 
     // Preview
     const audio = document.getElementById('sp-az-audio');
     const previewBtn = document.getElementById('sp-az-preview-btn');
-    if (track.preview_url) {
+    if (_n(track.preview_url)) {
       audio.src = track.preview_url;
       audio.onended = () => { previewBtn.textContent = '▶'; _spPreviewPlaying = false; };
       previewBtn.textContent = '▶';
@@ -9053,12 +9067,15 @@ async function analyzeSpTrack() {
     }
 
     // Badges (album type, explicit, release age)
+    const albumType    = _n(track.albumType)    || track.album?.album_type  || '';
+    const releaseDate  = _n(track.releaseDate)  || track.album?.release_date || '';
+    const isExplicit   = track.explicit === true || track.explicit === 'true';
     const badgesEl = document.getElementById('sp-az-badges');
     const badges = [];
-    if (track.album?.album_type) badges.push(`<span style="padding:3px 8px;border-radius:100px;font-size:10px;font-weight:600;background:rgba(255,255,255,0.08);color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">${track.album.album_type}</span>`);
-    if (track.explicit) badges.push(`<span style="padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700;background:rgba(239,68,68,0.15);color:#f87171">E</span>`);
-    if (track.album?.release_date) {
-      const days = Math.floor((Date.now() - new Date(track.album.release_date)) / 86400000);
+    if (albumType) badges.push(`<span style="padding:3px 8px;border-radius:100px;font-size:10px;font-weight:600;background:rgba(255,255,255,0.08);color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">${albumType}</span>`);
+    if (isExplicit) badges.push(`<span style="padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700;background:rgba(239,68,68,0.15);color:#f87171">E</span>`);
+    if (releaseDate) {
+      const days = Math.floor((Date.now() - new Date(releaseDate)) / 86400000);
       const label = days < 30 ? `hace ${days}d` : days < 365 ? `hace ${Math.floor(days/30)}m` : `hace ${Math.floor(days/365)}a`;
       badges.push(`<span style="padding:3px 8px;border-radius:100px;font-size:10px;font-weight:600;background:rgba(29,185,84,0.1);color:#1db954">${label}</span>`);
     }
@@ -9066,19 +9083,20 @@ async function analyzeSpTrack() {
 
     // Track name, artist, meta
     document.getElementById('sp-az-track').textContent = track.name || '';
-    document.getElementById('sp-az-artist').textContent = (track.artists || []).map(a => a.name).join(', ');
+    document.getElementById('sp-az-artist').textContent = _artistNames;
     const artistImgEl = document.getElementById('sp-az-artist-img');
-    const artistImgUrl = artist?.images?.[0]?.url || '';
+    const artistImgUrl = _n(artist?.image) || artist?.images?.[0]?.url || '';
     if (artistImgUrl) { artistImgEl.src = artistImgUrl; artistImgEl.style.display = 'inline-block'; }
     else { artistImgEl.style.display = 'none'; }
+    const albumName = _n(track.albumName) || track.album?.name || '';
     const metaParts = [];
-    if (track.album?.name) metaParts.push(track.album.name);
-    if (track.album?.release_date) metaParts.push(track.album.release_date.slice(0,4));
-    if (track.duration_ms) metaParts.push(fmtDuration(track.duration_ms));
+    if (albumName) metaParts.push(albumName);
+    if (releaseDate) metaParts.push(releaseDate.slice(0,4));
+    if (track.duration_ms) metaParts.push(fmtDuration(_int(track.duration_ms)));
     document.getElementById('sp-az-meta').textContent = metaParts.join(' · ');
 
-    // Genres
-    const genres = artist?.genres || [];
+    // Genres — handle array or comma-separated string
+    const genres = _arr(artist?.genres);
     _spAnalyzeData.genres = genres;
     const genresEl = document.getElementById('sp-az-genres');
     if (genres.length) {
@@ -9088,12 +9106,12 @@ async function analyzeSpTrack() {
       genresEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">Sin géneros</span>';
     }
 
-    // KPIs
+    // KPIs — normalize numbers from strings
+    const tPop = _int(track.popularity);
+    const aFol = _int(artist?.followers?.total ?? artist?.followers);
+    const aPop = _int(artist?.popularity);
+    const mkts = _int(track.marketsCount) ?? (Array.isArray(track.available_markets) ? track.available_markets.length : null);
     const kpisEl = document.getElementById('sp-az-kpis');
-    const tPop = track.popularity ?? null;
-    const aFol = artist?.followers?.total ?? null;
-    const aPop = artist?.popularity ?? null;
-    const mkts = track.available_markets?.length ?? null;
     kpisEl.innerHTML = [
       _spKpiCard('Popularidad Track',   tPop != null ? `${tPop}/100` : '—', tPop != null ? _spPopBar(tPop, '#1db954') : ''),
       _spKpiCard('Seguidores Artista',  aFol != null ? fmtStat(aFol) : '—', ''),
