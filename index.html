@@ -1614,7 +1614,7 @@
         <button class="btn btn-sm camp-view-btn" data-view="historial" onclick="setCampView('historial')">📋 Historial</button>
       </div>
       <div style="flex:1"></div>
-      <select id="camp-filter-vendor" class="filter-control" onchange="_updateBtnCampVerTodos();renderCampaniasTab()" style="min-width:140px;font-size:12px">
+      <select id="camp-filter-vendor" class="filter-control" onchange="_updateBtnCampVerTodos();renderCampaniasTab();renderResumenCampaniasHoy()" style="min-width:140px;font-size:12px">
         <option value="all">Todos los vendedores</option>
       </select>
       <button id="btn-camp-ver-todos" onclick="toggleCampVerTodos()" style="display:none;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.08);color:var(--indigo)">Ver todos</button>
@@ -5682,15 +5682,28 @@ function renderResumenCampaniasHoy() {
     return;
   }
   const today = new Date(); today.setHours(0,0,0,0);
+  const role   = window._currentUser?.role;
+  const vendor = window._currentUser?.vendorName;
+
+  // Segmentación igual que tab Campañas
+  let _baseHoy = _campanias || [];
+  if (role === 'admin') {
+    const filterVendor = document.getElementById('camp-filter-vendor')?.value || vendor;
+    if (filterVendor && filterVendor !== 'all') {
+      _baseHoy = _baseHoy.filter(c => c.coVendedor ? c.coVendedor === filterVendor : c.vendedor === filterVendor);
+    }
+  } else if (role === 'secondary_admin' && !_campIncludePaneAgency) {
+    _baseHoy = _baseHoy.filter(c => c.vendedor !== 'Pane Agency' && c.coVendedor !== 'Pane Agency');
+  }
 
   // Campañas pendiente_inicio que inician hoy
-  const iniciandoHoy = (_campanias || []).filter(c => {
+  const iniciandoHoy = _baseHoy.filter(c => {
     if (c.estado !== 'pendiente_inicio') return false;
     const ini = new Date(c.fechaInicio + 'T12:00:00');
     return Math.floor((ini - today) / 86400000) === 0;
   });
 
-  const hoy = agruparPorEvento((_campanias || []).filter(c => {
+  const hoy = agruparPorEvento(_baseHoy.filter(c => {
     const venc = new Date(c.fechaVencimiento + 'T12:00:00');
     return Math.floor((venc - today) / 86400000) === 0;
   }));
@@ -5804,6 +5817,7 @@ function toggleCampVerTodos() {
   sel.value = sel.value === 'all' ? (myVendor || 'all') : 'all';
   _updateBtnCampVerTodos();
   renderCampaniasTab();
+  renderResumenCampaniasHoy();
 }
 function _updateBtnCampVerTodos() {
   const sel = document.getElementById('camp-filter-vendor');
@@ -5817,6 +5831,7 @@ function toggleCampPaneAgency() {
   _campIncludePaneAgency = !_campIncludePaneAgency;
   _updateBtnCampPaneAgency();
   renderCampaniasTab();
+  renderResumenCampaniasHoy();
 }
 function _updateBtnCampPaneAgency() {
   const btn = document.getElementById('btn-camp-include-pane');
