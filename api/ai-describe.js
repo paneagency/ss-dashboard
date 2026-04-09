@@ -21,15 +21,13 @@ RECOMENDACION: [1 oración sobre en qué tipo de playlists o campaña encajaría
     } else if (mode === 'recommend') {
       const context = req.body.context || '';
       if (!context.trim()) return res.status(400).json({ error: 'context requerido' });
-      prompt = `Sos experto en campañas de Spotify y curación de playlists. Con estos datos del track:
+      prompt = `Sos experto en curación de playlists de Spotify para el mercado latinoamericano. Con estos datos del track:
 
 ${context.trim()}
 
-Escribí una recomendación concisa (2-3 oraciones) sobre:
-1. En qué tipo de playlists encaja (mood, ocasión, género específico)
-2. Qué tipo de campaña le conviene y por qué
-Usá los datos de audio features para justificar. Solo el texto, sin encabezados ni formato.`;
-      maxTokens = 220;
+Respondé en este formato exacto (una sola línea, sin explicaciones adicionales):
+Géneros: [2-3 géneros específicos] · Playlists: [3-4 tipos de playlist reales de Spotify, separados por coma]`;
+      maxTokens = 100;
     } else {
       if (!name?.trim()) return res.status(400).json({ error: 'name requerido' });
       prompt = `Sos un experto en SEO musical y posicionamiento en plataformas de streaming. Creá una descripción para una playlist de Spotify llamada "${name.trim()}", orientada a búsquedas en 2026. Usá palabras clave de alto volumen relacionadas con el género, mood y ocasión que sugiere el nombre. Máximo 200 caracteres, sin emojis, en español neutro. Solo dame el resultado final, sin explicaciones ni comillas.`;
