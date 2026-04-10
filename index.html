@@ -10826,7 +10826,8 @@ async function loadYtAnalytics() {
   try {
     const data = await fetch('/api/sheets?mode=yt-analytics').then(r => r.json());
     if (!data.ok) {
-      if (loadingEl) loadingEl.textContent = data.error === 'not_connected' ? 'No conectado' : `Error: ${data.error}`;
+      const isAuthError = data.error === 'not_connected' || data.error?.includes('expired') || data.error?.includes('revoked') || data.error?.includes('invalid');
+      if (loadingEl) loadingEl.innerHTML = `<span style="margin-right:8px">${isAuthError ? 'Token expirado —' : `Error: ${data.error} —`}</span><a href="/api/spotify-auth?action=yt-login" target="_blank" style="color:#ff4444;font-weight:600;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Reconectar Analytics ↗</a>`;
       return;
     }
     _ytAnalyticsData = data;
@@ -10844,7 +10845,7 @@ async function loadYtAnalytics() {
       }).join('');
     }
   } catch(e) {
-    if (loadingEl) loadingEl.textContent = `Error: ${e.message}`;
+    if (loadingEl) loadingEl.innerHTML = `<span style="margin-right:8px">Error: ${e.message} —</span><a href="/api/spotify-auth?action=yt-login" target="_blank" style="color:#ff4444;font-weight:600;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Reconectar Analytics ↗</a>`;
   }
 }
 
