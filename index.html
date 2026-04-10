@@ -6419,18 +6419,20 @@ async function renderHistorialFacturas(pillStyle) {
   window._facturasList = facturas;
 
   const escH = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const rows = facturas.map((f, i) => {
+
+  const searchQ = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
+  const filteredFacturas = searchQ
+    ? facturas.filter(f => (f.artista||'').toLowerCase().includes(searchQ) || (f.invoiceNum||'').toLowerCase().includes(searchQ) || (f.vendedor||'').toLowerCase().includes(searchQ))
+    : facturas;
+  const filteredRows = filteredFacturas.map((f) => {
+    const i = facturas.indexOf(f);
     const estadoBg    = f.estado === 'Enviada' ? 'rgba(16,185,129,0.12)' : 'rgba(99,102,241,0.12)';
     const estadoColor = f.estado === 'Enviada' ? 'var(--green)' : '#a5b4fc';
     const badge = `<span style="background:${estadoBg};color:${estadoColor};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${escH(f.estado || 'Generada')}</span>`;
     const monto = f.monto ? '$' + parseFloat(f.monto).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
-    const pdfBtn = f.gcsUrl
-      ? `<a href="${escH(f.gcsUrl)}" target="_blank" class="btn btn-sm" style="padding:3px 10px;font-size:11px">👁 Ver PDF</a>`
-      : '';
+    const pdfBtn = f.gcsUrl ? `<a href="${escH(f.gcsUrl)}" target="_blank" class="btn btn-sm" style="padding:3px 10px;font-size:11px">👁 Ver PDF</a>` : '';
     const sendBtn = `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--indigo)" onclick="sendInvoiceDirect(${i})">📤 Enviar</button>`;
-    const editBtn = f.estado !== 'Cancelada'
-      ? `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--muted)" onclick="openRegenModal('${escH(f.invoiceNum)}')" title="Actualizar datos fiscales y regenerar PDF">✏️</button>`
-      : '';
+    const editBtn = f.estado !== 'Cancelada' ? `<button class="btn btn-sm" style="padding:3px 10px;font-size:11px;color:var(--muted)" onclick="openRegenModal('${escH(f.invoiceNum)}')" title="Actualizar datos fiscales y regenerar PDF">✏️</button>` : '';
     return `
       <tr style="border-bottom:1px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
         <td style="padding:10px 12px;font-size:12px;color:var(--muted);white-space:nowrap;font-family:monospace">${escH(f.invoiceNum)}</td>
@@ -6440,9 +6442,7 @@ async function renderHistorialFacturas(pillStyle) {
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(f.metodo || '—')}</td>
         <td style="padding:10px 12px;font-size:12px;color:var(--muted)">${escH(f.fecha || '—')}</td>
         <td style="padding:10px 12px">${badge}</td>
-        <td style="padding:10px 12px;white-space:nowrap">
-          <div style="display:flex;gap:6px">${pdfBtn}${sendBtn}${editBtn}</div>
-        </td>
+        <td style="padding:10px 12px;white-space:nowrap"><div style="display:flex;gap:6px">${pdfBtn}${sendBtn}${editBtn}</div></td>
       </tr>`;
   }).join('');
 
@@ -6463,7 +6463,7 @@ async function renderHistorialFacturas(pillStyle) {
               <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">Acciones</th>
             </tr>
           </thead>
-          <tbody>${rows}</tbody>
+          <tbody>${filteredRows || '<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">Sin resultados</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
