@@ -5064,6 +5064,9 @@ function maybeTriggerSongstats(artista) {
 }
 
 async function maybeGenerateInvoice(artista, vendedor, representante, precio, metodo) {
+  // Normalize casing from sheet (e.g. "Paypal" → "PayPal", "wise" → "Wise")
+  const _mNorm = { paypal: 'PayPal', wise: 'Wise' };
+  metodo = _mNorm[(metodo || '').toLowerCase()] || metodo;
   if (!['Wise', 'PayPal'].includes(metodo)) return;
   const clienteData = window._clientesMap?.[artista.toLowerCase().trim()] || {};
   const facData = resolverDatosFacturacion(artista, representante, vendedor);
