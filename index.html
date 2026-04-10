@@ -5884,8 +5884,6 @@ async function loadCampanias() {
     );
     _campaniasLoaded = true;
     _campaniasLoading = false;
-    renderCampaniasTab();
-    renderResumenCampaniasHoy();
     renderTodayPanel();
     // Poblar datalist de representantes
     fillDatalist('list-representantes', _campanias.map(c => c.representante).filter(Boolean));
@@ -5918,6 +5916,9 @@ async function loadCampanias() {
         if (btn) { btn.style.display = 'inline-flex'; _updateBtnCampPaneAgency(); }
       }
     }
+    // Renderizar vistas DESPUÉS de setear filtros (para que ya estén con el vendedor correcto)
+    renderCampaniasTab();
+    renderResumenCampaniasHoy();
   } catch(e) {
     _campaniasLoading = false;
     const list = document.getElementById('campanias-list');
