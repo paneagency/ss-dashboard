@@ -6424,9 +6424,12 @@ async function renderHistorialFacturas(pillStyle) {
   const escH = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   const searchQ = (document.getElementById('camp-search')?.value || '').toLowerCase().trim();
-  const filteredFacturas = searchQ
-    ? facturas.filter(f => (f.artista||'').toLowerCase().includes(searchQ) || (f.invoiceNum||'').toLowerCase().includes(searchQ) || (f.vendedor||'').toLowerCase().includes(searchQ))
-    : facturas;
+  const filterVendor = document.getElementById('camp-filter-vendor')?.value || 'all';
+  const filterRep    = document.getElementById('camp-filter-rep')?.value || 'all';
+  let filteredFacturas = facturas;
+  if (filterVendor !== 'all') filteredFacturas = filteredFacturas.filter(f => (f.vendedor||'') === filterVendor);
+  if (filterRep    !== 'all') filteredFacturas = filteredFacturas.filter(f => (f.representante||'') === filterRep);
+  if (searchQ) filteredFacturas = filteredFacturas.filter(f => (f.artista||'').toLowerCase().includes(searchQ) || (f.invoiceNum||'').toLowerCase().includes(searchQ) || (f.vendedor||'').toLowerCase().includes(searchQ));
   const filteredRows = filteredFacturas.map((f) => {
     const i = facturas.indexOf(f);
     const estadoBg    = f.estado === 'Enviada' ? 'rgba(16,185,129,0.12)' : 'rgba(99,102,241,0.12)';
